@@ -312,8 +312,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	//NOTE: DRAWING HEALTH BAR OVER ENEMIES
 	if(entity->flags & ENTITY_SHOW_HEALTH_BAR) {
 
-
-
 		V3 worldP = easyTransform_getWorldPos(&player->T);
 
 		V3 entP = easyTransform_getWorldPos(&entity->T);

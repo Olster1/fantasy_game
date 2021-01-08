@@ -429,7 +429,7 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 	// testEnt->dA = testEnt->dA - (dotV2(perp(BP), Impulse)*Inv_BodyB_I);
 
 	float safeDistance = 0.4f;
-	if(output->wasInside) {
+	// if(output->wasInside) {
 		// assert(false);
 		// gjk_v2 a[4] = {0};
 		// gjk_v2 b[4] = {0};
@@ -437,18 +437,24 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 		// Gjk_EPA_Info info = gjk_objectsCollide_withEPA(&gjk_a, 4, &gjk_b, 4);
 
 		// a.T.pos.xy = v2_plus(a.T.pos.xy, v2_scale(info.distance, v2(info.normal.x, info.normal.y)));
-	} else {
+	// } else 
+	{
 		
-		if(output->distance < safeDistance) {
-			V2 N = output->normal.xy;
+		V2 N = output->normal.xy;
 
-			ent->dP.xy = v2_minus(ent->dP.xy, v2_scale(dotV2(ent->dP.xy, N), N));
-			testEnt->dP.xy = v2_plus(testEnt->dP.xy, v2_scale(dotV2(testEnt->dP.xy, N), N));
+		ent->dP.xy = v2_minus(ent->dP.xy, v2_scale(dotV2(ent->dP.xy, N), N));
+		testEnt->dP.xy = v2_plus(testEnt->dP.xy, v2_scale(dotV2(testEnt->dP.xy, N), N));
 
-			*deltaPos = v2_minus(*deltaPos, v2_scale(dotV2(v2_minus(A->pos.xy, lastPosA.xy), N), N));
-		} else {
-			//Don't do anything
-		}
+
+		// char string[512];
+		// sprintf(string, "dP 0: %f %f", deltaPos->x, deltaPos->y);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
+		*deltaPos = v2_minus(*deltaPos, v2_scale(dotV2(*deltaPos, N), N));
+
+		// sprintf(string, "dP 1: %f %f", deltaPos->x, deltaPos->y);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+		
 	}
 }
 
@@ -576,113 +582,119 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
             Array_Dynamic hitEnts;
             initArray(&hitEnts, EasyPhysics_HitBundle);
 
+            // EasyPhysics_HitBundle bundle = {};
+
         ///////////////////////*********** Test for collisions **************////////////////////
 
-            for (int j = i + 1; j < colliders->count; ++j)
+            for (int j = 0; j < colliders->count; ++j)
             {
-                assert(i != j);
+                if(i != j) {
 
-                EasyCollider *b = (EasyCollider *)getElement(colliders, j);
+	                EasyCollider *b = (EasyCollider *)getElement(colliders, j);
 
-                if(b) {
-                	bool hit = false;
-                	/*
-                		If both objects aren't triggers, actually process the physics
-                		using minkowski-baycentric coordinates
+	                if(b) {
+	                	bool hit = false;
+	                	/*
+	                		If both objects aren't triggers, actually process the physics
+	                		using minkowski-baycentric coordinates
 
-                	*/
-                	if(!a->isTrigger && !b->isTrigger) {
-                		/*
-							Non trigger collisions
-                		*/
-                		EasyRigidBody *rb_a = a->rb;
-                		EasyRigidBody *rb_b = b->rb;
+	                	*/
+	                	if(!a->isTrigger && !b->isTrigger) {
+	                		/*
+								Non trigger collisions
+	                		*/
+	                		EasyRigidBody *rb_a = a->rb;
+	                		EasyRigidBody *rb_b = b->rb;
 
-                		if(!(rb_a->inverseWeight == 0 && rb_b->inverseWeight == 0)) 
-                		{
-                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
+	                		if(!(rb_a->inverseWeight == 0 && rb_b->inverseWeight == 0)) 
+	                		{
+	                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
 
-                		    if(out.distance <= smallestDistance) {
-                		        EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)getEmptyElement(&hitEnts);
-                		        bundle->hitEnt = b;
-                		        bundle->outputInfo = out;
-                		        smallestDistance = out.distance;
-                		    }
-                		}
-                	} else {
-                	/*
-                		If there is a trigger involved, just do overlap collision detection
-                	*/
-                		
-                		V3 aPos = v3_plus(easyTransform_getWorldPos(a->T), a->offset);
-                		V3 bPos = v3_plus(easyTransform_getWorldPos(b->T), b->offset);
+	                		    if(out.distance <= smallestDistance) {
+									ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
+									EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
+	                		        
+	                		        bundle->hitEnt = b;
+	                		        bundle->outputInfo = out;
+	                		    }
+	                		}
+	                	} else {
+	                	/*
+	                		If there is a trigger involved, just do overlap collision detection
+	                	*/
+	                		
+	                		V3 aPos = v3_plus(easyTransform_getWorldPos(a->T), a->offset);
+	                		V3 bPos = v3_plus(easyTransform_getWorldPos(b->T), b->offset);
 
-                		bool circle = a->type == EASY_COLLIDER_CIRCLE || b->type == EASY_COLLIDER_CIRCLE;
+	                		bool circle = a->type == EASY_COLLIDER_CIRCLE || b->type == EASY_COLLIDER_CIRCLE;
 
-                		bool rectangle = a->type == EASY_COLLIDER_RECTANGLE || b->type == EASY_COLLIDER_RECTANGLE;
-                		if(circle && rectangle) {
-                			assert(false);
-                		} else if(a->type == EASY_COLLIDER_RECTANGLE && b->type == EASY_COLLIDER_RECTANGLE) { //both rectangles
+	                		bool rectangle = a->type == EASY_COLLIDER_RECTANGLE || b->type == EASY_COLLIDER_RECTANGLE;
+	                		if(circle && rectangle) {
+	                			assert(false);
+	                		} else if(a->type == EASY_COLLIDER_RECTANGLE && b->type == EASY_COLLIDER_RECTANGLE) { //both rectangles
 
-                			V2 hDim = v2(0.5f*b->dim2f.x, 0.5f*b->dim2f.y);
+	                			V2 hDim = v2(0.5f*b->dim2f.x, 0.5f*b->dim2f.y);
 
-                			V2 points[] = { v2(-hDim.x, -hDim.y), 
-                							v2(hDim.x, -hDim.y),
-                							v2(-hDim.x, hDim.y),
-                							v2(hDim.x, hDim.y) };
+	                			V2 points[] = { v2(-hDim.x, -hDim.y), 
+	                							v2(hDim.x, -hDim.y),
+	                							v2(-hDim.x, hDim.y),
+	                							v2(hDim.x, hDim.y) };
 
-                			for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
-                				V2 p = v2_plus(points[pointI], bPos.xy);
-                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x, a->dim2f.y), BOUNDS_RECT)) {
-                					hit = true;
-                				}
-                			}
+	                			for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+	                				V2 p = v2_plus(points[pointI], bPos.xy);
+	                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x, a->dim2f.y), BOUNDS_RECT)) {
+	                					hit = true;
+	                				}
+	                			}
 
-                			if(!hit) {
-                				hDim = v2(0.5f*a->dim2f.x, 0.5f*a->dim2f.y);
+	                			if(!hit) {
+	                				hDim = v2(0.5f*a->dim2f.x, 0.5f*a->dim2f.y);
 
-                				V2 points2[] = { v2(-hDim.x, -hDim.y), 
-                								v2(hDim.x, -hDim.y),
-                								v2(-hDim.x, hDim.y),
-                								v2(hDim.x, hDim.y) };
+	                				V2 points2[] = { v2(-hDim.x, -hDim.y), 
+	                								v2(hDim.x, -hDim.y),
+	                								v2(-hDim.x, hDim.y),
+	                								v2(hDim.x, hDim.y) };
 
-                				for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
-                					V2 p = v2_plus(points2[pointI], aPos.xy);
-                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x, b->dim2f.y), BOUNDS_RECT)) {
-                						hit = true;
-                					}
-                				}
-                			}
-                		} else if((a->type == EASY_COLLIDER_CIRCLE && b->type == EASY_COLLIDER_CIRCLE) || (a->type == EASY_COLLIDER_SPHERE && b->type == EASY_COLLIDER_SPHERE)) { //both circles
-                			V3 centerDiff = v3_minus(aPos, bPos);
+	                				for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+	                					V2 p = v2_plus(points2[pointI], aPos.xy);
+	                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x, b->dim2f.y), BOUNDS_RECT)) {
+	                						hit = true;
+	                					}
+	                				}
+	                			}
+	                		} else if((a->type == EASY_COLLIDER_CIRCLE && b->type == EASY_COLLIDER_CIRCLE) || (a->type == EASY_COLLIDER_SPHERE && b->type == EASY_COLLIDER_SPHERE)) { //both circles
+	                			V3 centerDiff = v3_minus(aPos, bPos);
 
-                			//TODO(ollie): Can use radius sqr for speed!
-                			if(getLengthV3(centerDiff) <= (a->radius + b->radius)) {
-                				hit = true;
-                			}
-                		} else if ((a->type == EASY_COLLIDER_CIRCLE && b->type == EASY_COLLIDER_BOX) || (a->type == EASY_COLLIDER_BOX && b->type == EASY_COLLIDER_SPHERE)) {
-                			assert(false);
-                		} else {
-                			//case not handled
-                			assert(false);
-                		}
-                	}
+	                			//TODO(ollie): Can use radius sqr for speed!
+	                			if(getLengthV3(centerDiff) <= (a->radius + b->radius)) {
+	                				hit = true;
+	                			}
+	                		} else if ((a->type == EASY_COLLIDER_CIRCLE && b->type == EASY_COLLIDER_BOX) || (a->type == EASY_COLLIDER_BOX && b->type == EASY_COLLIDER_SPHERE)) {
+	                			assert(false);
+	                		} else {
+	                			//case not handled
+	                			assert(false);
+	                		}
+	                	}
 
-                	if(hit) {
-                		//add collision info
-                		EasyCollider_addCollisionInfo(a, b->T->id);
-                		EasyCollider_addCollisionInfo(b, a->T->id);
-                	}
-                }
+	                	if(hit) {
+	                		//add collision info
+	                		EasyCollider_addCollisionInfo(a, b->T->id);
+	                		EasyCollider_addCollisionInfo(b, a->T->id);
+	                	}
+	                }
+	            }
             }
 
             V2 deltaPos = v2_minus(a->T->pos.xy, lastPos.xy);
-            for(int hitIndex = 0; hitIndex < hitEnts.count; ++hitIndex) {
-            	EasyPhysics_HitBundle *h = (EasyPhysics_HitBundle *)getElement(&hitEnts, hitIndex);
-            	if(h) {
-            		EasyPhysics_ResolveCollisions(a->rb, h->hitEnt->rb, a->T, h->hitEnt->T, &h->outputInfo, lastPos, lastQ, &deltaPos);	
-            	}
-            }
+
+            for (int i = 0; i < hitEnts.count; ++i)
+            {
+                EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)getElement(&hitEnts, i);
+        		if(bundle->hitEnt) {
+	        		EasyPhysics_ResolveCollisions(a->rb, bundle->hitEnt->rb, a->T, bundle->hitEnt->T, &bundle->outputInfo, lastPos, lastQ, &deltaPos);	
+        		}
+        	}
             a->T->pos.xy = v2_plus(lastPos.xy, deltaPos); 
         }
     }
