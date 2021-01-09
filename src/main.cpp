@@ -117,16 +117,16 @@ int main(int argc, char *args[]) {
         EntityManager *manager = pushStruct(&globalLongTermArena, EntityManager);
         initEntityManager(manager);
         //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
-        Entity *player = initEntity(manager, &gameState->wizardIdle, v3(1, 0, 0), v2(1.5f, 1.5f), v2(0.5f, 1), gameState, ENTITY_WIZARD, inverse_weight, 0, COLOR_WHITE, 0, true);
-
+        Entity *player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.5f, 1), gameState, ENTITY_WIZARD, inverse_weight, 0, COLOR_WHITE, 0, true);
 
 
         // initEntity(manager, &gameState->firePitAnimation, v3(0, 1, 0), v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, 3);
         initEntity(manager, &gameState->torchAnimation, v3(0, -1, 0), v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
-        initEntity(manager, &gameState->skeltonIdle, v3(-1, 0, 0), v2(1.5f, 1.5f), v2(0.5f, 0.8f), gameState, ENTITY_SKELETON, inverse_weight, 0, COLOR_WHITE, 1, true);
+        // initEntity(manager, &gameState->skeltonIdle, v3(-1, 0, 0), v2(1.5f, 1.5f), v2(0.5f, 0.8f), gameState, ENTITY_SKELETON, inverse_weight, 0, COLOR_WHITE, 1, true);
 
         
-        initEntity(manager, 0, v3(0, -2, 0), v2(10, 1), v2(10, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
+        initEntity(manager, 0, v3(0, -4, 0), v2(10, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
+        initEntity(manager, 0, v3(3, -1.5f, 0), v2(1, 2), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
 
         int canCameraMove = 0;//EASY_CAMERA_MOVE;
         int canCamRotate = 0;
@@ -199,15 +199,14 @@ int main(int argc, char *args[]) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
                     if(e && e->collider) {
                         e->T.pos.z = -0.1f*e->layer;
+                        V3 prevScale = e->T.scale;
+
+                        e->T.scale.x *= e->collider->dim2f.x;
+                        e->T.scale.y *= e->collider->dim2f.y;
+
                         Matrix4 T = easyTransform_getTransform(&e->T);
 
                         V2 dim = e->collider->dim2f;
-
-                        T.a.x = dim.x;
-                        T.a.y = 0;
-
-                        T.b.x = 0;
-                        T.b.y = dim.y;
 
                         V4 color = COLOR_RED;
 
@@ -219,6 +218,8 @@ int main(int argc, char *args[]) {
                         setModelTransform(globalRenderGroup, T);
                         renderDrawQuad(globalRenderGroup, color);
                         e->T.pos.z = 0;
+
+                        e->T.scale = prevScale;
                     }
                     
                 }

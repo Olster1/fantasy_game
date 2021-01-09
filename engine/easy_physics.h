@@ -332,40 +332,59 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	V2 aSize = a_->dim2f;
 	V2 bSize = b_->dim2f;
 
-	a.T = Matrix4_translate(easyTransform_getTransform(a_->T), a_->T->pos); 
+	// char string[512];
+	// sprintf(string, "size: %f %f", aSize.x, aSize.y);
+	// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
+
+	// sprintf(string, "size: %f %f", bSize.x, bSize.y);
+	// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
+
+	
 	a.p[0] = v3(-0.5, -0.5, 0);
 	a.p[1] = v3(-0.5, 0.5, 0);
 	a.p[2] = v3(0.5, 0.5, 0);
 	a.p[3] = v3(0.5, -0.5, 0);
 	a.count = 4; 
 
-	b = a;
+	b.p[0] = v3(-0.5, -0.5, 0);
+	b.p[1] = v3(-0.5, 0.5, 0);
+	b.p[2] = v3(0.5, 0.5, 0);
+	b.p[3] = v3(0.5, -0.5, 0);
+	b.count = 4; 
 
 	a.p[0].x *= aSize.x;
 	a.p[0].y *= aSize.y;
+
 	a.p[1].x *= aSize.x;
 	a.p[1].y *= aSize.y;
+
 	a.p[2].x *= aSize.x;
 	a.p[2].y *= aSize.y;
+
 	a.p[3].x *= aSize.x;
-	a.p[4].y *= aSize.y;
+	a.p[3].y *= aSize.y;
 
 	b.p[0].x *= bSize.x;
 	b.p[0].y *= bSize.y;
+
 	b.p[1].x *= bSize.x;
 	b.p[1].y *= bSize.y;
+
 	b.p[2].x *= bSize.x;
 	b.p[2].y *= bSize.y;
+
 	b.p[3].x *= bSize.x;
-	b.p[4].y *= bSize.y;
+	b.p[3].y *= bSize.y;
 
 
 
 	// printf("%f %f %f\n", b_->T->pos.x, b_->T->pos.y, b_->T->pos.z);
 	// printf("%f %f %f\n", bT_global.E_[12], bT_global.E_[13], bT_global.E_[14]);
 
-	b.T = Matrix4_translate(easyTransform_getTransform(b_->T), b_->T->pos); 
-
+	b.T = easyTransform_getTransform(b_->T);
+	a.T = easyTransform_getTransform(a_->T);
 
 
 	// printf("%f %f %f\n", b.T.E_[12], b.T.E_[13], b.T.E_[14]);
@@ -381,7 +400,7 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	// ouput.pointA; 
 	// ouput.pointB; 
 	if(output.wasInside) {
-		printf("collision: %f\n", output.distance);
+		// printf("collision: %f\n", output.distance);
 	}
 	return output;
 }
@@ -428,7 +447,6 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 	// ent->dA = ent->dA + (dotV2(perp(AP), Impulse)*Inv_BodyA_I);
 	// testEnt->dA = testEnt->dA - (dotV2(perp(BP), Impulse)*Inv_BodyB_I);
 
-	float safeDistance = 0.4f;
 	// if(output->wasInside) {
 		// assert(false);
 		// gjk_v2 a[4] = {0};
@@ -577,7 +595,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
         ////////////////////////////////////////////////////////////////////
 
-            float smallestDistance = 0.4f;
+            float smallestDistance = 0.1f;
             
             Array_Dynamic hitEnts;
             initArray(&hitEnts, EasyPhysics_HitBundle);

@@ -373,6 +373,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	Matrix4 T = easyTransform_getTransform(&entity->T);
 
+	// char string[512];
+	// sprintf(string, "size: %f %f", T.a.x, T.b.y);
+	// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
 
 	//NOTE: We keep track of whether the entity is flipped since we only flip once we move fast a velocity threshold,
 	//		otherwise entities default back to unflipped  
@@ -393,6 +397,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		T.E_[1] *= -1;
 		T.E_[2] *= -1;
 	}
+
 	/////////////////////
 
 	setModelTransform(globalRenderGroup, T);

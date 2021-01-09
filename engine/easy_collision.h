@@ -330,10 +330,20 @@ static inline void easyCollision_GetClosestPoint(EasyCollisionInput *input, Easy
 	EasyCollisionPolygon *a = &input->a;
 	for(int i = 0; i < a->count; ++i) {
 		a->pT[i] = transformPositionV3(a->p[i], a->T);
+
+		// char string[512];
+		// sprintf(string, "size: %f %f", a->pT[i].x, a->pT[i].y);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
 	}
+
 	EasyCollisionPolygon *b = &input->b;
 	for(int i = 0; i < b->count; ++i) {
 		b->pT[i] = transformPositionV3(b->p[i], b->T);
+
+		// char string[512];
+		// sprintf(string, "size 1: %f %f", b->pT[i].x, b->pT[i].y);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
 	}
 	//
 
