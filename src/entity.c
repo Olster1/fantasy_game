@@ -39,7 +39,7 @@ typedef struct {
 	EasyRigidBody *rb;
 	EasyCollider *collider;
 
-	int layer; //NOTE: zero for infront, +ve for more behind
+	float layer; //NOTE: zero for infront, +ve for more behind
 
 	////////////////  Different entity sub types ////////////////
 	float lifeSpanLeft;
@@ -68,7 +68,7 @@ static void initEntityManager(EntityManager *manager) {
 	initArray(&manager->entitiesToDeleteForFrame, int);
 }
 
-Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim, V2 physicsDim, GameState *gameState, EntityType type, float inverse_weight, Texture *sprite, V4 colorTint, int layer, bool canCollide) {
+Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim, V2 physicsDim, GameState *gameState, EntityType type, float inverse_weight, Texture *sprite, V4 colorTint, float layer, bool canCollide) {
 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entities);
 
 	Entity *entity = (Entity *)arrayInfo.elm;
@@ -101,7 +101,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->maxHealth = 3;
 	entity->health = entity->maxHealth;
 
-	float gravityFactor = 25;
+	float gravityFactor = 80;
 	if(type == ENTITY_SCENERY) 
 	{ 
 		gravityFactor = 0; 
@@ -163,15 +163,15 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused) {
 
 	if(entity->type == ENTITY_WIZARD) {
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)){
-			if(isDown(keyStates->gameButtons, BUTTON_LEFT)) {
+			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -700;
 			}
 
-			if(isDown(keyStates->gameButtons, BUTTON_RIGHT)) {
+			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 				entity->rb->accumForce.x += 700;
 			}
 
@@ -179,9 +179,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 
 		// char string[512];
-		// sprintf(string, "speed: %f", entity->rb->dP.x);
+		// sprintf(string, "is grounded");
 		// easyConsole_addToStream(console, string);
-
+		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
+			entity->rb->accumForce.y += 35000;
+		}
 
 		Animation *animToAdd = 0;
 
@@ -197,7 +199,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			}
 		}
 
-		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) {
+		if(wasPressed(keyStates->gameButtons, BUTTON_X) && !isPaused) {
 			animToAdd = &gameState->wizardAttack;
 		} else if(wasPressed(keyStates->gameButtons, BUTTON_1)) {
 			animToAdd = &gameState->wizardAttack2;
@@ -302,8 +304,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(entity->lifeSpanLeft <= 0.0f) {
 			entity->isDead = true;
-
-			
 		}
 	}
 	

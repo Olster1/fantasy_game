@@ -24,6 +24,8 @@ typedef struct {
 	Animation skeltonHit;
 	Animation skeltonWalk;
 
+	bool isLookingAtItems;
+
 	EasyPhysics_World physicsWorld;
 } GameState; 
 
@@ -41,7 +43,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->animationFreeList = 0;
 
 
-
+	state->isLookingAtItems = false;
 
 	return state;
 }	

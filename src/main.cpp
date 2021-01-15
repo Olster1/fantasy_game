@@ -117,16 +117,16 @@ int main(int argc, char *args[]) {
         EntityManager *manager = pushStruct(&globalLongTermArena, EntityManager);
         initEntityManager(manager);
         //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
-        Entity *player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.5f, 1), gameState, ENTITY_WIZARD, inverse_weight, 0, COLOR_WHITE, 0, true);
+        Entity *player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.5f, 0.5f), gameState, ENTITY_WIZARD, inverse_weight, 0, COLOR_WHITE, 0, true);
 
 
         // initEntity(manager, &gameState->firePitAnimation, v3(0, 1, 0), v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, 3);
-        initEntity(manager, &gameState->torchAnimation, v3(0, -1, 0), v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
-        // initEntity(manager, &gameState->skeltonIdle, v3(-1, 0, 0), v2(1.5f, 1.5f), v2(0.5f, 0.8f), gameState, ENTITY_SKELETON, inverse_weight, 0, COLOR_WHITE, 1, true);
+        initEntity(manager, &gameState->torchAnimation, v3(0, -3, 0), v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
+        initEntity(manager, &gameState->skeltonIdle, v3(-3, 0, 0), v2(2.5f, 2.5f), v2(0.5f, 0.4f), gameState, ENTITY_SKELETON, inverse_weight, 0, COLOR_WHITE, 1, true);
 
         
         initEntity(manager, 0, v3(0, -4, 0), v2(10, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
-        initEntity(manager, 0, v3(3, -1.5f, 0), v2(1, 2), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
+        initEntity(manager, 0, v3(3, -3.5f, 0), v2(3, 2.5f), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
 
         int canCameraMove = 0;//EASY_CAMERA_MOVE;
         int canCamRotate = 0;
@@ -174,8 +174,17 @@ int main(int argc, char *args[]) {
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
             Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
 
+            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_R)) {
+                gameState->isLookingAtItems = !gameState->isLookingAtItems;
+            }
 
-            EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);
+
+            if(gameState->isLookingAtItems) {
+
+            } else 
+            {
+                EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
+            }
 
             RenderProgram *mainShader = &glossProgram;
             renderSetShader(globalRenderGroup, mainShader);
@@ -193,7 +202,7 @@ int main(int argc, char *args[]) {
             }
 
             //DEBUG
-            if(true) {
+            if(false) {
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -235,7 +244,7 @@ int main(int argc, char *args[]) {
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, player);        
+                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, player, gameState->isLookingAtItems);        
                 
                     if(e->isDead) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -250,7 +259,9 @@ int main(int argc, char *args[]) {
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
                     if(e) {
-                        Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, v2(1, 1), v2(1, 1), gameState, e->type, 0, 0, COLOR_WHITE, 1, true);
+                        float layer = -0.5f;
+
+                        Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, v2(1, 1), v2(1, 1), gameState, e->type, 0, 0, COLOR_WHITE, layer, true);
                         e1->rb->dP = e->dP;
                         e1->lifeSpanLeft = 3.0f;
                     }
@@ -279,12 +290,6 @@ int main(int argc, char *args[]) {
 
             
 
-            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-
-            //NOTE(ollie): Make sure the scene chooser is on top
-            renderClearDepthBuffer(toneMappedBuffer.bufferId);
-            
-          
             ////////////////////////////////////////////////////////////////////
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
@@ -293,7 +298,12 @@ int main(int argc, char *args[]) {
             //NOTE(ollie): Make sure the transition is on top
             renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
-            
+            FrameBuffer *endBuffer = &mainFrameBuffer;
+            if(gameState->isLookingAtItems) {
+                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                endBuffer = &bloomFrameBuffer;
+
+            }
             
             //NOTE(ollie): Update the console
             if(easyConsole_update(&appInfo->console, &consoleKeyStates, appInfo->dt, (resolution.y / resolution.x))) {
@@ -329,7 +339,7 @@ int main(int argc, char *args[]) {
 
             //////////////////////////////////////////////////////////////////////////////////////////////
 
-            easyOS_endFrame(resolution, screenDim, mainFrameBuffer.bufferId, appInfo, appInfo->hasBlackBars);
+            easyOS_endFrame(resolution, screenDim, endBuffer->bufferId, appInfo, appInfo->hasBlackBars);
             DEBUG_TIME_BLOCK_FOR_FRAME_END(beginFrame, wasPressed(appInfo->keyStates.gameButtons, BUTTON_F4))
             DEBUG_TIME_BLOCK_FOR_FRAME_START(beginFrame, "Per frame")
             easyOS_endKeyState(&appInfo->keyStates);

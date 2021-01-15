@@ -143,6 +143,8 @@ typedef struct {
 	float dragFactor;
 	float gravityFactor;
 
+	u32 isGrounded; //flag where grounded is 1 << 0 & done this frame is 1 << 1 
+
 } EasyRigidBody;
 
 typedef enum {
@@ -491,6 +493,7 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     rb->dA = NULL_VECTOR3;
     rb->dragFactor = dragFactor;
     rb->gravityFactor = gravityFactor;
+    rb->isGrounded = 0;
 
     return rb;
 }
@@ -571,6 +574,10 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
     		rb->accumForce = NULL_VECTOR3;
     		rb->accumTorque = NULL_VECTOR3;
 	        ////////////////////////////////////////////////////////////////////
+
+	        if(!(rb->isGrounded & (1 << 1))) {
+	        	rb->isGrounded = 0;
+	        }
 	    }
 	}
 
@@ -628,7 +635,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		{
 	                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
 
-	                		    if(out.distance <= smallestDistance) {
+	                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
 									ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
 									EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
 	                		        
@@ -710,6 +717,14 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
             {
                 EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)getElement(&hitEnts, i);
         		if(bundle->hitEnt) {
+        			//CHeck if grounded
+        			V2 up = v2(0, 1);
+        			
+        			if(dotV2(bundle->outputInfo.normal.xy, up) > 0.5f) { //0.5f being the slope value
+        				a->rb->isGrounded |= 1 << 0;
+        				a->rb->isGrounded |= 1 << 1;
+        			}
+        			//
 	        		EasyPhysics_ResolveCollisions(a->rb, bundle->hitEnt->rb, a->T, bundle->hitEnt->T, &bundle->outputInfo, lastPos, lastQ, &deltaPos);	
         		}
         	}
@@ -736,6 +751,7 @@ static void EasyPhysics_UpdateWorld(EasyPhysics_World *world, float dt) {
 	{
 	    EasyCollider *a = (EasyCollider *)getElement(&world->colliders, i);
 	    if(a) {
+	    	a->rb->isGrounded &= ~(1 << 1); //to let know it's not this frame
 	   		EasyCollider_removeCollisions(a);
 	    }
 	}
