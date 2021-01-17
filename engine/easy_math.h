@@ -38,6 +38,8 @@ float absVal(float a) {
 }
 
 
+
+
 float lerp(float a, float t, float b) {
     float value = a + t*(b - a);
     return value;
@@ -1275,6 +1277,14 @@ float clamp01(float value) {
     float result = min(max(0, value), 1);
     return result;
 }
+
+
+//NOTE: Tween between x between 0 -> 1
+float easeInOutQuint(float x) {
+    x = clamp01(x);
+    return x < 0.5 ? 16 * x * x * x * x * x : 1 - pow(-2 * x + 2, 5) / 2;
+}
+
 
 float randomBetween(float a, float b) { // including a and b
     float result = ((float)rand() / (float)RAND_MAX);

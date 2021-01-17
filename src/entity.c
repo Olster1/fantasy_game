@@ -3,6 +3,7 @@ typedef enum {
 	ENTITY_WIZARD = 1,
 	ENTITY_PLAYER_PROJECTILE = 2,
 	ENTITY_SKELETON = 3,
+	ENTITY_HEALTH_POTION_1 = 4,
 } EntityType;
 
 typedef enum {
@@ -17,6 +18,13 @@ typedef struct {
 
 } EntityManager;	
 
+
+typedef enum {
+	ITEM_HEALTH_POTION_1,
+	ITEM_HEALTH_POTION_2,
+	ITEM_HEALTH_POTION_3,
+	ITEM_SHEILD,
+} PlayerItem;
 
 typedef struct {
 	EntityType type;
@@ -38,6 +46,7 @@ typedef struct {
 
 	EasyRigidBody *rb;
 	EasyCollider *collider;
+	EasyCollider *collider1;
 
 	float layer; //NOTE: zero for infront, +ve for more behind
 
@@ -47,6 +56,9 @@ typedef struct {
 	bool isDying;
 	int health;
 	int maxHealth;
+
+	int itemCount;
+	PlayerItem itemSpots[8];
 	/////
 
 	float healthBarTimer; 
@@ -93,6 +105,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->healthBarTimer = -1;
 
 	entity->isDying = false;
+	entity->itemCount = 0;
 	
 	entity->layer = layer;
 	entity->sprite = sprite;
@@ -115,11 +128,45 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	float dragFactor = 0.1f;
 
+	entity->collider1 = 0;
+
 	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; }
 
+	if(type == ENTITY_HEALTH_POTION_1) { isTrigger = false;  }
+
 	if(canCollide) {
+		// char string[256];
+		// sprintf(string, "%f", gravityFactor);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
+		
+		if(type == ENTITY_HEALTH_POTION_1) { 
+			//Add a trigger aswell
+			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
+			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
+		}
+
+
+		switch(entity->type) {
+			case ENTITY_SCENERY: {
+				entity->collider->layer = EASY_COLLISION_LAYER_WORLD;
+			} break;
+			case ENTITY_WIZARD: {
+				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
+			} break;
+			case ENTITY_PLAYER_PROJECTILE: {
+				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER_BULLET;
+			} break;
+			case ENTITY_SKELETON: {
+				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
+			} break;
+			case ENTITY_HEALTH_POTION_1: {
+				entity->collider->layer = EASY_COLLISION_LAYER_ITEM_RIGID;
+			} break;
+		}
+
 	}
 	
 	return entity;
@@ -306,6 +353,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entity->isDead = true;
 		}
 	}
+
+
 	
 	entity->T.pos.z = 0.1f*entity->layer;
 
@@ -358,6 +407,25 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	////////////////////////////////
 
 	Texture *sprite = entity->sprite;
+
+	if(entity->type == ENTITY_HEALTH_POTION_1) {
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, "Potion");
+		assert(sprite);
+
+		if(entity->collider->collisionCount > 0) {
+			easyConsole_addToStream(console, "picked up health potion");
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	easyConsole_addToStream(console, "picked up health potion");
+            	
+            	player->itemSpots[player->itemCount++] = ITEM_HEALTH_POTION_1;
+
+            	entity->isDead = true; //remove from entity list
+            	
+            }
+		}
+	}
+
 	if(!sprite) {
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
@@ -365,6 +433,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		if(entity->isDying && entity->type == ENTITY_SKELETON && !easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->skeletonDeath)) {
 			//NOTE: Check if finished the dying animation, if so delete entity
 			entity->isDead = true;
+
+			//Add items skelton leaves behind
+			ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+			EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+			entityToAdd->type = ENTITY_HEALTH_POTION_1;
+			entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
+
+			entityToAdd->dP.y = 10;
+			entityToAdd->dP.x = randomBetween(-5, 5);
 		}
 	}
 	

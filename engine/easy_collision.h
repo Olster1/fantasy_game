@@ -265,7 +265,12 @@ static inline V3 easyCollision_getSearchDirection(EasySimplex *simplex) {
 			float s = 1.0f / simplex->divisor;
 			V3 p = v3_plus(v3_scale((s * simplex->points[0].u), simplex->points[0].point), v3_scale((s * simplex->points[1].u), simplex->points[1].point));
 			result = v3_minus(v3(0, 0, 0), p);
-			assert(result.z == 0);
+
+			// char str[256];
+			// sprintf(str, "%f", result.z);
+			// easyConsole_addToStream(DEBUG_globalEasyConsole, str); 
+			// assert(result.z == 0);
+
 		} break;
 		case 3: {
 			assert(false);

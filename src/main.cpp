@@ -42,6 +42,7 @@ int main(int argc, char *args[]) {
         }
 
         loadAndAddImagesToAssets("img/engine_icons/");
+        loadAndAddImagesToAssets("img/temp_images/");
         
         EasyCamera camera;
         easy3d_initCamera(&camera, v3(0, 0, -10));
@@ -180,7 +181,10 @@ int main(int argc, char *args[]) {
 
 
             if(gameState->isLookingAtItems) {
+                float angle = 0;
+                for(int i = 0; i < arrayCount(player->itemSpots); ++i) {
 
+                }
             } else 
             {
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
@@ -259,11 +263,27 @@ int main(int argc, char *args[]) {
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
                     if(e) {
-                        float layer = -0.5f;
+                        float layer = -0.5f;    
+                        float lifeSpan = 3.0f;
 
-                        Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, v2(1, 1), v2(1, 1), gameState, e->type, 0, 0, COLOR_WHITE, layer, true);
+                        float inverse_weight = 0;
+
+                        V2 size = v2(1, 1);
+                        Texture *t = 0;
+                        float reboundFactor = 1.0f;
+                        if(e->type == ENTITY_HEALTH_POTION_1) {
+                            t = findTextureAsset("blue_jar.png");
+                            assert(t);
+                            lifeSpan = -1.0f;
+                            inverse_weight = 1.0f / 20.0f; 
+                            size = v2(0.4f, 0.4f);
+                            reboundFactor = 0.98f;
+                        }
+
+                        Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, size, v2(0.9f, 0.9f), gameState, e->type, inverse_weight, t, COLOR_WHITE, layer, true);
                         e1->rb->dP = e->dP;
-                        e1->lifeSpanLeft = 3.0f;
+                        e1->lifeSpanLeft = lifeSpan;
+                        e1->rb->reboundFactor = reboundFactor;
                     }
                 }
             }

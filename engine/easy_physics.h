@@ -119,7 +119,31 @@ static inline EasyPhysics_RayCastAABB3f_Info EasyPhysics_CastRayAgainstAABB3f(Ma
 }
 
 
+typedef enum {
+	EASY_COLLISION_LAYER_WORLD,
+	EASY_COLLISION_LAYER_ITEMS,
+	EASY_COLLISION_LAYER_ENEMIES,
+	EASY_COLLISION_LAYER_PLAYER,
+	EASY_COLLISION_LAYER_PLAYER_BULLET,
+	EASY_COLLISION_LAYER_ITEM_RIGID,
+} EasyCollisionLayer;
 
+
+static inline bool EasyPhysics_layersCanCollider(EasyCollisionLayer a, EasyCollisionLayer b) {
+	bool result = false;
+	if(a == b) {
+
+	} else if(a == EASY_COLLISION_LAYER_WORLD || b == EASY_COLLISION_LAYER_WORLD) {
+		result = true;
+	} else if((a == EASY_COLLISION_LAYER_PLAYER_BULLET || b == EASY_COLLISION_LAYER_PLAYER_BULLET) && (a == EASY_COLLISION_LAYER_ENEMIES || b == EASY_COLLISION_LAYER_ENEMIES)) {
+		result = true;
+	} else if((a == EASY_COLLISION_LAYER_ITEMS || b == EASY_COLLISION_LAYER_ITEMS) && (a == EASY_COLLISION_LAYER_PLAYER || b == EASY_COLLISION_LAYER_PLAYER)) {
+		result = true;
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, "ITEM");
+	}
+
+	return result;
+} 
 
 typedef struct {
 	int arrayIndex;
@@ -139,6 +163,7 @@ typedef struct {
 	};
 	
 	float inverseWeight;
+	float reboundFactor;
 
 	float dragFactor;
 	float gravityFactor;
@@ -180,6 +205,8 @@ typedef struct {
 	V3 offset;
 
 	bool isTrigger;
+
+	EasyCollisionLayer layer;
 
 	int collisionCount;
 	EasyCollisionInfo collisions[256];
@@ -462,8 +489,14 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 		
 		V2 N = output->normal.xy;
 
-		ent->dP.xy = v2_minus(ent->dP.xy, v2_scale(dotV2(ent->dP.xy, N), N));
-		testEnt->dP.xy = v2_plus(testEnt->dP.xy, v2_scale(dotV2(testEnt->dP.xy, N), N));
+		float max_dP = 1.0f;
+		float r0 = 1.0f + ent->reboundFactor;
+
+		ent->dP.xy = v2_minus(ent->dP.xy, v2_scale(r0*dotV2(ent->dP.xy, N), N));
+
+		float r1 = 1.0f + testEnt->reboundFactor;
+
+		testEnt->dP.xy = v2_plus(testEnt->dP.xy, v2_scale(r1*dotV2(testEnt->dP.xy, N), N));
 
 
 		// char string[512];
@@ -494,6 +527,7 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     rb->dragFactor = dragFactor;
     rb->gravityFactor = gravityFactor;
     rb->isGrounded = 0;
+    rb->reboundFactor = 0.0f;
 
     return rb;
 }
@@ -617,7 +651,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                EasyCollider *b = (EasyCollider *)getElement(colliders, j);
 
-	                if(b) {
+	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer)) {
 	                	bool hit = false;
 	                	/*
 	                		If both objects aren't triggers, actually process the physics
