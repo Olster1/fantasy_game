@@ -180,11 +180,9 @@ int main(int argc, char *args[]) {
             }
 
 
-            if(gameState->isLookingAtItems) {
-                float angle = 0;
-                for(int i = 0; i < arrayCount(player->itemSpots); ++i) {
 
-                }
+            if(gameState->isLookingAtItems) {
+                
             } else 
             {
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
@@ -320,6 +318,38 @@ int main(int argc, char *args[]) {
 
             FrameBuffer *endBuffer = &mainFrameBuffer;
             if(gameState->isLookingAtItems) {
+
+                setViewTransform(globalRenderGroup, mat4());
+                
+                float fuaxWidth = 1920.0f;
+                
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxWidth*(resolution.y / resolution.x)));
+
+                float angle = 0;
+                float angleUpdate = 2*PI32 / arrayCount(player->itemSpots);
+                for(int i = 0; i < player->itemCount; ++i) {
+
+                    Texture *t = 0;
+                    switch(player->itemSpots[i]) {
+                        case ENTITY_HEALTH_POTION_1: {
+                            t = findTextureAsset("blue_jar.png");
+                            // assert(false);
+                        } break;
+                        default: {
+
+                        }
+                    }
+
+                    Matrix4 T = Matrix4_translate(mat4(), v3(0.3f*fuaxWidth*cos(angle), 0.3f*fuaxWidth*sin(angle), -10));
+
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                    angle += angleUpdate; 
+                }
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
                 easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
                 endBuffer = &bloomFrameBuffer;
 

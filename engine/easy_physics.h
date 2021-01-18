@@ -168,6 +168,8 @@ typedef struct {
 	float dragFactor;
 	float gravityFactor;
 
+	bool updated;
+
 	u32 isGrounded; //flag where grounded is 1 << 0 & done this frame is 1 << 1 
 
 } EasyRigidBody;
@@ -528,6 +530,7 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     rb->gravityFactor = gravityFactor;
     rb->isGrounded = 0;
     rb->reboundFactor = 0.0f;
+    rb->updated = false;
 
     return rb;
 }
@@ -625,13 +628,15 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
         	Quaternion lastQ = a->T->Q;
         ///////////////////////************* Integrate the physics ************////////////////////
 
-	        if(a->rb) {
+	        if(a->rb && !a->rb->updated) {
 	        	EasyRigidBody *rb = a->rb;
 	        	a->T->pos = v3_plus(v3_scale(dt, rb->dP), a->T->pos);
 
 	        	a->T->Q = addScaledVectorToQuaternion(a->T->Q, rb->dA, dt);
 
 	        	a->T->Q = easyMath_normalizeQuaternion(a->T->Q);
+
+	        	a->rb->updated = true;
 	        }
 
         ////////////////////////////////////////////////////////////////////
@@ -737,9 +742,18 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                	}
 
 	                	if(hit) {
+
+	                		
 	                		//add collision info
 	                		EasyCollider_addCollisionInfo(a, b->T->id);
 	                		EasyCollider_addCollisionInfo(b, a->T->id);
+
+	                		// if((a->layer == EASY_COLLISION_LAYER_ITEMS || a->layer == EASY_COLLISION_LAYER_PLAYER) && (b->layer == EASY_COLLISION_LAYER_ITEMS || b->layer == EASY_COLLISION_LAYER_PLAYER)) {
+	                		// 	char string[256];
+	                		// 	sprintf(string, "%d %d", a->collisionCount, b->collisionCount);
+	                		// 	easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+	                			
+	                		// }
 	                	}
 	                }
 	            }
@@ -777,6 +791,14 @@ static void EasyPhysics_UpdateWorld(EasyPhysics_World *world, float dt) {
 	int dividend = world->physicsTime / PHYSICS_TIME_STEP;
 	float timeInterval = PHYSICS_TIME_STEP; 
 	while(world->physicsTime >= timeInterval) {
+
+		for (int i = 0; i < world->rigidBodies.count; ++i)
+		{
+		    EasyRigidBody *a = (EasyRigidBody *)getElement(&world->rigidBodies, i);
+		    if(a) {
+		    	a->updated = false;
+		    }
+		}
 	    ProcessPhysics(&world->colliders, &world->rigidBodies, timeInterval);
 	    world->physicsTime -= timeInterval;
 	}

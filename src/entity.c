@@ -19,12 +19,6 @@ typedef struct {
 } EntityManager;	
 
 
-typedef enum {
-	ITEM_HEALTH_POTION_1,
-	ITEM_HEALTH_POTION_2,
-	ITEM_HEALTH_POTION_3,
-	ITEM_SHEILD,
-} PlayerItem;
 
 typedef struct {
 	EntityType type;
@@ -58,7 +52,7 @@ typedef struct {
 	int maxHealth;
 
 	int itemCount;
-	PlayerItem itemSpots[8];
+	EntityType itemSpots[8];
 	/////
 
 	float healthBarTimer; 
@@ -280,6 +274,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 				easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
 
+				entityToAdd->dP.y = 0;
 				if(entity->isFlipped) {
 					entityToAdd->dP.x = -5;
 				} else {
@@ -292,6 +287,21 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);
 			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
 		}
+
+		
+	}
+
+	if(entity->type == ENTITY_HEALTH_POTION_1) {
+		if(entity->collider1->collisionCount > 0) {
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	player->itemSpots[player->itemCount++] = ENTITY_HEALTH_POTION_1;
+
+            	entity->isDead = true; //remove from entity list
+            	
+            }
+		}
+		
 	}
 
 	if(entity->type == ENTITY_SKELETON) {
@@ -347,6 +357,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}	
 
 	if(entity->type == ENTITY_PLAYER_PROJECTILE) {
+		
+		if(entity->collider->collisionCount > 0) {
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_SKELETON, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	easyConsole_addToStream(console, "skeleton hit 2");
+            	
+            }
+		}
+
 		entity->lifeSpanLeft -= dt;
 
 		if(entity->lifeSpanLeft <= 0.0f) {
@@ -409,21 +428,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	Texture *sprite = entity->sprite;
 
 	if(entity->type == ENTITY_HEALTH_POTION_1) {
+		assert(entity->collider1);
+		assert(entity->collider1->layer == EASY_COLLISION_LAYER_ITEMS);
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, "Potion");
 		assert(sprite);
 
-		if(entity->collider->collisionCount > 0) {
-			easyConsole_addToStream(console, "picked up health potion");
-            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
-            if(info.found) {
-            	easyConsole_addToStream(console, "picked up health potion");
-            	
-            	player->itemSpots[player->itemCount++] = ITEM_HEALTH_POTION_1;
+		
 
-            	entity->isDead = true; //remove from entity list
-            	
-            }
-		}
+		
 	}
 
 	if(!sprite) {
