@@ -1,10 +1,4 @@
-typedef enum {
-	ENTITY_SCENERY = 0,
-	ENTITY_WIZARD = 1,
-	ENTITY_PLAYER_PROJECTILE = 2,
-	ENTITY_SKELETON = 3,
-	ENTITY_HEALTH_POTION_1 = 4,
-} EntityType;
+
 
 typedef enum {
 	ENTITY_SHOW_HEALTH_BAR = 1 << 0,
@@ -52,7 +46,7 @@ typedef struct {
 	int maxHealth;
 
 	int itemCount;
-	EntityType itemSpots[8];
+	EntityType itemSpots[MAX_PLAYER_ITEM_COUNT];
 	/////
 
 	float healthBarTimer; 
@@ -108,7 +102,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->maxHealth = 3;
 	entity->health = entity->maxHealth;
 
-	float gravityFactor = 80;
+	float gravityFactor = 120;
 	if(type == ENTITY_SCENERY) 
 	{ 
 		gravityFactor = 0; 
@@ -120,7 +114,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	bool isTrigger = false;
 
-	float dragFactor = 0.1f;
+	float dragFactor = 0.12f;
 
 	entity->collider1 = 0;
 
@@ -209,11 +203,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	if(entity->type == ENTITY_WIZARD) {
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)){
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
-				entity->rb->accumForce.x += -700;
+				entity->rb->accumForce.x += -400;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
-				entity->rb->accumForce.x += 700;
+				entity->rb->accumForce.x += 400;
 			}
 
 
@@ -222,9 +216,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		// char string[512];
 		// sprintf(string, "is grounded");
 		// easyConsole_addToStream(console, string);
-		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
-			entity->rb->accumForce.y += 35000;
-		}
+
 
 		Animation *animToAdd = 0;
 
@@ -242,11 +234,22 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_X) && !isPaused) {
 			animToAdd = &gameState->wizardAttack;
-		} else if(wasPressed(keyStates->gameButtons, BUTTON_1)) {
+		} else if(wasPressed(keyStates->gameButtons, BUTTON_Z)) {
 			animToAdd = &gameState->wizardAttack2;
-		} else if(wasPressed(keyStates->gameButtons, BUTTON_4)) {
-			animToAdd = &gameState->wizardJump;
-		}
+			if(gameState->playerHolding[0] != ENTITY_NULL) {
+				switch(gameState->playerHolding[0]) {
+					case ENTITY_HEALTH_POTION_1: {
+						entity->health++;
+
+						if(entity->health > entity->maxHealth) {
+							entity->health = entity->maxHealth;
+						}
+						//EMPTY OUT THE SPOT
+						gameState->playerHolding[0] = ENTITY_NULL;
+					} break;
+				}
+			} 
+		} 
 
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_2)) {
@@ -261,6 +264,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_5)) {
 			animToAdd = &gameState->wizardFall;
+		}
+
+		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
+			entity->rb->accumForceOnce.y += 70000;
+			animToAdd = &gameState->wizardJump;
 		}
 
 

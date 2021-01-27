@@ -33,6 +33,8 @@ typedef struct {
 	char *saveFolderLocation;
 	////////////////////////////////////////////////////////////////////
 
+	float aspectRatio_yOverX;
+
 	//NOTE(ollie): Whether the game is running for the game loop 
 	bool running;
 	bool hasBlackBars;
@@ -222,6 +224,8 @@ OSAppInfo *easyOS_createApp(char *windowName, V2 *screenDim, bool fullscreen) {
 void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
 	DEBUG_TIME_BLOCK()
 
+
+
 	//NOTE(ollie): Get the folder location of AppData/Roaming
 	result->saveFolderLocation = concatInArena((char *)easyOs_getSaveFolderLocation(), "/easy_engine", &globalLongTermArena);
 
@@ -255,8 +259,8 @@ void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
     	resolution->y = mode.h;
     }
 
-    if(resolution )
-    
+    result->aspectRatio_yOverX = resolution->y / resolution->x;
+
 #if DESKTOP
     gl3wInit();
 #endif
@@ -705,6 +709,9 @@ static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V
 	            } break;
 	            case SDLK_r: {
 	                buttonType = BUTTON_R;
+	            } break;
+	            case SDLK_i: {
+	                buttonType = BUTTON_I;
 	            } break;
 	            case SDLK_LSHIFT: {
 	                // buttonType = BUTTON_SHIFT;

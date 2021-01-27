@@ -150,7 +150,9 @@ typedef struct {
 	
 	V3 dP;
 	V3 accumForce; //perFrame
+	V3 accumForceOnce; //Gets cleared after one phsyics click
 	V3 accumTorque;
+	V3 accumTorqueOnce;
 
 	union {
 		struct { //2d
@@ -526,6 +528,10 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     rb->inverseWeight = inverseWeight;
     rb->inverse_I = inverseIntertia;
     rb->dA = NULL_VECTOR3;
+    rb->accumForce = NULL_VECTOR3;
+    rb->accumTorque = NULL_VECTOR3;
+    rb->accumForceOnce = NULL_VECTOR3;
+    rb->accumTorqueOnce = NULL_VECTOR3;
     rb->dragFactor = dragFactor;
     rb->gravityFactor = gravityFactor;
     rb->isGrounded = 0;
@@ -580,10 +586,10 @@ typedef struct {
 	EasyCollisionOutput outputInfo;
 } EasyPhysics_HitBundle;
 
-static void EasyPhysics_AddGravity(EasyRigidBody *rb, float scale) {
+static V3 EasyPhysics_AddGravity(EasyRigidBody *rb, float scale) {
 	V3 gravity = v3(0, scale*-9.81f, 0);
 
-	rb->accumForce = v3_plus(rb->accumForce, gravity);
+	return gravity;
 }
 
 void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float dt) {
@@ -593,23 +599,26 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	    EasyRigidBody *rb = (EasyRigidBody *)getElement(rigidBodies, i);
 	    if(rb) {
 
-	    	EasyPhysics_AddGravity(rb, rb->gravityFactor);
+	    	V3 gravity = EasyPhysics_AddGravity(rb, rb->gravityFactor);
 
 	    ///////////////////////************* Integrate accel & velocity ************////////////////////
 	    	
-	        rb->dP = v3_plus(v3_scale(dt, v3_scale(rb->inverseWeight, rb->accumForce)), rb->dP);
+	        rb->dP = v3_plus(v3_scale(dt, v3_scale(rb->inverseWeight, v3_plus(v3_plus(rb->accumForce, gravity), rb->accumForceOnce))), rb->dP);
 
 			//TODO(ollie): Integrate torque 
 
-	        rb->dA = v3_plus(v3_scale(dt, rb->accumTorque), rb->dA);
+	        rb->dA = v3_plus(v3_scale(dt, v3_plus(rb->accumTorque, rb->accumTorqueOnce)), rb->dA);
 
 
 	    ////////////////////////////////////////////////////////////////////
 
 	        rb->dP = v3_minus(rb->dP, v3_scale(rb->dragFactor, rb->dP)); 
 
-    		rb->accumForce = NULL_VECTOR3;
-    		rb->accumTorque = NULL_VECTOR3;
+	        //Decay the forces so it averages out over different frame rates
+			rb->accumForceOnce = NULL_VECTOR3;
+    		rb->accumTorqueOnce = NULL_VECTOR3;
+
+    		
 	        ////////////////////////////////////////////////////////////////////
 
 	        if(!(rb->isGrounded & (1 << 1))) {
@@ -802,6 +811,16 @@ static void EasyPhysics_UpdateWorld(EasyPhysics_World *world, float dt) {
 	    ProcessPhysics(&world->colliders, &world->rigidBodies, timeInterval);
 	    world->physicsTime -= timeInterval;
 	}
+
+	for (int i = 0; i < world->rigidBodies.count; ++i)
+	{
+	    EasyRigidBody *rb = (EasyRigidBody *)getElement(&world->rigidBodies, i);
+	    if(rb) {
+	    	rb->accumForce = NULL_VECTOR3;
+	    	rb->accumTorque = NULL_VECTOR3;	
+	    }
+	}
+				
 
 	for (int i = 0; i < world->colliders.count; ++i)
 	{

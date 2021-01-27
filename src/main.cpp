@@ -6,7 +6,28 @@
 #include "gameScene.c"
 #include "entity.c"
 
+#define MSF_GIF_IMPL
+#include "msf_gif.h"
 
+// #define STB_IMAGE_RESIZE_IMPLEMENTATION
+// #include "stb_resize.h"
+
+#define GIF_MODE 0
+
+
+static Texture *getInvetoryTexture(EntityType type) {
+    Texture *t = 0;
+    switch(type) {
+        case ENTITY_HEALTH_POTION_1: {
+            t = findTextureAsset("blue_jar.png");
+            // assert(false);
+        } break;
+        default: {
+
+        }
+    }
+    return t;
+}
 
 int main(int argc, char *args[]) {
     
@@ -14,12 +35,23 @@ int main(int argc, char *args[]) {
     
     V2 screenDim = v2(DEFINES_WINDOW_SIZE_X, DEFINES_WINDOW_SIZE_Y); //init in create app function
     V2 resolution = v2(DEFINES_RESOLUTION_X, DEFINES_RESOLUTION_Y);
+
+    #if GIF_MODE
+    resolution.x = 480;
+    resolution.y = 320;
+    #endif
     
     OSAppInfo *appInfo = easyOS_createApp("Fantasy Game", &screenDim, false);
+
     
     if(appInfo->valid) {
         
         easyOS_setupApp(appInfo, &resolution, RESOURCE_PATH_EXTENSION);
+
+        //Gif Recording stuff    
+        int gif_width = 480, gif_height = appInfo->aspectRatio_yOverX*gif_width, centisecondsPerFrame = 5, bitDepth = 16;
+        MsfGifState gifState = {};
+        /////
 
         FrameBuffer mainFrameBuffer;
         FrameBuffer toneMappedBuffer;
@@ -133,6 +165,19 @@ int main(int argc, char *args[]) {
         int canCamRotate = 0;
 
         ///////////************************/////////////////
+
+        Matrix4 cameraLookAt_straight = easy3d_lookAt(v3(0, 0, -10), v3(0, 0, 0), v3(0, 1, 0));
+
+
+        V4 lightBrownColor = hexARGBTo01Color(0xFFF5DEB3);
+        Texture *t_square = findTextureAsset("square_img.png");
+        Texture *particleImage = findTextureAsset("light_03.png");
+
+        V3 itemPosition1 = v3(100, 100, 0.2f);
+        V3 itemPosition2 = v3(250, 100, 0.2f);
+
+        bool recording = false;
+        float timeSinceLastFrame = 0.0f;
         while(appInfo->running) {
 
             easyOS_processKeyStates(&appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
@@ -175,18 +220,80 @@ int main(int argc, char *args[]) {
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
             Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
 
-            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_R)) {
+            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I)) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
+                gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
+                gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
+
+                gameState->indexInItems = 0;
+                gameState->animationItemTimers[0].target = UI_ITEM_PICKER_MAX_SIZE;
+
+                //Stop all the other animation timers
+                for(int i = 1; i < arrayCount(gameState->animationItemTimers); ++i) {
+                    gameState->animationItemTimers[i].target = UI_ITEM_PICKER_MIN_SIZE;
+                    gameState->animationItemTimers[i].current = UI_ITEM_PICKER_MIN_SIZE;
+                }
+                // playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
             }
+
+            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_F1)) {
+                if(recording) {
+                    easyFlashText_addText(&globalFlashTextManager, "STOP RECORDING");
+
+                    MsfGifResult result = msf_gif_end(&gifState);
+                    char str[1028];
+                    sprintf(str, "%s%s", appInfo->saveFolderLocation, "MyGif.gif");
+
+                    FILE * fp = fopen(str, "wb");
+                    fwrite(result.data, result.dataSize, 1, fp);
+                    fclose(fp);
+                    msf_gif_free(result);
+
+                } else {
+                    easyFlashText_addText(&globalFlashTextManager, "START RECORDING");
+
+                    msf_gif_begin(&gifState, gif_height, gif_height);
+                    
+                }
+                recording = !recording;
+                timeSinceLastFrame = 0;
+            }
+
 
 
 
             if(gameState->isLookingAtItems) {
-                
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT)) {
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                    gameState->indexInItems--;
+                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+
+                    if(gameState->indexInItems < 0) {
+                        gameState->indexInItems = arrayCount(player->itemSpots) - 1;
+                    }
+
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                }
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                    gameState->indexInItems++;
+                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+                    if(gameState->indexInItems >= arrayCount(player->itemSpots)) {
+                        gameState->indexInItems = 0;
+                    }
+
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                }
             } else 
             {
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
             }
+
+
 
             RenderProgram *mainShader = &glossProgram;
             renderSetShader(globalRenderGroup, mainShader);
@@ -257,6 +364,7 @@ int main(int argc, char *args[]) {
                 
             }
 
+           
             { //NOTE: Add entities that need adding
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
@@ -312,48 +420,172 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
+
+
             
             //NOTE(ollie): Make sure the transition is on top
-            renderClearDepthBuffer(mainFrameBuffer.bufferId);
+            // renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
             FrameBuffer *endBuffer = &mainFrameBuffer;
             if(gameState->isLookingAtItems) {
 
-                setViewTransform(globalRenderGroup, mat4());
+                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                endBuffer = &bloomFrameBuffer;
+
+
+
+                renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
+
+                setViewTransform(globalRenderGroup, cameraLookAt_straight);
+
+                V2 size = getBounds("INVENTORY", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "INVENTORY", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 2, true, 1);
                 
                 float fuaxWidth = 1920.0f;
                 
-                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxWidth*(resolution.y / resolution.x)));
+                setProjectionTransform(globalRenderGroup, perspectiveMatrix);//OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
 
-                float angle = 0;
+                //Update animation timer
+                gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);
+                ////
+
+
+                Matrix4 T_ = Matrix4_scale(mat4(), v3(2, 2, 0));
+                Matrix4 T_1 = Matrix4_scale(mat4(), v3(0.8f, 0.8f, 0));
+
+                
+                float angle = PI32/2.0f;
                 float angleUpdate = 2*PI32 / arrayCount(player->itemSpots);
-                for(int i = 0; i < player->itemCount; ++i) {
+                float radius = gameState->lookingAt_animTimer.current*3.5f;
+                for(int i = 0; i < arrayCount(player->itemSpots); ++i) {
 
-                    Texture *t = 0;
-                    switch(player->itemSpots[i]) {
-                        case ENTITY_HEALTH_POTION_1: {
-                            t = findTextureAsset("blue_jar.png");
-                            // assert(false);
-                        } break;
-                        default: {
+                    V2 pos = v2(radius*cos(angle), radius*sin(angle));
 
-                        }
+                    gameState->animationItemTimers[i].current = lerp(gameState->animationItemTimers[i].current, 8*clamp01(appInfo->dt), gameState->animationItemTimers[i].target);                    
+
+                    float growthSize = gameState->animationItemTimers[i].current;
+
+                    if(player->itemSpots[i] != ENTITY_NULL) {
+                        Texture *t = getInvetoryTexture(player->itemSpots[i]);
+                        
+                        Matrix4 T = Matrix4_translate(Matrix4_scale(T_1, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.4f));
+                        
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
                     }
 
-                    Matrix4 T = Matrix4_translate(mat4(), v3(0.3f*fuaxWidth*cos(angle), 0.3f*fuaxWidth*sin(angle), -10));
 
+                    Matrix4 T = Matrix4_translate(Matrix4_scale(T_, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.5f));
                     setModelTransform(globalRenderGroup, T);
-                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+                    renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+
+
+                    if(i == gameState->indexInItems) {
+                        Matrix4 T = Matrix4_translate(T_, v3(pos.x, pos.y, 0.6f));
+                        setModelTransform(globalRenderGroup, T);
+                        // renderDrawSprite(globalRenderGroup, particleImage, COLOR_GOLD);
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
+                            if(player->itemSpots[i] != ENTITY_NULL) {
+                                EntityType tempType = gameState->playerHolding[0];
+
+                                gameState->playerHolding[0] = player->itemSpots[i];
+                                player->itemSpots[i] = tempType;
+
+                                gameState->animationItemTimersHUD[0] = 0.0f;
+
+                                //NOTE: This was animating the transfer of the item to the HUD spot, but didn't seen necessary atm?
+                                // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
+                                // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(v2_scale(0.5f, gameState->fuaxResolution), itemPosition1.xy, gameState->playerHolding[0]);
+
+                                // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
+                                // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(itemPosition1.xy, v2_scale(0.5f, gameState->fuaxResolution), player->itemSpots[i]);
+                            }
+                        }
+                    }
 
                     angle += angleUpdate; 
                 }
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
-                endBuffer = &bloomFrameBuffer;
-
             }
+
+             //NOTE: Draw what the player is holding
+            {
+
+                Matrix4 T_1 = Matrix4_scale(mat4(), v3(100, 100, 0));
+                Matrix4 item_T = Matrix4_scale(mat4(), v3(40, 40, 0));
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, gameState->orthoFuaxMatrix);
+
+                for(int i = 0; i < gameState->itemAnimationCount; ) {
+
+                    int increment = 1;
+                    ItemAnimationInfo *anim = &gameState->item_animations[i];
+                    assert(anim->tAt >= 0);
+
+                    anim->tAt += appInfo->dt;
+
+                    float canVal = anim->tAt / 0.3f;
+
+                    V2 P = lerpV2(anim->startP, canVal, anim->endP);
+
+                    Texture *t = getInvetoryTexture(anim->type);
+                    Matrix4 T = Matrix4_translate(item_T, v3(P.x, P.y, 0.1f));
+                    
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+
+                    if(canVal >= 1.0f) {
+                        increment = 0;
+                        anim->tAt = -1;
+                        gameState->item_animations[i] = gameState->item_animations[--gameState->itemAnimationCount];
+                    }
+
+                    i += increment;
+                }
+                
+
+                //Update the HUD item spots animations
+                float canVal0 = 1;
+                float canVal1 = 1;
+                if(gameState->animationItemTimersHUD[0] >= 0.0f) { gameState->animationItemTimersHUD[0] += appInfo->dt; canVal0 = gameState->animationItemTimersHUD[0]/0.5f; if(canVal0 >= 1.0f) { gameState->animationItemTimersHUD[0] = -1.0f; } canVal0 = smoothStep00(1, canVal0, 2.5f); }
+                if(gameState->animationItemTimersHUD[1] >= 0.0f) { gameState->animationItemTimersHUD[1] += appInfo->dt; canVal1 = gameState->animationItemTimersHUD[1]/0.5f; if(canVal1 >= 1.0f) { gameState->animationItemTimersHUD[1] = -1.0f; } canVal1 = smoothStep00(1, canVal1, 2.5f); }
+                
+
+                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal0, canVal0, 0)), itemPosition1));
+                renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+
+                outputTextNoBacking(globalDebugFont, itemPosition1.x + 50, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 1, true, 1);
+                
+                if(gameState->playerHolding[0] != ENTITY_NULL) {
+                    easyConsole_addToStream(DEBUG_globalEasyConsole, "HAS SOMETHING");
+
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(canVal0, canVal0, 0)), v3(itemPosition1.x, itemPosition1.y, 0.1f)));
+
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[0]);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+                }
+
+                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
+                renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+
+                outputTextNoBacking(globalDebugFont, itemPosition2.x + 50, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 1, true, 1);
+
+                if(gameState->playerHolding[1] != ENTITY_NULL) {
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(canVal1, canVal1, 0)), v3(itemPosition2.x, itemPosition2.y, 0.1f)));
+
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[1]);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                }
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            }
+            ///////
             
             //NOTE(ollie): Update the console
             if(easyConsole_update(&appInfo->console, &consoleKeyStates, appInfo->dt, (resolution.y / resolution.x))) {
@@ -393,6 +625,30 @@ int main(int argc, char *args[]) {
             DEBUG_TIME_BLOCK_FOR_FRAME_END(beginFrame, wasPressed(appInfo->keyStates.gameButtons, BUTTON_F4))
             DEBUG_TIME_BLOCK_FOR_FRAME_START(beginFrame, "Per frame")
             easyOS_endKeyState(&appInfo->keyStates);
+
+            if(recording) {
+                timeSinceLastFrame += appInfo->dt;
+
+                if((timeSinceLastFrame * 100.0f) >= centisecondsPerFrame) {
+                    timeSinceLastFrame = 0;
+                    u8 *stream = (u8 *)easyPlatform_allocateMemory(resolution.x*resolution.y*4, EASY_PLATFORM_MEMORY_NONE);
+
+                    renderReadPixels(endBuffer->bufferId, 0, 0, resolution.x, resolution.y, 
+                                          (u32)GL_RGBA,
+                                          (u32)GL_UNSIGNED_BYTE,
+                                          stream);
+
+                    // u8 *output_pixels = (u8 *)easyPlatform_allocateMemory(gif_width*gif_height*4, EASY_PLATFORM_MEMORY_NONE);
+
+                    // stbir_resize_uint8(stream, resolution.x, resolution.y, 0, output_pixels, gif_width, gif_height, 0, 4);
+                                                   
+                    msf_gif_frame(&gifState, stream, centisecondsPerFrame, bitDepth, -gif_width * 4); //frame 1  
+
+                    easyPlatform_freeMemory(stream); 
+                    // easyPlatform_freeMemory(output_pixels); 
+                } 
+            }
+            
         }
         easyOS_endProgram(appInfo);
     }

@@ -63,7 +63,7 @@ static inline void easyFlashText_updateManager(EasyFlashTextManager *m, RenderGr
 			alphaValue = 0;
 		} 
 
-		outputTextNoBacking(m->font, 0.5f*resolution.x, 0.5f*resolution.y, 1, resolution, t->message, rect2fMinMax(0, 0, resolution.x, resolution.y), v4(1, 1, 0, alphaValue), 1, true, m->relSize);
+		outputTextNoBacking(m->font, 0.5f*resolution.x, 0.5f*resolution.y, 1, resolution, t->message, rect2fMinMax(0, 0, resolution.x, resolution.y), v4(0, 0, 0, alphaValue), 1, true, 1);
 
 		if(increment) {
 			i++;
