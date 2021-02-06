@@ -54,6 +54,10 @@ static char *EasyRender_ShapeTypeStrings[] = { EASY_RENDER_SHAPE_TYPE(STRING) };
 
 static char* globalExeBasePath;
 
+#define EASY_STRING_IMPLEMENTATION 1
+#include "easy_string_utf8.h"
+#include "easy_string.h"
+
 #include "easy_files.h"
 #include "easy_math.h"
 #include "easy_error.h"
@@ -66,9 +70,7 @@ static char* globalExeBasePath;
 
 #include "easy_perlin.h"
 
-#define EASY_STRING_IMPLEMENTATION 1
-#include "easy_string_utf8.h"
-#include "easy_string.h"
+
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -115,6 +117,7 @@ static char* globalExeBasePath;
 #include "easy_collision.h"
 #include "easy_physics.h"
 #include "easy_vm.h"
+#include "easy_ai.h"
 
 // #include "easy_write.h"
 

@@ -346,8 +346,16 @@ void platformDeleteFile(char *fileName) {
 #include <shlwapi.h>
 #endif
 
-bool platformCreateDirectory(char *fileName) {
+bool platformCreateDirectory(char *fileName_) {
     bool result = false;
+
+    char *fileName = easyString_copyToHeap(fileName_);
+
+    //Remove any slashes at the end
+    while(fileName[strlen(fileName) - 1] == '/' || fileName[strlen(fileName) - 1] == '\\') {
+        fileName[strlen(fileName) - 1] = '\0';
+    }
+
 #ifdef __APPLE__
     DIR* dir = opendir(fileName);
     if (dir) {
@@ -367,13 +375,23 @@ bool platformCreateDirectory(char *fileName) {
         assert(!"couldn't create directory");
     }
 #endif
+
+    easyPlatform_freeMemory(fileName);
     return result;
 
 }
 
 
-bool platformDoesDirectoryExist(char *fileName) {
+bool platformDoesDirectoryExist(char *fileName_) {
     bool result = false;
+            
+    char *fileName = easyString_copyToHeap(fileName_);
+
+    //Remove any slashes at the end
+    while(fileName[strlen(fileName) - 1] == '/' || fileName[strlen(fileName) - 1] == '\\') {
+        fileName[strlen(fileName) - 1] = '\0';
+    }
+
 #ifdef __APPLE__
     DIR* dir = opendir(fileName);
     if(dir) {
@@ -389,6 +407,7 @@ bool platformDoesDirectoryExist(char *fileName) {
     }
 #endif
     
+    easyPlatform_freeMemory(fileName);
     return result;
 }
 
@@ -408,7 +427,7 @@ char *platformGetUniqueDirName(char *dirName) {
     return newDirName;
 }
 
-//Creates last folder if doesn't exist, but note recursive
+//Creates last folder if doesn't exist, but not recursive
 void platformCopyFile(char *fileName, char *copyDir) {
     FileContents contents = platformReadEntireFile(fileName, false);
     assert(contents.valid);

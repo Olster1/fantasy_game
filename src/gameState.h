@@ -1,11 +1,18 @@
+#define MY_ENTITY_TYPE(FUNC) \
+FUNC(ENTITY_NULL)\
+FUNC(ENTITY_SCENERY)\
+FUNC(ENTITY_WIZARD)\
+FUNC(ENTITY_PLAYER_PROJECTILE)\
+FUNC(ENTITY_SKELETON)\
+FUNC(ENTITY_HEALTH_POTION_1)\
+FUNC(ENITY_AUDIO_CHECKPOINT)\
+FUNC(ENITY_CHECKPOINT)\
+
 typedef enum {
-	ENTITY_NULL = 0,
-	ENTITY_SCENERY = 1,
-	ENTITY_WIZARD = 2,
-	ENTITY_PLAYER_PROJECTILE = 3,
-	ENTITY_SKELETON = 4,
-	ENTITY_HEALTH_POTION_1 = 5,
+    MY_ENTITY_TYPE(ENUM)
 } EntityType;
+
+static char *MyEntity_EntityTypeStrings[] = { MY_ENTITY_TYPE(STRING) };
 
 #define MAX_PLAYER_ITEM_COUNT 8
 #define UI_ITEM_PICKER_MIN_SIZE 1.0f
@@ -82,12 +89,28 @@ typedef struct {
 	//SOUNDS
 
 	WavFile *clickSound;
+	WavFile *equipItemSound;
+	WavFile *openMenuSound;
 
 	////
 
 
+	//EDITOR STATE
+	bool isEditorOpen;
+
+	///////////////////
 
 	EasyPhysics_World physicsWorld;
+
+	char *currentSceneName;
+	char *sceneFileNameTryingToSave;
+
+	float inverse_weight;
+
+
+	InfiniteAlloc splatList;
+	InfiniteAlloc splatTextures;
+
 } GameState; 
 
 static GameState *initGameState(float yOverX_aspectRatio) {
@@ -115,7 +138,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->indexInItems = 0;
 
-	state->clickSound = findSoundAsset("click2.wav");
+	state->openMenuSound = state->equipItemSound = state->clickSound = findSoundAsset("click2.wav");
 
 
 	//NOTE: Initialize the ui item pickers to nothing
@@ -126,6 +149,20 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->animationItemTimersHUD[0] = -1.0f;
 	state->animationItemTimersHUD[1] = -1.0f;
+
+	state->isEditorOpen = false;
+
+	state->inverse_weight = 1 / 10.0f;
+
+	state->currentSceneName = 0;
+	state->sceneFileNameTryingToSave = 0;
+
+	state->splatList = initInfinteAlloc(char *);
+	state->splatTextures = initInfinteAlloc(Texture *);
+
+
+	EasyPhysics_beginWorld(&state->physicsWorld);
+
 
 	return state;
 }	

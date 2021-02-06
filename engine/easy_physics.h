@@ -2,6 +2,9 @@
 #define PHYSICS_TIME_STEP 0.002f 
 #endif
 
+
+static float global_easyPhysics_gravityModifier = 1.0f;
+
 typedef struct {
 	bool collided;
 	V2 point;
@@ -238,6 +241,12 @@ typedef struct {
 	Array_Dynamic rigidBodies;
 	float physicsTime;
 } EasyPhysics_World;
+
+static void EasyPhysics_emptyPhysicsWorld(EasyPhysics_World *world) {
+	DEBUG_TIME_BLOCK()
+	easyArray_clear(&world->colliders);
+	easyArray_clear(&world->rigidBodies);
+}
 
 
 static void EasyPhysics_beginWorld(EasyPhysics_World *world) {
@@ -520,6 +529,7 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&world->rigidBodies);
 
     EasyRigidBody *rb = (EasyRigidBody *)arrayInfo.elm;
+    memset(rb, 0, sizeof(EasyRigidBody));
 
     // memset(rb, 0, sizeof(EasyRigidBody));
     rb->arrayIndex = arrayInfo.absIndex;
@@ -599,7 +609,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	    EasyRigidBody *rb = (EasyRigidBody *)getElement(rigidBodies, i);
 	    if(rb) {
 
-	    	V3 gravity = EasyPhysics_AddGravity(rb, rb->gravityFactor);
+	    	V3 gravity = EasyPhysics_AddGravity(rb, global_easyPhysics_gravityModifier*rb->gravityFactor);
 
 	    ///////////////////////************* Integrate accel & velocity ************////////////////////
 	    	

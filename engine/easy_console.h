@@ -32,6 +32,10 @@ typedef struct {
 
 	bool isInFocus;
 
+	//For console to keep state across multiple queries, so you can ask questions. 
+	int questionId;
+	bool askingQuestion;
+
 	EasyTokenizer tokenizer;
 } EasyConsole;
 
@@ -55,6 +59,9 @@ inline void easyConsole_initConsole(EasyConsole *c, ButtonType hotkey) {
 	easyString_initInputBuffer(&c->buffer, false);
 
 	c->tokenizer.parsing = false;
+
+	c->questionId = 0;
+	c->askingQuestion = false;
 
 	c->streamAt = 0;
 	c->streamSize = 1000;
@@ -138,6 +145,8 @@ inline bool easyConsole_update(EasyConsole *c, AppKeyStates *keyStates, float dt
 		if(c->state >= (int)EASY_CONSOLE_COUNT) {
 			c->state = EASY_CONSOLE_CLOSED;
 			c->isInFocus = false;
+			//Stop asking any questions
+			c->askingQuestion = false;
 			turnTimerOff(&c->focusGlowTimer);
 		} else {
 			c->isInFocus = true;

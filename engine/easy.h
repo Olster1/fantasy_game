@@ -340,6 +340,14 @@ static void easyString_initInputBuffer(InputBuffer *buffer, bool canResize) {
 
 }
 
+static void easyString_emptyInputBuffer(InputBuffer *buffer) {
+    buffer->length = 0;
+    buffer->cursorAt = 0;
+    if(buffer->totalAllocatedBytes > 0) {
+        buffer->chars[0] = '\0';    
+    }
+}
+
 static void easyString_deleteInputBuffer(InputBuffer *buffer) {
     easyPlatform_freeMemory(buffer->chars);
 }

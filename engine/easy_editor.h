@@ -78,6 +78,8 @@ typedef struct {
 
 			//NOTE(ollie): To see if it docks anywhere
 			EasyEditor_WindowDockType dockType; 
+
+			bool drawnYet;
 		};
 		struct { //color selection state
 			
@@ -302,10 +304,19 @@ static inline void easyEditor_startWindow_(EasyEditor *e, char *name, float x, f
 		w->margin = InfinityRect2f();
 		w->topCorner = v2(x, y); //NOTE: Default top corner
 		
-		if(w->dockType != EASY_EDITOR_DOCK_NONE) {
+		if(dockType != EASY_EDITOR_DOCK_NONE) {
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "NOT NOW");
 			//just default the position to out of the screen since we calculate the position at the end of the window
-			w->topCorner = e->fuaxResolution;
+			//NOTE: Couldn't use INFINITY_VALUE since the margin for the text output is using these values and the span of that react was 
+			//		between -INFINITY & INFINITY & Y was clamped to onscreen values.  
+			w->topCorner = v2(3000.0f, 3000.0f);
+
+		} else {	
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "YEA");
 		}
+		w->drawnYet = false;
+	} else {
+		w->drawnYet = true;
 	}
 
 
@@ -332,72 +343,81 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 
 	//update the handle
 
-	Rect2f rect = outputTextNoBacking(e->font, w->topCorner.x, w->topCorner.y - e->font->fontHeight - EASY_EDITOR_MARGIN, 1, e->fuaxResolution, w->name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
-	rect = expandRectf(rect, v2(EASY_EDITOR_MARGIN, EASY_EDITOR_MARGIN));
+	Rect2f rect = outputTextNoBacking(e->font, w->topCorner.x, w->topCorner.y - e->font->fontHeight - 2*EASY_EDITOR_MARGIN, 1, e->fuaxResolution, w->name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
 
-	w->at.x += getDim(rect).x;
+		//explicilty set the top handle to the right size 
+		rect.maxY = w->topCorner.y - e->font->fontHeight;
+		rect.minX = w->topCorner.x - EASY_EDITOR_MARGIN;
+		w->at.x += getDim(rect).x;
 
-	if(w->maxX < w->at.x) {
-		w->maxX = w->at.x;
-	}
-
-	rect.maxX = w->maxX + EASY_EDITOR_MARGIN;
-
-	///////////////////////************** We set the position depending on the dock type ***********////////////////////
-	float windowHeight = w->at.y - w->topCorner.y;
-	float windowWidth = w->maxX - w->topCorner.x;
-
-	switch(w->dockType) {
-		case EASY_EDITOR_DOCK_BOTTOM_LEFT: {
-			w->topCorner = v2(0, e->fuaxResolution.y - windowHeight);
-		} break;
-		case EASY_EDITOR_DOCK_BOTTOM_RIGHT: {
-			w->topCorner = v2(e->fuaxResolution.x - windowWidth, e->fuaxResolution.y - windowHeight);
-		} break;
-		case EASY_EDITOR_DOCK_TOP_LEFT: {
-			w->topCorner = v2(0, 0);
-		} break;
-		case EASY_EDITOR_DOCK_TOP_RIGHT: {
-			w->topCorner = v2(e->fuaxResolution.x - windowWidth, 0);
-		} break;
-		default: {
-			//do nothing
+		if(w->maxX < w->at.x) {
+			w->maxX = w->at.x;
 		}
-	}
 
-	//NOTE(ollie): Draw the backing
-	Rect2f bounds = rect2fMinMax(w->topCorner.x - EASY_EDITOR_MARGIN, w->topCorner.y - e->font->fontHeight, w->maxX + EASY_EDITOR_MARGIN, w->at.y); 
-	renderDrawRect(bounds, 10, COLOR_BLACK, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+		rect.maxX = w->maxX + EASY_EDITOR_MARGIN;
+
+		///////////////////////************** We set the position depending on the dock type ***********////////////////////
+		float windowHeight = w->at.y - w->topCorner.y;
+		float windowWidth = w->maxX - rect.minX;
+
+		float maxExtent = w->maxX + EASY_EDITOR_MARGIN;
+
+		switch(w->dockType) {
+			case EASY_EDITOR_DOCK_BOTTOM_LEFT: {
+				w->topCorner = v2(0, e->fuaxResolution.y - windowHeight);
+			} break;
+			case EASY_EDITOR_DOCK_BOTTOM_RIGHT: {
+				w->topCorner = v2(e->fuaxResolution.x - windowWidth, e->fuaxResolution.y - windowHeight);
+				maxExtent = e->fuaxResolution.x;
+			} break;
+			case EASY_EDITOR_DOCK_TOP_LEFT: {
+				w->topCorner = v2(0, 2*e->font->fontHeight);
+			} break;
+			case EASY_EDITOR_DOCK_TOP_RIGHT: {
+				w->topCorner = v2(e->fuaxResolution.x - windowWidth, 2.0f*e->font->fontHeight + 0.4f*EASY_EDITOR_MARGIN);
+				maxExtent = e->fuaxResolution.x;
+			} break;
+			default: {
+				//do nothing
+			}
+		}
+
+		//NOTE(ollie): Draw the backing
+		Rect2f bounds = rect2fMinMax(w->topCorner.x - EASY_EDITOR_MARGIN, w->topCorner.y - e->font->fontHeight, maxExtent, w->at.y); 
+		if(w->drawnYet) {
+			renderDrawRect(bounds, 10, COLOR_BLACK, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+		}
+
+		V4 color = COLOR_BLUE;
+
+		if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), rect, BOUNDS_RECT) && !e->interactingWith.item && w->dockType == EASY_EDITOR_DOCK_NONE) {
+			color = COLOR_YELLOW;
+			if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+				easyEditor_startInteracting(e, w, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_WINDOW);
+
+				e->interactingWith.dragOffset = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), w->topCorner);
+			} 
+		}
+
+		if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
+			e->interactingWith.visitedThisFrame = true;
+			color = COLOR_GREEN;
+
+			if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+				easyEditor_stopInteracting(e);
+			} else {
+				w->topCorner = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), e->interactingWith.dragOffset);
+			}
+		}
 
 
-	V4 color = COLOR_BLUE;
-
-	if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), rect, BOUNDS_RECT) && !e->interactingWith.item && w->dockType == EASY_EDITOR_DOCK_NONE) {
-		color = COLOR_YELLOW;
-		if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
-			easyEditor_startInteracting(e, w, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_WINDOW);
-
-			e->interactingWith.dragOffset = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), w->topCorner);
+		if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), bounds, BOUNDS_RECT) || inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), rect, BOUNDS_RECT)) {
+			e->isHovering_unstable = true;
 		} 
-	}
-
-	if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
-		e->interactingWith.visitedThisFrame = true;
-		color = COLOR_GREEN;
-
-		if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
-			easyEditor_stopInteracting(e);
-		} else {
-			w->topCorner = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), e->interactingWith.dragOffset);
+		if(w->drawnYet) {
+			renderDrawRect(rect, 3, color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);	
 		}
-	}
-
-
-	if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), bounds, BOUNDS_RECT) || inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), rect, BOUNDS_RECT)) {
-		e->isHovering_unstable = true;
-	} 
-	renderDrawRect(rect, 3, color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
-
+		
 
 	//////
 
@@ -646,8 +666,9 @@ static inline bool easyEditor_pushButton_(EasyEditor *e, char *name, int lineNum
 
 	V4 color = COLOR_WHITE;
 
-	Rect2f bounds = outputTextNoBacking(e->font, w->at.x, w->at.y, 1, e->fuaxResolution, name, w->margin, COLOR_BLACK, 1, true, e->screenRelSize);
+	Rect2f bounds = outputTextNoBacking(e->font, w->at.x + EASY_EDITOR_MARGIN, w->at.y, 1, e->fuaxResolution, name, w->margin, COLOR_BLACK, 1, true, e->screenRelSize);
 	bounds = expandRectf(bounds, v2(EASY_EDITOR_MARGIN, EASY_EDITOR_MARGIN));
+	// bounds.minX = w->topCorner.x + EASY_EDITOR_MARGIN;
 	
 	//NOTE(ollie): Increment the bounds 
 	w->at.x += getDim(bounds).x;
@@ -693,6 +714,7 @@ static inline bool easyEditor_pushButton_(EasyEditor *e, char *name, int lineNum
 
 typedef enum {
 	EASY_EDITOR_FLOAT_BOX,
+	EASY_EDITOR_INT_BOX,
 	EASY_EDITOR_TEXT_BOX,
 } EasyEditor_TextBoxType;
 
@@ -701,7 +723,7 @@ typedef struct {
 	char *string;
 } EasyEditor_TextBoxEditInfo;
 
-static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(EasyEditor *e, float *f, char *startStr, int lineNumber, char *fileName, int index, EasyEditor_TextBoxType boxType) {
+static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(EasyEditor *e, float *f, int *intVal, char *startStr, int lineNumber, char *fileName, int index, EasyEditor_TextBoxType boxType) {
 	EasyEditor_TextBoxEditInfo result = {};
 
 	assert(e->currentWindow);
@@ -719,6 +741,11 @@ static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(Eas
 			if(boxType == EASY_EDITOR_FLOAT_BOX) {
 				float newValue = atof(field->buffer.chars);
 				*f = newValue;	
+			} 
+
+			if(boxType == EASY_EDITOR_INT_BOX) {
+				float newValue = atoi(field->buffer.chars);
+				*intVal = newValue;	
 			} 
 
 			easyEditor_stopInteracting(e);
@@ -745,7 +772,22 @@ static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(Eas
 	} else {
 		//Where we first put the string in the buffer 
 		if(boxType == EASY_EDITOR_FLOAT_BOX) {
-			sprintf(field->buffer.chars, "%f", *f); 
+			//Empty the buffer
+			easyString_emptyInputBuffer(&field->buffer);
+
+			char floatStr[512];
+			sprintf(floatStr, "%f", *f);
+
+			splice(&field->buffer, floatStr, true);
+
+		} else if(boxType == EASY_EDITOR_INT_BOX) {
+			//Empty the buffer
+			easyString_emptyInputBuffer(&field->buffer);
+
+			char floatStr[512];
+			sprintf(floatStr, "%d", *intVal);
+
+			splice(&field->buffer, floatStr, true);
 		} else if(boxType == EASY_EDITOR_TEXT_BOX && !hasState) {
 			splice(&field->buffer, startStr, true);
 		}
@@ -803,7 +845,7 @@ static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *sta
 		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
 	}
 
-	EasyEditor_TextBoxEditInfo textInfo = easyEditor_renderBoxWithCharacters_(e, 0, startStr, lineNumber, fileName, 0, EASY_EDITOR_TEXT_BOX);
+	EasyEditor_TextBoxEditInfo textInfo = easyEditor_renderBoxWithCharacters_(e, 0, 0, startStr, lineNumber, fileName, 0, EASY_EDITOR_TEXT_BOX);
 	Rect2f bounds = textInfo.bounds;
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
 
@@ -817,6 +859,26 @@ static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *sta
 	return textInfo.string;
 }
 
+#define easyEditor_pushInt1(e, name, f0) easyEditor_pushInt1_(e, name, f0, __LINE__, __FILE__)
+static inline void easyEditor_pushInt1_(EasyEditor *e, char *name, int *f, int lineNumber, char *fileName) {
+	EasyEditorState *w = e->currentWindow;
+	assert(w);
+	if(name && strlen(name) > 0) {
+		Rect2f rect = outputTextNoBacking(e->font, w->at.x, w->at.y, 1, e->fuaxResolution, name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
+		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
+	}
+
+	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, 0, f, 0, lineNumber, fileName, 0, EASY_EDITOR_INT_BOX).bounds;
+	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
+
+	if(w->maxX < w->at.x) {
+		w->maxX = w->at.x;
+	}
+	w->at.x = w->topCorner.x;
+	w->at.y += getDim(bounds).y + EASY_EDITOR_MARGIN;
+
+}
+
 #define easyEditor_pushFloat1(e, name, f0) easyEditor_pushFloat1_(e, name, f0, __LINE__, __FILE__)
 static inline void easyEditor_pushFloat1_(EasyEditor *e, char *name, float *f, int lineNumber, char *fileName) {
 	EasyEditorState *w = e->currentWindow;
@@ -826,7 +888,7 @@ static inline void easyEditor_pushFloat1_(EasyEditor *e, char *name, float *f, i
 		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
 	}
 
-	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
+	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f, 0, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
 
 	if(w->maxX < w->at.x) {
@@ -847,10 +909,10 @@ static inline void easyEditor_pushFloat2_(EasyEditor *e, char *name, float *f0, 
 		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
 	}
 
-	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f0, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
+	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f0, 0, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
 
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
-	bounds = easyEditor_renderBoxWithCharacters_(e, f1, 0, lineNumber, fileName, 1, EASY_EDITOR_FLOAT_BOX).bounds;
+	bounds = easyEditor_renderBoxWithCharacters_(e, f1, 0, 0, lineNumber, fileName, 1, EASY_EDITOR_FLOAT_BOX).bounds;
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
 
 	if(w->maxX < w->at.x) {
@@ -871,12 +933,12 @@ static inline void easyEditor_pushFloat3_(EasyEditor *e, char *name, float *f0, 
 		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
 	}
 
-	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f0, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
+	Rect2f bounds = easyEditor_renderBoxWithCharacters_(e, f0, 0, 0, lineNumber, fileName, 0, EASY_EDITOR_FLOAT_BOX).bounds;
 
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
-	bounds = easyEditor_renderBoxWithCharacters_(e, f1, 0, lineNumber, fileName, 1, EASY_EDITOR_FLOAT_BOX).bounds;
+	bounds = easyEditor_renderBoxWithCharacters_(e, f1, 0, 0, lineNumber, fileName, 1, EASY_EDITOR_FLOAT_BOX).bounds;
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
-	bounds = easyEditor_renderBoxWithCharacters_(e, f2, 0, lineNumber, fileName, 2, EASY_EDITOR_FLOAT_BOX).bounds;
+	bounds = easyEditor_renderBoxWithCharacters_(e, f2, 0, 0, lineNumber, fileName, 2, EASY_EDITOR_FLOAT_BOX).bounds;
 	w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
 
 	if(w->maxX < w->at.x) {
@@ -972,7 +1034,7 @@ static inline void easyEditor_pushSlider_(EasyEditor *e, char *name, float *valu
 
 ///////////////////////*************advance the cursor ************////////////////////
 
-	w->at.x += sliderX;
+	w->at.x += sliderX + EASY_EDITOR_MARGIN;
 
 
 	if(w->maxX < w->at.x) {

@@ -2,15 +2,15 @@
 
 typedef enum {
 	ENTITY_SHOW_HEALTH_BAR = 1 << 0,
+	ENTITY_SHOULD_SAVE = 1 << 1,
 } EntityFlags;
 
-typedef struct {
-	Array_Dynamic entities;
+typedef enum {
+	ENTITY_SUB_TYPE_NONE = 0,
+	ENTITY_SUB_TYPE_TORCH = 1 << 0,
+} SubEntityType;
 
-	Array_Dynamic entitiesToAddForFrame;
-	Array_Dynamic entitiesToDeleteForFrame;
 
-} EntityManager;	
 
 
 
@@ -23,6 +23,8 @@ typedef struct {
 	bool isFlipped; 
 
 	bool isDead;
+
+	int subEntityType;
 
 	//NOTE: If no animation, use this sprite
 	Texture *sprite;
@@ -51,9 +53,22 @@ typedef struct {
 
 	float healthBarTimer; 
 
+	//For the audio checklist
+	WavFile *audioFile;
+
 
 } Entity;
 
+typedef struct {
+	Array_Dynamic entities;
+
+	Array_Dynamic entitiesToAddForFrame;
+	Array_Dynamic entitiesToDeleteForFrame;
+
+	int lastEntityIndex;
+
+	Entity *player;
+} EntityManager;	
 
 typedef struct {
 	EntityType type;
@@ -66,10 +81,16 @@ static void initEntityManager(EntityManager *manager) {
 
 	initArray(&manager->entitiesToAddForFrame, EntityToAdd);
 	initArray(&manager->entitiesToDeleteForFrame, int);
+
+	manager->lastEntityIndex = 0;
 }
+
+
 
 Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim, V2 physicsDim, GameState *gameState, EntityType type, float inverse_weight, Texture *sprite, V4 colorTint, float layer, bool canCollide) {
 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entities);
+
+	manager->lastEntityIndex = arrayInfo.absIndex;
 
 	Entity *entity = (Entity *)arrayInfo.elm;
 
@@ -102,7 +123,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->maxHealth = 3;
 	entity->health = entity->maxHealth;
 
-	float gravityFactor = 120;
+	float gravityFactor = 150;
 	if(type == ENTITY_SCENERY) 
 	{ 
 		gravityFactor = 0; 
@@ -112,15 +133,26 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
+	if(type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_HEALTH_POTION_1) {
+
+	} else {
+		entity->flags |= (u64)ENTITY_SHOULD_SAVE;
+	}
+
 	bool isTrigger = false;
 
 	float dragFactor = 0.12f;
 
 	entity->collider1 = 0;
 
+	entity->subEntityType = (int)ENTITY_SUB_TYPE_NONE;
+
 	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; }
 
 	if(type == ENTITY_HEALTH_POTION_1) { isTrigger = false;  }
+
+	if(type == ENITY_CHECKPOINT || type == ENITY_AUDIO_CHECKPOINT) { isTrigger = true; }
+	
 
 	if(canCollide) {
 		// char string[256];
@@ -152,6 +184,12 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			} break;
 			case ENTITY_HEALTH_POTION_1: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ITEM_RIGID;
+			} break;
+			case ENITY_AUDIO_CHECKPOINT: {
+				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
+			} break;
+			case ENITY_CHECKPOINT: {
+				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
 			} break;
 		}
 
@@ -194,6 +232,10 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
     return result;
 }
 
+static float getEntityZLayerPos(Entity *e) {
+	return -0.1f*e->layer;	
+}
+
 
 ////////////////////////////////////////////////////////////////////
 
@@ -201,7 +243,7 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
 void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused) {
 
 	if(entity->type == ENTITY_WIZARD) {
-		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)){
+		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -400;
 			}
@@ -267,7 +309,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 
 		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
-			entity->rb->accumForceOnce.y += 70000;
+			entity->rb->accumForceOnce.y += 55000;
 			animToAdd = &gameState->wizardJump;
 		}
 
@@ -382,8 +424,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 
-	
-	entity->T.pos.z = 0.1f*entity->layer;
+		
+	entity->T.pos.z = getEntityZLayerPos(entity);
 
 	//NOTE: DRAWING HEALTH BAR OVER ENEMIES
 	if(entity->flags & ENTITY_SHOW_HEALTH_BAR) {
@@ -404,8 +446,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			float w = 0.8f; //game world meters
 			float h = 0.1f; //game world meters
-
-			entity->T.pos.z -= 0.05f;
 
 			Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(w, h, 0)), v3_plus(entP, v3(0, 0.5f, 0)));
 
@@ -463,6 +503,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entityToAdd->dP.y = 10;
 			entityToAdd->dP.x = randomBetween(-5, 5);
 		}
+	} else if(!DEBUG_DRAW_SCENERY_TEXTURES) {
+		sprite = 0;
 	}
 	
 
@@ -498,8 +540,56 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	/////////////////////
 
 	setModelTransform(globalRenderGroup, T);
-	renderDrawSprite(globalRenderGroup, sprite, entity->colorTint);
+	if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	
 	// renderDrawQuad(globalRenderGroup, COLOR_RED);
 
+	//Reset for collision
 	entity->T.pos.z = 0;
+}
+
+
+
+
+//Init entity types
+
+static Entity *initScenery_noRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+    return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
+}
+
+static Entity *initScenery_withRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
+}
+
+static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 worldP) {
+	 return initEntity(manager, &gameState->wizardIdle, worldP, v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
+}
+static Entity *initSkeleton(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, &gameState->skeltonIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+}
+
+static Entity *initTorch(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e  = initEntity(manager, &gameState->torchAnimation, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
+	e->subEntityType |= (int)ENTITY_SUB_TYPE_TORCH;
+
+	return e;
+}
+
+static Entity *initCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+}
+
+static Entity *initAudioCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+}
+
+static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics_World *physicsWorld) {
+	easyArray_clear(&manager->entitiesToDeleteForFrame);
+	easyArray_clear(&manager->entities);
+	easyArray_clear(&manager->entitiesToAddForFrame);
+
+	EasyPhysics_emptyPhysicsWorld(physicsWorld);
+	
+	manager->lastEntityIndex = 0;
+	manager->player = 0;
 }

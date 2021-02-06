@@ -129,6 +129,19 @@ bool v2Equal_withError(V2 a, V2 b, float error) {
     return result;
 }
 
+V2 absVal_v2(V2 a) {
+    V2 result = a;
+    if(a.x < 0) {
+        result.x = -a.x;
+    }
+
+    if(a.y < 0) {
+        result.y = -a.y;
+    }
+    return result;
+    
+}
+
 V4 v4(float x, float y, float z, float w) {
     V4 result = {};
     result.x = x;
