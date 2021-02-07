@@ -285,7 +285,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             		    		if(easyString_stringsMatch_nullTerminated(name, "white texture") ) {
             		    			splatTexture = &globalWhiteTexture;
             		    		} else {
-            		    			splatTexture = findTextureAsset(name);	
+            		    			splatTexture = gameState_findSplatTexture(gameState, name);	
             		    		}
             		    		
 

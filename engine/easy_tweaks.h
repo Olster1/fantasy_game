@@ -75,10 +75,16 @@ float getFloatFromTweakData(Tweaker *tweaker, char *name) {
 	TweakVar *var = findTweakVar(tweaker, name);
 	assert(var);
 	DataObject *objs = (DataObject *)var->data.memory;
-	assert(objs[0].type == VAR_FLOAT);
+	assert(objs[0].type == VAR_FLOAT || objs[0].type == VAR_INT);
 	assert(var->data.count == 1);
 
-	float result = objs[0].floatVal;
+	float result = 0;
+	if(objs[0].type == VAR_FLOAT) {
+		result = objs[0].floatVal;
+	} else if(objs[0].type == VAR_INT) {
+		result = objs[0].intVal;
+	}
+	
 	return result;
 }
 
@@ -118,6 +124,19 @@ bool getBoolFromTweakData(Tweaker *tweaker, char *name) {
     return result;
 }
 
+
+static bool easyFile_canOpenFile_forRead(char *FileName) {
+    assert(FileName);
+    SDL_RWops* FileHandle = SDL_RWFromFile(FileName, "r");
+    bool result = false;
+
+    if(FileHandle) {
+        result = true;
+        SDL_RWclose(FileHandle);
+    }
+    return result;
+}
+
 bool refreshTweakFile(char *fileName, Tweaker *tweaker) {
 	bool refreshed = false;
 	struct stat result;
@@ -125,7 +144,8 @@ bool refreshTweakFile(char *fileName, Tweaker *tweaker) {
 	if(stat(fileName, &result) == 0) {
 	    mod_time = result.st_mtime;
 	}
-	if(mod_time != tweaker->modTime) {
+
+	if((mod_time > tweaker->modTime) && easyFile_canOpenFile_forRead(fileName)) {
 		refreshed = true;
 		if(tweaker->varCount) {
 			for(int i = 0; i < tweaker->varCount; ++i) {

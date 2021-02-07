@@ -111,6 +111,11 @@ typedef struct {
 	InfiniteAlloc splatList;
 	InfiniteAlloc splatTextures;
 
+	//Player variables loaded in tweak file
+	float jumpPower;
+	float walkPower;
+	float gravityScale;
+
 } GameState; 
 
 static GameState *initGameState(float yOverX_aspectRatio) {
@@ -160,9 +165,28 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->splatList = initInfinteAlloc(char *);
 	state->splatTextures = initInfinteAlloc(Texture *);
 
+	state->walkPower = 400;
+
+	state->gravityScale = 150;
 
 	EasyPhysics_beginWorld(&state->physicsWorld);
 
 
 	return state;
 }	
+
+
+static Texture *gameState_findSplatTexture(GameState *gameState, char *textureName) {
+	Texture *found = 0;
+
+	for(int i = 0; i < gameState->splatTextures.count && !found; ++i) {
+		Texture *t = *getElementFromAlloc(&gameState->splatTextures, i , Texture *);
+
+		if(easyString_stringsMatch_nullTerminated(textureName, t->name)) {
+			found = t;
+			break;
+		}
+	}	
+
+	return found;
+}

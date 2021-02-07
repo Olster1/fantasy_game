@@ -123,7 +123,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->maxHealth = 3;
 	entity->health = entity->maxHealth;
 
-	float gravityFactor = 150;
+	float gravityFactor = gameState->gravityScale; //150
 	if(type == ENTITY_SCENERY) 
 	{ 
 		gravityFactor = 0; 
@@ -245,11 +245,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	if(entity->type == ENTITY_WIZARD) {
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
-				entity->rb->accumForce.x += -400;
+				entity->rb->accumForce.x += -gameState->walkPower;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
-				entity->rb->accumForce.x += 400;
+				entity->rb->accumForce.x += gameState->walkPower;
 			}
 
 
@@ -309,7 +309,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 
 		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
-			entity->rb->accumForceOnce.y += 55000;
+			entity->rb->accumForceOnce.y += gameState->jumpPower;
 			animToAdd = &gameState->wizardJump;
 		}
 

@@ -228,9 +228,26 @@ int main(int argc, char *args[]) {
                 initEntity(manager, 0, v3(3, -3.5f, 0), v2(3, 2.5f), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
         #endif
 
+        gameState->jumpPower = 55000;
+        Tweaker *tweaker = pushStruct(&globalLongTermArena, Tweaker);
+        tweaker->varCount = 0;
 
+        char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
 
         while(appInfo->running) {
+
+            if(refreshTweakFile(tweakerFileName, tweaker)) {
+                gameState->jumpPower = getIntFromTweakData(tweaker, "jumpPower");
+                gameState->walkPower = getIntFromTweakData(tweaker, "walkPower");
+                gameState->gravityScale = (float)getFloatFromTweakData(tweaker, "gravityScale");
+
+                for(int i = 0; i < manager->entities.count; ++i) {
+                    Entity *e = (Entity *)getElement(&manager->entities, i);
+                    if(e && e->rb && e->rb->gravityFactor > 0) {
+                        e->rb->gravityFactor = gameState->gravityScale;
+                    }
+                }
+            }
 
             easyOS_processKeyStates(&appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
             easyOS_beginFrame(resolution, appInfo);
@@ -1059,7 +1076,6 @@ int main(int argc, char *args[]) {
                             } else {
                                 gameScene_saveScene(manager, sceneFileName);
                                 easyFlashText_addText(&globalFlashTextManager, "SAVED");   
-                                easyPlatform_freeMemory(gameState->sceneFileNameTryingToSave); 
                             }
                             
                         } else {
@@ -1078,7 +1094,8 @@ int main(int argc, char *args[]) {
                             if(gameScene_doesSceneExist(sceneFileName)) {
                                 entityManager_emptyEntityManager(manager, &gameState->physicsWorld);
                                 editorState->entitySelected = 0;
-                                gameScene_loadScene(gameState, manager, sceneFileName);
+                                //NOTE: MEMEORY LEAK HERE. We don' free the scene file name when we load a new scene
+                                gameScene_loadScene(gameState, manager, nullTerminateArena(token.at, token.size, &globalLongTermArena));
                             } else {
                                 easyConsole_addToStream(DEBUG_globalEasyConsole, "No scene to load");    
                             }
