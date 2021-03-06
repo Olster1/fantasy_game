@@ -1,0 +1,15 @@
+{
+
+	id: 25;
+	type: "ENTITY_SCENERY";
+	position: 8.861150 2.044919 0.000000;
+	scale: 3.192430 1.140636 1.000000;
+	color: 0.976953 1.000000 0.949613 1.000000;
+	rotation: 1.000000 0.000000 0.000000 0.000000;
+	maxHealth: 3;
+	layer: -1.000000;
+	subtype: 2;
+	spriteName: "one_wayplatform";
+	colliderScale: 1.000000 0.500000;
+}
+

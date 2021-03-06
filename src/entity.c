@@ -105,6 +105,9 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	easyTransform_initTransform_withScale(&entity->T, pos, v3(width, height, 1), EASY_TRANSFORM_STATIC_ID);
 	easyAnimation_initController(&entity->animationController);
 
+	//NOTE: Have entities spun around the x axis 45 degrees for the top down effect
+	entity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
+
 	if(animation) {
 		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);	
 	}

@@ -94,6 +94,8 @@ int main(int argc, char *args[]) {
         
         EasyCamera camera;
         easy3d_initCamera(&camera, v3(0, 0, -10));
+
+        camera.orientation = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
         EasyTransform sunTransform;
         easyTransform_initTransform(&sunTransform, v3(0, -10, 0), EASY_TRANSFORM_TRANSIENT_ID);

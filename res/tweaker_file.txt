@@ -1,0 +1,4 @@
+jumpPower: 240000;
+walkPower: 800;
+gravityScale: 200;
+cameraSnapDistance: 0.1;

@@ -1,0 +1,14 @@
+{
+
+	id: 45;
+	type: "ENTITY_SCENERY";
+	position: 5.724380 8.905608 0.000000;
+	scale: 1.000000 1.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	maxHealth: 3;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "tree";
+}
+

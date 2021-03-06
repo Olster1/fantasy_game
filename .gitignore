@@ -2,6 +2,9 @@
 /bin/*
 /SDL2/*
 /res/*
+!/res/scenes/
+!/res/shaders/
+!/res/tweaker_file.txt
 
 # Object files
 *.o
