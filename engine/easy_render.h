@@ -263,6 +263,7 @@ RenderProgram textureProgram;
 RenderProgram textureOutlineProgram;
 RenderProgram skyQuadProgram;
 RenderProgram terrainProgram;
+RenderProgram terrainProgram2d;
 RenderProgram toneMappingProgram;
 RenderProgram blurProgram;
 RenderProgram colorWheelProgram;
@@ -1634,6 +1635,9 @@ void enableRenderer(int width, int height, Arena *arena) {
     terrainProgram = createProgramFromFile(vertex_terrain_shader, frag_terrain_shader, false);
     renderCheckError();
 
+    terrainProgram2d = createProgramFromFile(vertex_terrain_shader, frag_blend_map2d_shader, false);
+    renderCheckError();
+
     toneMappingProgram = createProgramFromFile(vertex_fullscreen_quad_shader, frag_tone_map_shader, false);
     renderCheckError();
 
@@ -2077,6 +2081,14 @@ static inline void renderTerrain(RenderGroup *group, VaoHandle *bufferHandle, V4
     RenderItem * i = pushRenderItem(bufferHandle, group, 0, 0, 0, bufferHandle->indexCount, &terrainProgram, "Terrain", SHAPE_TERRAIN, 0, group->modelTransform, group->viewTransform, group->projectionTransform, colorTint, sortZ, material, packet); 
 }
 
+
+static void renderDrawTerrain2d(RenderGroup *group, V4 colorTint, void *packet) {
+    DEBUG_TIME_BLOCK()
+    //TODO: @speed this is probably pretty expensive to do for every sprite?
+    float sortZ = Mat4Mult(group->viewTransform, group->modelTransform).val[14];
+    pushRenderItem(&globalQuadVaoHandle, group, globalQuadPositionData, arrayCount(globalQuadPositionData), globalQuadIndicesData, arrayCount(globalQuadIndicesData), &terrainProgram2d, "Terrain2d", SHAPE_TERRAIN_2D, 0, group->modelTransform, group->viewTransform, group->projectionTransform, colorTint, sortZ, 0, packet);
+}
+
 static inline void renderModel(RenderGroup *group, EasyModel *model, V4 colorTint) {  
     for(int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex) {
         EasyMesh *thisMesh = model->meshes[meshIndex];
@@ -2416,6 +2428,30 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
 
         glUniform2f(glGetUniformLocation(program->glProgram, "dim"),  packet->dim.x, packet->dim.y);
         renderCheckError();
+    }
+
+    if(type == SHAPE_TERRAIN_2D) {
+        EasyTerrainDataPacket *packet = (EasyTerrainDataPacket *)dataPacket;
+
+        glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "projection"), 1, GL_FALSE, projectionTransform->E_);
+        renderCheckError();
+
+        // glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "projection"), 1, GL_FALSE, group->projectionTransform.E_);
+        // renderCheckError();
+        // glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "view"), 1, GL_FALSE, group->viewTransform.E_);
+        // renderCheckError();
+        // glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "model"), 1, GL_FALSE, group->modelTransform.E_);
+        // renderCheckError();
+
+        for(int i = 0; i < packet->textureCount; ++i) {
+            Texture *t = packet->textures[i];
+            char buffer[64];
+            sprintf(buffer, "%s%d", "tex", i);
+            easy_BindTexture(buffer, i, t->id, program);
+        }
+
+        easy_BindTexture("blendMap", 5, packet->blendMap->id, program);
+
     }
 
     if(type == SHAPE_SKY_QUAD) {

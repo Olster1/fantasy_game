@@ -7,6 +7,7 @@ FUNC(ENTITY_SKELETON)\
 FUNC(ENTITY_HEALTH_POTION_1)\
 FUNC(ENITY_AUDIO_CHECKPOINT)\
 FUNC(ENITY_CHECKPOINT)\
+FUNC(ENTITY_TERRAIN)\
 
 typedef enum {
     MY_ENTITY_TYPE(ENUM)
@@ -69,6 +70,8 @@ typedef struct {
 	Animation skeltonHit;
 	Animation skeltonWalk;
 
+	Texture *playerTexture;
+
 	bool isLookingAtItems;
 	ItemGrowTimerUI lookingAt_animTimer;
 	int indexInItems;
@@ -115,6 +118,11 @@ typedef struct {
 	float jumpPower;
 	float walkPower;
 	float gravityScale;
+	float cameraSnapDistance;
+	//
+
+
+	EasyTerrainDataPacket terrainPacket;
 
 } GameState; 
 
@@ -170,6 +178,16 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->gravityScale = 150;
 
 	EasyPhysics_beginWorld(&state->physicsWorld);
+
+
+
+	state->terrainPacket.textureCount = 4;;
+	state->terrainPacket.textures[0] = findTextureAsset("blend_grass.png");
+	state->terrainPacket.textures[1] = findTextureAsset("blend_mud.png");
+	state->terrainPacket.textures[2] = findTextureAsset("blend_path.png");
+	state->terrainPacket.textures[3] = findTextureAsset("blend_grass2.jpg");
+
+	state->terrainPacket.blendMap = findTextureAsset("blendMap.png");
 
 
 	return state;

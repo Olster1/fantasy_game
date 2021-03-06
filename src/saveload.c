@@ -314,7 +314,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     				case ENTITY_SCENERY: {
     					if(subtype & ENTITY_SUB_TYPE_TORCH) {
     						newEntity = initTorch(gameState, manager, position);
-    					} else {
+    					} else if(subtype & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
+                            newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
+                        } else {
     						if(colliderSet) {
     							newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
     						} else {
@@ -344,6 +346,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     				case ENITY_CHECKPOINT: {
     					newEntity = initCheckPoint(gameState, manager, position);
     				} break;
+                    case ENTITY_TERRAIN: {
+                        newEntity = initTerrain(gameState, manager, position);
+                    } break;
     				default: {
 
     				}

@@ -2,10 +2,12 @@ typedef enum {
 	EDITOR_CREATE_SELECT_MODE,
 	EDITOR_CREATE_SCENERY,
 	EDITOR_CREATE_SCENERY_RIGID_BODY,
+	EDITOR_CREATE_ONE_WAY_PLATFORM,
 	EDITOR_CREATE_SKELETON,
 	EDITOR_CREATE_CHECKPOINT,
 	EDITOR_CREATE_TORCH,
 	EDITOR_CREATE_AUDIO_CHECKPOINT,
+	EDITOR_CREATE_TERRAIN
 } EditorCreateMode;
 
 typedef enum {
@@ -17,7 +19,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint"};
+char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d"};
 
 typedef struct {
 	void *entitySelected;

@@ -129,6 +129,7 @@ typedef enum {
 	EASY_COLLISION_LAYER_PLAYER,
 	EASY_COLLISION_LAYER_PLAYER_BULLET,
 	EASY_COLLISION_LAYER_ITEM_RIGID,
+	EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP,
 } EasyCollisionLayer;
 
 
@@ -143,6 +144,8 @@ static inline bool EasyPhysics_layersCanCollider(EasyCollisionLayer a, EasyColli
 	} else if((a == EASY_COLLISION_LAYER_ITEMS || b == EASY_COLLISION_LAYER_ITEMS) && (a == EASY_COLLISION_LAYER_PLAYER || b == EASY_COLLISION_LAYER_PLAYER)) {
 		result = true;
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, "ITEM");
+	} else if((a == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP || b == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) && (a == EASY_COLLISION_LAYER_PLAYER || a == EASY_COLLISION_LAYER_ENEMIES || a == EASY_COLLISION_LAYER_ITEMS || b == EASY_COLLISION_LAYER_PLAYER || b == EASY_COLLISION_LAYER_ENEMIES || b == EASY_COLLISION_LAYER_ITEMS)) {
+		result = true;
 	}
 
 	return result;
@@ -622,7 +625,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	    ////////////////////////////////////////////////////////////////////
 
-	        rb->dP = v3_minus(rb->dP, v3_scale(rb->dragFactor, rb->dP)); 
+	        rb->dP = v3_minus(rb->dP, v3_scale(0.25f*rb->dragFactor, rb->dP)); 
 
 	        //Decay the forces so it averages out over different frame rates
 			rb->accumForceOnce = NULL_VECTOR3;
@@ -641,7 +644,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
     for (int i = 0; i < colliders->count; ++i)
     {
         EasyCollider *a = (EasyCollider *)getElement(colliders, i);
-        if(a) {
+        if(a && a->rb->inverseWeight > 0.0f) {
 
         	V3 lastPos = a->T->pos;
         	Quaternion lastQ = a->T->Q;
@@ -690,12 +693,24 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		EasyRigidBody *rb_b = b->rb;
 
 	                		if(!(rb_a->inverseWeight == 0 && rb_b->inverseWeight == 0)) 
-	                		{
+	                		{	
 	                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
+
+	                		    bool ifOneWay_normalIsUp = true;
+
+	                		    // if(b->type == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) {
+	                		    // 	//try make it false
+	                		    // 	ifOneWay_normalIsUp = (dotV2(out.normal.xy, v2(0, 1)) > 0.0f);	
+	                		    // }
+	                		    
 
 	                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
 									ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
 									EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
+
+									char str[256];
+									sprintf(str, "%f %f", out.normal.x, out.normal.y);
+									// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
 	                		        
 	                		        bundle->hitEnt = b;
 	                		        bundle->outputInfo = out;

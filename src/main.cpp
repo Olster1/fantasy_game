@@ -2,7 +2,7 @@
 #include "easy_headers.h"
 
 static bool DEBUG_DRAW_SCENERY_TEXTURES = true;
-static bool DEBUG_GRAVITY = true;
+static bool DEBUG_GRAVITY = false;
 
 #include "gameState.h"
 #include "gameScene.c"
@@ -83,6 +83,14 @@ int main(int argc, char *args[]) {
 
         loadAndAddImagesToAssets("img/engine_icons/");
         loadAndAddImagesToAssets("img/temp_images/");
+
+        //Setup the gravity if it's on or not. GAMEPLAY: Could be an interesting gameplay feature: magentic rooms
+        if(DEBUG_GRAVITY) {
+            global_easyPhysics_gravityModifier = 1;
+        } else {
+            global_easyPhysics_gravityModifier = 0;
+        }
+        ///
         
         EasyCamera camera;
         easy3d_initCamera(&camera, v3(0, 0, -10));
@@ -104,7 +112,12 @@ int main(int argc, char *args[]) {
         {
             //WIZARD ANIMATIONS
             easyAnimation_initAnimation(&gameState->wizardRun, "wizardRun");
-            loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
+            // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
+            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+
+            easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
+            easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
+            // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
             easyAnimation_initAnimation(&gameState->wizardAttack, "wizardAttack");
             loadAndAddImagesStripToAssets(&gameState->wizardAttack, "img/fantasy_sprites/wizard/Attack1.png", 231);
@@ -118,8 +131,6 @@ int main(int argc, char *args[]) {
             easyAnimation_initAnimation(&gameState->wizardHit, "wizardHit");
             loadAndAddImagesStripToAssets(&gameState->wizardHit, "img/fantasy_sprites/wizard/Hit.png", 231);
 
-            easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
-            loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
             easyAnimation_initAnimation(&gameState->wizardJump, "wizardJump");
             loadAndAddImagesStripToAssets(&gameState->wizardJump, "img/fantasy_sprites/wizard/Jump.png", 231);
@@ -212,7 +223,7 @@ int main(int argc, char *args[]) {
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "scene1");
+                gameScene_loadScene(gameState, manager, "custom");
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -228,11 +239,16 @@ int main(int argc, char *args[]) {
                 initEntity(manager, 0, v3(3, -3.5f, 0), v2(3, 2.5f), v2(1, 1), gameState, ENTITY_SCENERY, 0, &globalWhiteTexture, COLOR_BLACK, 2, true);
         #endif
 
+
+        gameState->cameraSnapDistance = 1.5f;
         gameState->jumpPower = 55000;
         Tweaker *tweaker = pushStruct(&globalLongTermArena, Tweaker);
         tweaker->varCount = 0;
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
+
+
+        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("GrandQuest.wav"), 0, AUDIO_BACKGROUND));
 
         while(appInfo->running) {
 
@@ -240,6 +256,7 @@ int main(int argc, char *args[]) {
                 gameState->jumpPower = getIntFromTweakData(tweaker, "jumpPower");
                 gameState->walkPower = getIntFromTweakData(tweaker, "walkPower");
                 gameState->gravityScale = (float)getFloatFromTweakData(tweaker, "gravityScale");
+                gameState->cameraSnapDistance = (float)getFloatFromTweakData(tweaker, "cameraSnapDistance");
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -270,13 +287,22 @@ int main(int argc, char *args[]) {
     
             //FOLLOW PLAYER    
             V3 worldP = easyTransform_getWorldPos(&manager->player->T);
+            {//update x position
+                float distance = absVal(worldP.x - camera.hidden_pos.x);
 
-            float distance = absVal(worldP.x - camera.hidden_pos.x);
+                if(distance > gameState->cameraSnapDistance) {
+                    float newPosX = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*2.f), manager->player->T.pos.x);
+                    camera.hidden_pos.x = newPosX;
+                }
+            }
 
-            if(distance > 2.0f) {
-                float newPos = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*1.f), manager->player->T.pos.x);
+            {//update y position
+                float distance = absVal(worldP.y - camera.hidden_pos.y);
 
-                camera.hidden_pos.x = newPos;
+                if(distance > gameState->cameraSnapDistance) {
+                    float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*2.f), manager->player->T.pos.y);
+                    camera.hidden_pos.y = newPosY;
+                }
             }
             ////////////////
 
@@ -288,6 +314,7 @@ int main(int argc, char *args[]) {
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
             Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
+            Matrix4 perspectiveMatrix_inventory = projectionMatrixFOV(60.0f, resolution.x/resolution.y);
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I)) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
@@ -472,7 +499,7 @@ int main(int argc, char *args[]) {
                 
             }
 
-           
+                       
             { //NOTE: Add entities that need adding
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
@@ -480,7 +507,7 @@ int main(int argc, char *args[]) {
                         float layer = -0.5f;    
                         float lifeSpan = 3.0f;
 
-                        float inverse_weight = 0;
+                        float inverse_weight = 1.0f / 10.0f;
 
                         V2 size = v2(1, 1);
                         Texture *t = 0;
@@ -492,10 +519,11 @@ int main(int argc, char *args[]) {
                             inverse_weight = 1.0f / 20.0f; 
                             size = v2(0.4f, 0.4f);
                             reboundFactor = 0.98f;
-                        }
+                        } 
 
                         Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, size, v2(0.9f, 0.9f), gameState, e->type, inverse_weight, t, COLOR_WHITE, layer, true);
                         e1->rb->dP = e->dP;
+                        
                         e1->lifeSpanLeft = lifeSpan;
                         e1->rb->reboundFactor = reboundFactor;
                     }
@@ -539,10 +567,11 @@ int main(int argc, char *args[]) {
                 editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
 
                 int splatIndexOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY) {
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM) {
                     splatIndexOn = easyEditor_pushList(appInfo->editor, "Splat Names: ", (char **)gameState->splatList.memory, gameState->splatList.count);    
                 }
-                
+
+
 
                 
 
@@ -557,12 +586,25 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
                         } break;
+                        case EDITOR_CREATE_TERRAIN: {
+                            if(pressed) {
+                                editorState->entitySelected = initTerrain(gameState, manager, mouseP_inWorldP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                            }
+                        } break;
                         case EDITOR_CREATE_SCENERY: {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
-
+                                editorState->entityIndex = manager->lastEntityIndex;
                             }
 
+                        } break;
+                        case EDITOR_CREATE_ONE_WAY_PLATFORM: {
+                            if(pressed) {
+                                initOneWayPlatform(gameState, manager, mouseP_inWorldP, splatTexture);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                            }
                         } break;
                         case EDITOR_CREATE_SCENERY_RIGID_BODY: {
                             if(pressed) {
@@ -775,7 +817,10 @@ int main(int argc, char *args[]) {
 
 
                     easyEditor_startDockedWindow(appInfo->editor, "Entity Window", EASY_EDITOR_DOCK_TOP_LEFT);
-                      
+                    
+
+                    easyEditor_pushButton(appInfo->editor, MyEntity_EntityTypeStrings[(int)e->type]);
+                    easyEditor_pushInt1(appInfo->editor, "Subtype: ", &(int)e->subEntityType);
                     
                     easyEditor_pushFloat3(appInfo->editor, "Position: ", &e->T.pos.x, &e->T.pos.y, &e->T.pos.z);
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
@@ -833,6 +878,71 @@ int main(int argc, char *args[]) {
                         editorState->entitySelected = 0;
                     }
 
+                    if(easyEditor_pushButton(appInfo->editor, "Duplicate")) {
+                        Entity *e  = (Entity *)editorState->entitySelected;
+                        Entity *newEntity = 0;
+                        V3 position = v3_plus(e->T.pos, v3(1, 1, 0));
+                        Texture *splatTexture = e->sprite;
+
+                        bool colliderSet = e->collider;
+
+                        switch(e->type) {
+                            case ENTITY_SCENERY: {
+                                if(e->subEntityType & ENTITY_SUB_TYPE_TORCH) {
+                                    newEntity = initTorch(gameState, manager, position);
+                                } else if(e->subEntityType & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
+                                    newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
+                                } else {
+                                    if(colliderSet) {
+                                        newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
+                                    } else {
+                                        newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);    
+                                    }   
+                                }
+                                
+                            } break;
+                            case ENTITY_PLAYER_PROJECTILE: {
+                                // assert(false);
+                                easyFlashText_addText(&globalFlashTextManager, "Can't copy");
+                            } break;
+                            case ENTITY_SKELETON: {
+                                newEntity = initSkeleton(gameState, manager, position);
+                            } break;
+                            case ENTITY_HEALTH_POTION_1: {
+                                // assert(false);
+                                easyFlashText_addText(&globalFlashTextManager, "Can't copy");
+                            } break;
+                            case ENITY_AUDIO_CHECKPOINT: {
+                                newEntity = initAudioCheckPoint(gameState, manager, position);
+                                newEntity->audioFile = e->audioFile;
+                            } break;
+                            case ENITY_CHECKPOINT: {
+                                newEntity = initCheckPoint(gameState, manager, position);
+                            } break;
+                            default: {
+
+                            }
+                        }
+
+                        if(newEntity) {
+                            if(newEntity->collider) {
+                                newEntity->collider->dim2f = e->collider->dim2f; 
+                            }
+
+
+                            if(newEntity->collider1) {
+                                newEntity->collider1->dim2f = e->collider1->dim2f;   
+                            }
+
+                            newEntity->layer = e->layer;
+                            newEntity->maxHealth = e->maxHealth;
+                            newEntity->T.Q = e->T.Q;
+                            newEntity->T.scale = e->T.scale;
+                            newEntity->colorTint = e->colorTint;
+                        }
+
+                    }
+
                     easyEditor_endWindow(appInfo->editor); //might not actuall need this
 
                     if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && !insideEntity && editorState->gizmoSelect == EDITOR_GIZMO_NONE) {
@@ -880,7 +990,7 @@ int main(int argc, char *args[]) {
                 
                 float fuaxWidth = 1920.0f;
                 
-                setProjectionTransform(globalRenderGroup, perspectiveMatrix);//OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
+                setProjectionTransform(globalRenderGroup, perspectiveMatrix_inventory);//OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
 
                 //Update animation timer
                 gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);

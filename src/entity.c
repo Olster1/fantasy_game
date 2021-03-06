@@ -8,6 +8,7 @@ typedef enum {
 typedef enum {
 	ENTITY_SUB_TYPE_NONE = 0,
 	ENTITY_SUB_TYPE_TORCH = 1 << 0,
+	ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM = 1 << 1,
 } SubEntityType;
 
 
@@ -147,11 +148,13 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	entity->subEntityType = (int)ENTITY_SUB_TYPE_NONE;
 
-	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; }
+	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
 
 	if(type == ENTITY_HEALTH_POTION_1) { isTrigger = false;  }
 
 	if(type == ENITY_CHECKPOINT || type == ENITY_AUDIO_CHECKPOINT) { isTrigger = true; }
+
+	if(type == ENTITY_TERRAIN) { canCollide = false; isTrigger = false; gravityFactor = 0; inverse_weight = 0; dragFactor = 0; }
 	
 
 	if(canCollide) {
@@ -250,6 +253,13 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 				entity->rb->accumForce.x += gameState->walkPower;
+			}
+			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
+				entity->rb->accumForce.y += gameState->walkPower;
+			}
+
+			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
+				entity->rb->accumForce.y += -gameState->walkPower;
 			}
 
 
@@ -407,7 +417,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}	
 
 	if(entity->type == ENTITY_PLAYER_PROJECTILE) {
-		
+			
+		char str[256];
+		sprintf(str, "%f", entity->rb->inverseWeight);
+		easyConsole_addToStream(DEBUG_globalEasyConsole, str);
+
 		if(entity->collider->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_SKELETON, EASY_COLLISION_ENTER);	
             if(info.found) {
@@ -485,8 +499,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		
 	}
-
-	if(!sprite) {
+	if(!sprite && entity->type != ENTITY_TERRAIN) {
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
 	
@@ -540,8 +553,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	/////////////////////
 
 	setModelTransform(globalRenderGroup, T);
-	if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
-	
+	if(entity->type == ENTITY_TERRAIN) {
+		renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
+	} else {
+		if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	}
+
 	// renderDrawQuad(globalRenderGroup, COLOR_RED);
 
 	//Reset for collision
@@ -574,9 +591,23 @@ static Entity *initTorch(GameState *gameState, EntityManager *manager, V3 worldP
 
 	return e;
 }
+				
+static Entity *initOneWayPlatform(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+	Entity *e  = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
+	e->subEntityType |= (int)ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM;
+
+	assert(e->collider);
+	e->collider->layer = EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP;
+
+	return e;
+} 
 
 static Entity *initCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
 	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+}
+
+static Entity *initTerrain(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TERRAIN, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
 }
 
 static Entity *initAudioCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
