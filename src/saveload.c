@@ -137,6 +137,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
 	gameState->currentSceneName = sceneName_;
 
+    gameState->currentTerrainEntity = 0;
+
 	char *sceneName = sceneName_;
 	if(sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '/' || sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '\\') {
 		sceneName = concatInArena(sceneName_, "/", &globalPerFrameArena);
@@ -379,8 +381,18 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
     			newEntity->layer = layer;
     			newEntity->maxHealth = maxHealth;
-        		newEntity->T.Q = rotation;
-        		newEntity->T.scale = scale;
+                
+                if(newEntity->type == ENTITY_TERRAIN) {
+                    gameState->currentTerrainEntity = newEntity;
+                    newEntity->T.Q = identityQuaternion();
+        		//   
+        		} else {
+                     newEntity->T.Q = rotation;
+                    // newEntity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);//rotation;
+                }
+               
+                
+                newEntity->T.scale = scale;
         		newEntity->colorTint = color;
 
 

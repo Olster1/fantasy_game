@@ -45,8 +45,8 @@ int main(int argc, char *args[]) {
     V2 resolution = v2(DEFINES_RESOLUTION_X, DEFINES_RESOLUTION_Y);
 
     #if GIF_MODE
-    resolution.x *= 0.5f;
-    resolution.y *= 0.5f;
+    resolution.x *= 0.3f;
+    resolution.y *= 0.3f;
     #endif
     
     OSAppInfo *appInfo = easyOS_createApp("Fantasy Game", &screenDim, false);
@@ -57,7 +57,7 @@ int main(int argc, char *args[]) {
         easyOS_setupApp(appInfo, &resolution, RESOURCE_PATH_EXTENSION);
 
         //Gif Recording stuff    
-        int gif_width = resolution.x, gif_height = resolution.y, centisecondsPerFrame = 5, bitDepth = 16;
+        int gif_width = resolution.x, gif_height = resolution.y, centisecondsPerFrame = 10, bitDepth = 16;
         MsfGifState gifState = {};
         /////
 
@@ -222,10 +222,30 @@ int main(int argc, char *args[]) {
         ////////////////////////
 
 
+                char *modelDirs[] = { "models/robertModels/"};
+                
+                EasyAssetLoader_AssetArray allModelsForEditor = {};
+                allModelsForEditor.count = 0;
+                allModelsForEditor.assetType = ASSET_MODEL;
+                
+                for(int dirIndex = 0; dirIndex < arrayCount(modelDirs); ++dirIndex) {
+                    char *dir = modelDirs[dirIndex];
+
+                    //NOTE(ollie): Load materials first
+                    char *fileTypes[] = { "mtl" };
+                    easyAssetLoader_loadAndAddAssets(0, dir, fileTypes, arrayCount(fileTypes), ASSET_MATERIAL, EASY_ASSET_LOADER_FLAGS_NULL);
+                    
+                    //NOTE(ollie): Then load models
+                    fileTypes[0] = "obj";
+                    easyAssetLoader_loadAndAddAssets(&allModelsForEditor, dir, fileTypes, arrayCount(fileTypes), ASSET_MODEL, EASY_ASSET_LOADER_FLAGS_NULL);
+
+                }
+
+
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "custom");
+                gameScene_loadScene(gameState, manager, "custom1");
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -249,6 +269,10 @@ int main(int argc, char *args[]) {
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
 
+        EasyTransform treeT;
+        easyTransform_initTransform_withScale(&treeT, v3(0, 0, 0), v3(0.1, 0.15, 0.1), EASY_TRANSFORM_STATIC_ID);
+
+        treeT.Q = eulerAnglesToQuaternion(-0.5f*PI32, -0.5f*PI32, 0.5f*PI32);
 
         EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("GrandQuest.wav"), 0, AUDIO_BACKGROUND));
 
@@ -293,16 +317,16 @@ int main(int argc, char *args[]) {
                 float distance = absVal(worldP.x - camera.hidden_pos.x);
 
                 if(distance > gameState->cameraSnapDistance) {
-                    float newPosX = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*2.f), manager->player->T.pos.x);
+                    float newPosX = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*10.f), worldP.x);
                     camera.hidden_pos.x = newPosX;
                 }
             }
 
             {//update y position
-                float distance = absVal(worldP.y - camera.hidden_pos.y);
+                float distance = absVal(worldP.y - 10 - camera.hidden_pos.y);
 
                 if(distance > gameState->cameraSnapDistance) {
-                    float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*2.f), manager->player->T.pos.y);
+                    float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - 10);
                     camera.hidden_pos.y = newPosY;
                 }
             }
@@ -361,6 +385,7 @@ int main(int argc, char *args[]) {
 
 
 
+
             if(gameState->isLookingAtItems) {
                 if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT)) {
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
@@ -392,13 +417,17 @@ int main(int argc, char *args[]) {
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
             }
 
-
-
-            RenderProgram *mainShader = &glossProgram;
-            renderSetShader(globalRenderGroup, mainShader);
             setViewTransform(globalRenderGroup, viewMatrix);
             setProjectionTransform(globalRenderGroup, perspectiveMatrix);
 
+
+            renderSetShader(globalRenderGroup, &phongProgram);
+            // setModelTransform(globalRenderGroup, easyTransform_getTransform(&treeT));
+
+            // renderModel(globalRenderGroup, findModelAsset_Safe("tree.obj"), v4(1, 1, 1, 1));
+
+            RenderProgram *mainShader = &glossProgram;
+            renderSetShader(globalRenderGroup, mainShader);
 
             AppKeyStates gameKeyStates = appInfo->keyStates;
             AppKeyStates consoleKeyStates = appInfo->keyStates;
@@ -408,6 +437,18 @@ int main(int argc, char *args[]) {
                 consoleKeyStates = {};
                 consoleKeyStates.gameButtons[BUTTON_ESCAPE] = gameKeyStates.gameButtons[BUTTON_ESCAPE];
             }
+
+            //DRAW THE TERRATIN FIRST
+            if(gameState->currentTerrainEntity) {
+                Entity *terrainEntity = (Entity *)(gameState->currentTerrainEntity);
+                terrainEntity->T.pos.z = getEntityZLayerPos(terrainEntity);
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&terrainEntity->T));
+                renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+                terrainEntity->T.pos.z = 0;
+            }
+
+            /////////////////
 
              Entity *insideEntity = 0;
             //DEBUG
@@ -486,6 +527,8 @@ int main(int argc, char *args[]) {
             }
             //////////////////////////////////////////
            
+
+
 
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);

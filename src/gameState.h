@@ -121,6 +121,7 @@ typedef struct {
 	float cameraSnapDistance;
 	//
 
+	void *currentTerrainEntity;
 
 	EasyTerrainDataPacket terrainPacket;
 
@@ -188,7 +189,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->terrainPacket.textures[3] = findTextureAsset("blend_grass2.jpg");
 
 	state->terrainPacket.blendMap = findTextureAsset("blendMap.png");
-
+	state->currentTerrainEntity = 0;
 
 	return state;
 }	

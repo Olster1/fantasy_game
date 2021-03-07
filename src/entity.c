@@ -52,6 +52,8 @@ typedef struct {
 	EntityType itemSpots[MAX_PLAYER_ITEM_COUNT];
 	/////
 
+	float rotation;
+
 	float healthBarTimer; 
 
 	//For the audio checklist
@@ -123,6 +125,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->layer = layer;
 	entity->sprite = sprite;
 	entity->type = type;
+	entity->rotation = 0;
 	
 	entity->maxHealth = 3;
 	entity->health = entity->maxHealth;
@@ -265,6 +268,16 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				entity->rb->accumForce.y += -gameState->walkPower;
 			}
 
+
+			// float angle = ATan2_0toTau(entity->rb->dP.y, entity->rb->dP.x);
+
+			// angle -= 0.5f*PI32;
+			// //NOTE(ollie): Wrap the angle so it moves from 0 -> Tau to -Pi -> PI
+			// if(angle > PI32) {
+			// 	angle = angle - TAU32;
+			// }
+
+			// entity->rotation = angle;
 
 		}
 
@@ -519,14 +532,19 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entityToAdd->dP.y = 10;
 			entityToAdd->dP.x = randomBetween(-5, 5);
 		}
-	} else if(!DEBUG_DRAW_SCENERY_TEXTURES) {
+	} else if(!DEBUG_DRAW_SCENERY_TEXTURES || entity->type == ENTITY_TERRAIN) {
 		sprite = 0;
 	}
 	
 
-	
+	Quaternion Q = entity->T.Q;
+	Quaternion Q1 = eulerAnglesToQuaternion(0, 0, entity->rotation);
+
+	entity->T.Q = quaternion_mult(Q, Q1);
 
 	Matrix4 T = easyTransform_getTransform(&entity->T);
+
+	entity->T.Q = Q;
 
 	// char string[512];
 	// sprintf(string, "size: %f %f", T.a.x, T.b.y);
@@ -548,19 +566,17 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	//NOTE: Flip sprite
 	if(entity->isFlipped) {
 		//NOTE: flipSprite
-		T.E_[0] *= -1;
-		T.E_[1] *= -1;
-		T.E_[2] *= -1;
+		// T.E_[0] *= -1;
+		// T.E_[1] *= -1;
+		// T.E_[2] *= -1;
 	}
 
 	/////////////////////
 
 	setModelTransform(globalRenderGroup, T);
-	if(entity->type == ENTITY_TERRAIN) {
-		renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
-	} else {
-		if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
-	}
+	
+	if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	
 
 	// renderDrawQuad(globalRenderGroup, COLOR_RED);
 
