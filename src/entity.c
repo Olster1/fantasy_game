@@ -107,9 +107,10 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	easyTransform_initTransform_withScale(&entity->T, pos, v3(width, height, 1), EASY_TRANSFORM_STATIC_ID);
 	easyAnimation_initController(&entity->animationController);
 
-	//NOTE: Have entities spun around the x axis 45 degrees for the top down effect
-	entity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
-
+	if(DEBUG_ANGLE_ENTITY_ON_CREATION) {
+		//NOTE: Have entities spun around the x axis 45 degrees for the top down effect
+		entity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
+	}
 	if(animation) {
 		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);	
 	}
@@ -136,7 +137,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		gravityFactor = 0; 
 	}
 
-	if(type == ENTITY_SKELETON) {
+	if(type == ENTITY_SKELETON || type == ENTITY_WEREWOLF) {
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
@@ -200,6 +201,9 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENITY_CHECKPOINT: {
 				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
 			} break;
+			case ENTITY_WEREWOLF: {
+				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
+			} break;
 		}
 
 	}
@@ -239,10 +243,6 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
     } 
     
     return result;
-}
-
-static float getEntityZLayerPos(Entity *e) {
-	return -0.1f*e->layer;	
 }
 
 
@@ -304,6 +304,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			animToAdd = &gameState->wizardAttack;
 		} else if(wasPressed(keyStates->gameButtons, BUTTON_Z)) {
 			animToAdd = &gameState->wizardAttack2;
+			
+			int attackSoundIndex = randomBetween(0, 3);
+			if(attackSoundIndex == 3) {
+				attackSoundIndex = 2;
+			}
+
+			playGameSound(&globalLongTermArena, gameState->playerAttackSounds[attackSoundIndex], 0, AUDIO_FOREGROUND);
+
 			if(gameState->playerHolding[0] != ENTITY_NULL) {
 				switch(gameState->playerHolding[0]) {
 					case ENTITY_HEALTH_POTION_1: {
@@ -315,6 +323,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 						//EMPTY OUT THE SPOT
 						gameState->playerHolding[0] = ENTITY_NULL;
 					} break;
+					case ENTITY_SWORD: {
+						 
+					};
 				}
 			} 
 		} 
@@ -403,6 +414,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		// 	animToAdd = &gameState->skeltonWalk;
 		// }
 
+
+
 		//NOTE: Check if a player bullet hit the skeleton 
 
 		if(entity->collider->collisionCount > 0 && entity->health > 0) {
@@ -452,10 +465,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entity->isDead = true;
 		}
 	}
-
-
-		
-	entity->T.pos.z = getEntityZLayerPos(entity);
 
 	//NOTE: DRAWING HEALTH BAR OVER ENEMIES
 	if(entity->flags & ENTITY_SHOW_HEALTH_BAR) {
@@ -575,13 +584,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	setModelTransform(globalRenderGroup, T);
 	
-	if(sprite) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
 	
 
 	// renderDrawQuad(globalRenderGroup, COLOR_RED);
 
 	//Reset for collision
-	entity->T.pos.z = 0;
 }
 
 
@@ -603,6 +611,12 @@ static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 world
 static Entity *initSkeleton(GameState *gameState, EntityManager *manager, V3 worldP) {
 	return initEntity(manager, &gameState->skeltonIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
 }
+
+static Entity *initWerewolf(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_WEREWOLF, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+}
+
+
 
 static Entity *initTorch(GameState *gameState, EntityManager *manager, V3 worldP) {
 	Entity *e  = initEntity(manager, &gameState->torchAnimation, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);

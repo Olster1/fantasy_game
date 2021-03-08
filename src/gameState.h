@@ -8,6 +8,8 @@ FUNC(ENTITY_HEALTH_POTION_1)\
 FUNC(ENITY_AUDIO_CHECKPOINT)\
 FUNC(ENITY_CHECKPOINT)\
 FUNC(ENTITY_TERRAIN)\
+FUNC(ENTITY_WEREWOLF)\
+FUNC(ENTITY_SWORD)\
 
 typedef enum {
     MY_ENTITY_TYPE(ENUM)
@@ -70,6 +72,8 @@ typedef struct {
 	Animation skeltonHit;
 	Animation skeltonWalk;
 
+	Animation werewolfIdle;
+
 	Texture *playerTexture;
 
 	bool isLookingAtItems;
@@ -120,6 +124,8 @@ typedef struct {
 	float gravityScale;
 	float cameraSnapDistance;
 	//
+
+	WavFile *playerAttackSounds[3];
 
 	void *currentTerrainEntity;
 
@@ -181,14 +187,19 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	EasyPhysics_beginWorld(&state->physicsWorld);
 
 
+	state->playerAttackSounds[0] = easyAudio_findSound("player_attack1.wav");
+	state->playerAttackSounds[1] = easyAudio_findSound("player_attack2.wav");
+	state->playerAttackSounds[2] = easyAudio_findSound("player_attack3.wav");
+
+
 
 	state->terrainPacket.textureCount = 4;;
-	state->terrainPacket.textures[0] = findTextureAsset("blend_grass.png");
-	state->terrainPacket.textures[1] = findTextureAsset("blend_mud.png");
-	state->terrainPacket.textures[2] = findTextureAsset("blend_path.png");
-	state->terrainPacket.textures[3] = findTextureAsset("blend_grass2.jpg");
+	state->terrainPacket.textures[0] = findTextureAsset("grass_block.png");
+	state->terrainPacket.textures[1] = findTextureAsset("mud_block.png");
+	state->terrainPacket.textures[2] = findTextureAsset("path_block.png");
+	state->terrainPacket.textures[3] = findTextureAsset("floor_texture.jpg");
 
-	state->terrainPacket.blendMap = findTextureAsset("blendMap.png");
+	state->terrainPacket.blendMap = findTextureAsset("black_blend.png");
 	state->currentTerrainEntity = 0;
 
 	return state;

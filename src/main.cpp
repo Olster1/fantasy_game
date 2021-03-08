@@ -1,8 +1,23 @@
 #include "defines.h"
 #include "easy_headers.h"
 
+//****** TODO *********/////
+/*
+1. collision boxes should be at the bottom of the sprites, and not in the middle. Really big sprites would put the box back further.  
+
+Gameplay:
+
+The wolf should attack you
+You pick up a sword which goes to your inventory - floating 3d model?
+You pick up shield as well 
+*/
+///////////////////////////
+
 static bool DEBUG_DRAW_SCENERY_TEXTURES = true;
 static bool DEBUG_GRAVITY = false;
+static bool DEBUG_DRAW_TERRAIN = true;
+static bool DEBUG_LOCK_POSITION_TO_GRID = true;
+static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 
 #include "gameState.h"
 #include "gameScene.c"
@@ -32,6 +47,13 @@ static Texture *getInvetoryTexture(EntityType type) {
         }
     }
     return t;
+}
+
+static V3 roundToGridBoard(V3 in) {
+    float xMod = (in.x < 0) ? -1 : 1;
+    float yMod = (in.y < 0) ? -1 : 1;
+    V3 result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
+    return result;
 }
 
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
@@ -143,6 +165,13 @@ int main(int argc, char *args[]) {
         }
 
         {
+            easyAnimation_initAnimation(&gameState->werewolfIdle, "werewolfIdle");
+            // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
+            easyAnimation_pushFrame(&gameState->werewolfIdle, "werewolf2.png");
+            
+        }
+
+        {
             easyAnimation_initAnimation(&gameState->skeletonAttack, "skeltonAttack");
             loadAndAddImagesStripToAssets(&gameState->skeletonAttack, "img/fantasy_sprites/skeleton/SAttack.png", 150);
 
@@ -245,7 +274,7 @@ int main(int argc, char *args[]) {
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "custom1");
+                gameScene_loadScene(gameState, manager, "swamp");
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -275,6 +304,11 @@ int main(int argc, char *args[]) {
         treeT.Q = eulerAnglesToQuaternion(-0.5f*PI32, -0.5f*PI32, 0.5f*PI32);
 
         EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("GrandQuest.wav"), 0, AUDIO_BACKGROUND));
+
+        EasyTransform outlineTransform;
+        easyTransform_initTransform_withScale(&outlineTransform, v3(0, 0, 0), v3(1, 1, 1), EASY_TRANSFORM_TRANSIENT_ID); 
+
+        Texture *outlineSprite = findTextureAsset("outline.png");
 
         while(appInfo->running) {
 
@@ -438,15 +472,12 @@ int main(int argc, char *args[]) {
                 consoleKeyStates.gameButtons[BUTTON_ESCAPE] = gameKeyStates.gameButtons[BUTTON_ESCAPE];
             }
 
-            //DRAW THE TERRATIN FIRST
-            if(gameState->currentTerrainEntity) {
-                Entity *terrainEntity = (Entity *)(gameState->currentTerrainEntity);
-                terrainEntity->T.pos.z = getEntityZLayerPos(terrainEntity);
-                setModelTransform(globalRenderGroup, easyTransform_getTransform(&terrainEntity->T));
-                renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
-                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-                terrainEntity->T.pos.z = 0;
-            }
+           
+           V3 mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, -camera.pos.z, easy3d_getViewToWorld(&camera));
+           EasyRay mouseP_worldRay = {};
+           mouseP_worldRay.origin = camera.pos;
+           mouseP_worldRay.direction = v3_minus(mouseP_inWorldP, camera.pos);
+
 
             /////////////////
 
@@ -456,27 +487,32 @@ int main(int argc, char *args[]) {
             {
                 
 
-                
-               
+                //Check if user grabs the entity to edit
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
                     if(e) {
 
                         if(gameState->isEditorOpen) {
-                            V3 mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, getEntityZLayerPos(e) - camera.pos.z, easy3d_getViewToWorld(&camera));
 
-                            //Grab Entity
-                            
-                            V2 entP = easyTransform_getWorldPos(&e->T).xy;
-                            V2 entScale = easyTransform_getWorldScale(&e->T).xy;
-                            Rect2f entBounds = rect2fCenterDim(entP.x, entP.y, entScale.x, entScale.y);
-                            if(inBounds(mouseP_inWorldP.xy, entBounds, BOUNDS_RECT)) {
+                            Matrix4 rotationT  = easyTransform_getWorldRotation(&e->T);
+
+                            V3 position = easyTransform_getWorldPos(&e->T);
+
+                            V3 scale = easyTransform_getWorldScale(&e->T);
+
+                            Rect3f bounds = rect3fCenterDimV3(v3(0, 0, 0), scale);
+
+                            EasyPhysics_RayCastAABB3f_Info castInfo = EasyPhysics_CastRayAgainstAABB3f(rotationT, position, v3(1, 1, 1), bounds, mouseP_worldRay.direction, mouseP_worldRay.origin);
+                            if(castInfo.didHit && e->type != ENTITY_TERRAIN) {
                                 insideEntity = e;
 
                                 if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
                                     editorState->entitySelected = e;
                                     editorState->entityIndex = i;
-                                    editorState->grabOffset = v2_minus(entP, mouseP_inWorldP.xy);
+
+                                    editorState->grabOffset = v3_scale(-1, castInfo.hitP);
+                                    editorState->grabOffset.z = 0;
+                                    // easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->grabOffset);
 
                                 }    
                             }
@@ -484,14 +520,23 @@ int main(int argc, char *args[]) {
                         }
 
 
+                        //Draw the DEBUG collider info 
                         if(e->collider) {   
-                            e->T.pos.z = getEntityZLayerPos(e);
                             V3 prevScale = e->T.scale;
 
                             e->T.scale.x *= e->collider->dim2f.x;
                             e->T.scale.y *= e->collider->dim2f.y;
 
+                            Quaternion Q = e->T.Q;
+
+                            float prevZ = e->T.pos.z;
+
+                            e->T.pos.z = 0;
+                            e->T.Q = identityQuaternion();
+
                             Matrix4 T = easyTransform_getTransform(&e->T);
+
+                            e->T.Q = Q;
 
                             V2 dim = e->collider->dim2f;
 
@@ -500,7 +545,6 @@ int main(int argc, char *args[]) {
                             if(e->collider->isTrigger) {
                                 color = COLOR_YELLOW;
                             } 
-                            
                         
 
                             setModelTransform(globalRenderGroup, T);
@@ -508,9 +552,8 @@ int main(int argc, char *args[]) {
                                 renderDrawQuad(globalRenderGroup, color);    
                             }
                             
-                            e->T.pos.z = 0;
-
                             e->T.scale = prevScale;
+                            e->T.pos.z = prevZ;
                         }
                     }
                     
@@ -526,9 +569,45 @@ int main(int argc, char *args[]) {
                 
             }
             //////////////////////////////////////////
+           //Draw the square to where the mouse is pointing
+           {
+               V3 hitP;
+               float tAt;
+
+               EasyPlane floor = {};
+
+               floor.origin = v3(0, 0, 0);
+               floor.normal = v3(0, 0, -1);
+
+               if(easyMath_castRayAgainstPlane(mouseP_worldRay, floor, &hitP, &tAt)) {
+
+                   
+                   hitP = roundToGridBoard(hitP);
+
+                   outlineTransform.pos = hitP;
+
+                   easyConsole_pushFloat(DEBUG_globalEasyConsole, outlineTransform.pos.y);
+
+                   Matrix4 outlineT = easyTransform_getTransform(&outlineTransform);
+                   setModelTransform(globalRenderGroup, outlineT);
+                   renderDrawSprite(globalRenderGroup, outlineSprite, COLOR_WHITE);
+
+                   drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+               }
+           }
+
+
+
+            //DRAW THE TERRATIN FIRST
+            if(gameState->currentTerrainEntity && DEBUG_DRAW_TERRAIN) {
+                Entity *terrainEntity = (Entity *)(gameState->currentTerrainEntity);
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&terrainEntity->T));
+                renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            }
+            ////////////////////////////
+
            
-
-
 
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -596,6 +675,7 @@ int main(int argc, char *args[]) {
             }   
 
 
+
             if(!appInfo->console.isInFocus && wasPressed(appInfo->keyStates.gameButtons, BUTTON_F5)) {
                 gameState->isEditorOpen = !gameState->isEditorOpen;
             }
@@ -620,68 +700,91 @@ int main(int argc, char *args[]) {
 
                 
 
-                V3 mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, -camera.pos.z, easy3d_getViewToWorld(&camera));
-
                 bool pressed = wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE);
 
                 Texture *splatTexture = ((Texture **)(gameState->splatTextures.memory))[splatIndexOn];
 
                 if(!appInfo->editor->isHovering) {
+
+                    EasyPlane floor = {};
+
+                    floor.origin = v3(0, 0, 0);
+                    floor.normal = v3(0, 0, -1);
+
+                    V3 hitP;
+                    float tAt;
+
+                    if(easyMath_castRayAgainstPlane(mouseP_worldRay, floor, &hitP, &tAt)) {
+                        //NOTE: Lock entities to integer coordinates - grid base gameplay
+                        if(DEBUG_LOCK_POSITION_TO_GRID) {
+                            hitP = roundToGridBoard(hitP);
+                        }
+                    }
+
+                    editorState->grabOffset = v3(0, 0, 0);
                     switch(editorState->createMode) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
                         } break;
                         case EDITOR_CREATE_TERRAIN: {
                             if(pressed) {
-                                editorState->entitySelected = initTerrain(gameState, manager, mouseP_inWorldP);
+                                editorState->entitySelected = initTerrain(gameState, manager, hitP);
+                                gameState->currentTerrainEntity = editorState->entitySelected; 
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                             }
                         } break;
                         case EDITOR_CREATE_SCENERY: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
+                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
                             }
 
                         } break;
                         case EDITOR_CREATE_ONE_WAY_PLATFORM: {
                             if(pressed) {
-                                initOneWayPlatform(gameState, manager, mouseP_inWorldP, splatTexture);
+                                initOneWayPlatform(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                             }
                         } break;
                         case EDITOR_CREATE_SCENERY_RIGID_BODY: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
+                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
                         } break;   
                         case EDITOR_CREATE_SKELETON: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, &gameState->skeltonIdle, mouseP_inWorldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+                                editorState->entitySelected = initEntity(manager, &gameState->skeltonIdle, hitP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_WEREWOLF: {
+                            if(pressed) {
+                                editorState->entitySelected = initWerewolf(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
                         } break;
                         case EDITOR_CREATE_CHECKPOINT: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
                         } break;
                         case EDITOR_CREATE_TORCH: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, &gameState->torchAnimation, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
+                                editorState->entitySelected = initEntity(manager, &gameState->torchAnimation, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
                         } break;
                         case EDITOR_CREATE_AUDIO_CHECKPOINT: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, mouseP_inWorldP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
@@ -703,6 +806,19 @@ int main(int argc, char *args[]) {
                     DEBUG_DRAW_COLLISION_BOUNDS = !DEBUG_DRAW_COLLISION_BOUNDS;
                 }
 
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_TERRAIN) ? "Terrain Off" : "Terrain On")) {
+                    DEBUG_DRAW_TERRAIN = !DEBUG_DRAW_TERRAIN;
+                }
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_LOCK_POSITION_TO_GRID) ? "Lock Pos Off" : "Lock Pos On")) {
+                    DEBUG_LOCK_POSITION_TO_GRID = !DEBUG_LOCK_POSITION_TO_GRID;
+                }
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_ANGLE_ENTITY_ON_CREATION) ? "Angle Entity Off" : "Angle Entity On")) {
+                    DEBUG_ANGLE_ENTITY_ON_CREATION = !DEBUG_ANGLE_ENTITY_ON_CREATION;
+                }
+                
+                
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_SCENERY_TEXTURES) ? "Scenery Off" : "Scenery On")) {
                     DEBUG_DRAW_SCENERY_TEXTURES = !DEBUG_DRAW_SCENERY_TEXTURES;
                 }
@@ -731,23 +847,19 @@ int main(int argc, char *args[]) {
                                 
                     //Draw the Gizmo
                     V3 entP = easyTransform_getWorldPos(&e->T);
-                    //treat the z position as zero
-                    entP.z = 0;
 
-                    V2 pos = v2_scale(0.5f, easyTransform_getWorldScale(&e->T).xy);
+                    V3 pos = v3_scale(0.5f, easyTransform_getWorldScale(&e->T));
                     Matrix4 rotation = easyTransform_getWorldRotation(&e->T);
 
 
-                    float entityZ = getEntityZLayerPos(e) - 0.1f;
+                    mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, pos.z - camera.pos.z, easy3d_getViewToWorld(&camera));
 
-                    mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, entityZ - camera.pos.z, easy3d_getViewToWorld(&camera));
+                    V3 rightTopCorner = v3(pos.x, pos.y, pos.z);
+                    V3 leftTopCorner = v3(-pos.x, pos.y, pos.z);
+                    V3 rightBottomCorner = v3(pos.x, -pos.y, pos.z);
+                    V3 leftBottomCorner = v3(-pos.x, -pos.y, pos.z);
 
-                    V3 rightTopCorner = v3(pos.x, pos.y, entityZ);
-                    V3 leftTopCorner = v3(-pos.x, pos.y, entityZ);
-                    V3 rightBottomCorner = v3(pos.x, -pos.y, entityZ);
-                    V3 leftBottomCorner = v3(-pos.x, -pos.y, entityZ);
-
-                    float handleSize = 0.3f;
+                    float handleSize = 0.1f;
 
                     Matrix4 a = Mat4Mult(Matrix4_translate(mat4(), entP), Mat4Mult(rotation, Matrix4_translate(Matrix4_scale(mat4(), v3(handleSize, handleSize, 0)), rightTopCorner)));
                     Matrix4 b = Mat4Mult(Matrix4_translate(mat4(), entP), Mat4Mult(rotation, Matrix4_translate(Matrix4_scale(mat4(), v3(handleSize, handleSize, 0)), leftTopCorner)));
@@ -768,33 +880,35 @@ int main(int argc, char *args[]) {
 
                     float handleScale = 1.0f;
 
+                    float handleDim = handleScale*handleSize;
+                    Rect3f handleBounds = rect3fCenterDimV3(v3(0, 0, 0), v3(handleDim, handleDim, handleDim));
+
+                    
+
                     V3 aP = v3_plus(transformPositionV3(rightTopCorner, rotation), entP);
-                    Rect2f aB = rect2fCenterDim(aP.x, aP.y, handleScale*handleSize, handleScale*handleSize);
-                    if(inBounds(mouseP_inWorldP.xy, aB, BOUNDS_RECT)) {
+                    
+                    if(EasyPhysics_CastRayAgainstAABB3f(rotation, aP, v3(1, 1, 1), handleBounds, mouseP_worldRay.direction, mouseP_worldRay.origin).didHit) {
                         if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
                             editorState->gizmoSelect = EDITOR_GIZMO_TOP_RIGHT;
                         }    
                     }
 
                     V3 bP = v3_plus(transformPositionV3(leftTopCorner, rotation), entP);
-                    aB = rect2fCenterDim(bP.x, bP.y, handleScale*handleSize, handleScale*handleSize);
-                    if(inBounds(mouseP_inWorldP.xy, aB, BOUNDS_RECT)) {
+                    if(EasyPhysics_CastRayAgainstAABB3f(rotation, bP, v3(1, 1, 1), handleBounds, mouseP_worldRay.direction, mouseP_worldRay.origin).didHit) {
                         if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
                             editorState->gizmoSelect = EDITOR_GIZMO_TOP_LEFT;
                         }    
                     }
 
                     V3 cP = v3_plus(transformPositionV3(rightBottomCorner, rotation), entP);
-                    aB = rect2fCenterDim(cP.x, cP.y, handleScale*handleSize, handleScale*handleSize);
-                    if(inBounds(mouseP_inWorldP.xy, aB, BOUNDS_RECT)) {
+                    if(EasyPhysics_CastRayAgainstAABB3f(rotation, cP, v3(1, 1, 1), handleBounds, mouseP_worldRay.direction, mouseP_worldRay.origin).didHit) {
                         if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
                             editorState->gizmoSelect = EDITOR_GIZMO_BOTTOM_RIGHT;
                         }    
                     }
 
                     V3 dP = v3_plus(transformPositionV3(leftBottomCorner, rotation), entP);
-                    aB = rect2fCenterDim(dP.x, dP.y, handleScale*handleSize, handleScale*handleSize);
-                    if(inBounds(mouseP_inWorldP.xy, aB, BOUNDS_RECT)) {
+                    if(EasyPhysics_CastRayAgainstAABB3f(rotation, dP, v3(1, 1, 1), handleBounds, mouseP_worldRay.direction, mouseP_worldRay.origin).didHit) {
                         if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
                             editorState->gizmoSelect = EDITOR_GIZMO_BOTTOM_LEFT;
                         }    
@@ -808,47 +922,47 @@ int main(int argc, char *args[]) {
 
                         } break;
                         case EDITOR_GIZMO_TOP_RIGHT: {
-                            V3 diff = v3_minus(mouseP_inWorldP, dP);
+                            // V3 diff = v3_minus(mouseP_inWorldP, dP);
 
-                            V2 prevS = e->T.scale.xy;
+                            // V2 prevS = e->T.scale.xy;
 
-                            e->T.scale.xy = diff.xy;
-                            e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2_minus(e->T.scale.xy, prevS)));
+                            // e->T.scale.xy = diff.xy;
+                            // e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2_minus(e->T.scale.xy, prevS)));
                             
                         } break;
                         case EDITOR_GIZMO_TOP_LEFT: {
 
-                            V3 diff = v3_minus(mouseP_inWorldP, cP);
+                            // V3 diff = v3_minus(mouseP_inWorldP, cP);
 
-                            V2 prevS = e->T.scale.xy;
+                            // V2 prevS = e->T.scale.xy;
 
-                            V2 positiveSize = absVal_v2(diff.xy);
+                            // V2 positiveSize = absVal_v2(diff.xy);
 
-                            e->T.scale.xy = positiveSize;
-                            e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(prevS.x - e->T.scale.x, e->T.scale.y - prevS.y)));
+                            // e->T.scale.xy = positiveSize;
+                            // e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(prevS.x - e->T.scale.x, e->T.scale.y - prevS.y)));
 
                         } break;
                         case EDITOR_GIZMO_BOTTOM_LEFT: {
-                            V3 diff = v3_minus(mouseP_inWorldP, aP);
+                            // V3 diff = v3_minus(mouseP_inWorldP, aP);
 
-                            V2 prevS = e->T.scale.xy;
+                            // V2 prevS = e->T.scale.xy;
 
-                            V2 positiveSize = absVal_v2(diff.xy);
+                            // V2 positiveSize = absVal_v2(diff.xy);
 
-                            e->T.scale.xy = positiveSize;
-                            e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(prevS.x - e->T.scale.x, prevS.y - e->T.scale.y)));
+                            // e->T.scale.xy = positiveSize;
+                            // e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(prevS.x - e->T.scale.x, prevS.y - e->T.scale.y)));
 
                         } break;
                         case EDITOR_GIZMO_BOTTOM_RIGHT: {
 
-                            V3 diff = v3_minus(mouseP_inWorldP, bP);
+                            // V3 diff = v3_minus(mouseP_inWorldP, bP);
 
-                            V2 prevS = e->T.scale.xy;
+                            // V2 prevS = e->T.scale.xy;
 
-                            V2 positiveSize = absVal_v2(diff.xy);
+                            // V2 positiveSize = absVal_v2(diff.xy);
 
-                            e->T.scale.xy = positiveSize;
-                            e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(e->T.scale.x - prevS.x, prevS.y - e->T.scale.y)));
+                            // e->T.scale.xy = positiveSize;
+                            // e->T.pos.xy = v2_plus(e->T.pos.xy, v2_scale(0.5f, v2(e->T.scale.x - prevS.x, prevS.y - e->T.scale.y)));
 
                         } break;
                     }
@@ -916,6 +1030,9 @@ int main(int argc, char *args[]) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                         int *indexToAdd = (int *)arrayInfo.elm;
                         *indexToAdd = editorState->entityIndex;
+                        if(editorState->entitySelected == gameState->currentTerrainEntity) {
+                            gameState->currentTerrainEntity = 0;
+                        }
                         editorState->entitySelected = 0;
                     }
 
@@ -997,8 +1114,26 @@ int main(int argc, char *args[]) {
                     //Update the entity moving
                     if(editorState->entitySelected && isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && editorState->gizmoSelect == EDITOR_GIZMO_NONE) {
                         Entity *e = ((Entity *)editorState->entitySelected);
-                        V3 mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, getEntityZLayerPos(e) - camera.pos.z, easy3d_getViewToWorld(&camera));
-                        e->T.pos.xy = v2_plus(mouseP_inWorldP.xy, editorState->grabOffset);
+                            
+                        EasyPlane floor = {};
+
+                        floor.origin = v3(0, 0, 0);
+                        floor.normal = v3(0, 0, -1);
+
+                        V3 hitP;
+                        float tAt;
+
+                        if(easyMath_castRayAgainstPlane(mouseP_worldRay, floor, &hitP, &tAt)) {
+                            
+                            hitP.z = 0;
+
+                            e->T.pos.xy = v3_plus(hitP, editorState->grabOffset).xy;
+
+                            //NOTE: Lock entities to integer coordinates - grid base gameplay
+                            if(DEBUG_LOCK_POSITION_TO_GRID) {
+                                e->T.pos.xy = roundToGridBoard(e->T.pos).xy;
+                            }
+                        }
                     }
 
 

@@ -338,6 +338,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     				case ENTITY_SKELETON: {
     					newEntity = initSkeleton(gameState, manager, position);
     				} break;
+                    case ENTITY_WEREWOLF: {
+                        newEntity = initWerewolf(gameState, manager, position);
+                    } break;
     				case ENTITY_HEALTH_POTION_1: {
     					assert(false);
     				} break;

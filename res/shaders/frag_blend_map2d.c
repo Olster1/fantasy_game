@@ -12,7 +12,7 @@ void main (void) {
 
     vec2 uv = uv_frag;
     vec4 blend = texture(blendMap, uv);
-    float scale = 100.0f; //how many times the texture will fit across the total terrain quad
+    float scale = 10.0f; //how many times the texture will fit across the total terrain quad
     vec2 localUv = fract(scale*uv_frag);
     vec4 blendA = texture(tex0, localUv);
     vec4 blendB = texture(tex1, localUv);

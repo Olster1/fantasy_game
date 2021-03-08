@@ -427,6 +427,18 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 
 	// printf("%f %f %f\n", b_->T->pos.x, b_->T->pos.y, b_->T->pos.z);
 	// printf("%f %f %f\n", bT_global.E_[12], bT_global.E_[13], bT_global.E_[14]);
+	//Remove rotation
+	Quaternion qb = b_->T->Q;
+	Quaternion qa = a_->T->Q;
+
+	float az = a_->T->pos.z;
+	float bz = b_->T->pos.z;
+
+	a_->T->pos.z = 0;
+	b_->T->pos.z = 0;
+
+	b_->T->Q = identityQuaternion();
+	a_->T->Q = identityQuaternion();
 
 	b.T = easyTransform_getTransform(b_->T);
 	a.T = easyTransform_getTransform(a_->T);
@@ -447,6 +459,13 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	if(output.wasInside) {
 		// printf("collision: %f\n", output.distance);
 	}
+
+	b_->T->Q = qb;
+	a_->T->Q = qa;
+
+	a_->T->pos.z = az;
+	b_->T->pos.z = bz;
+
 	return output;
 }
 
@@ -696,7 +715,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		{	
 	                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
 
-	                		    bool ifOneWay_normalIsUp = true;
+	                		    // bool ifOneWay_normalIsUp = true;
 
 	                		    // if(b->type == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) {
 	                		    // 	//try make it false

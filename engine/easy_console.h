@@ -117,6 +117,13 @@ static inline void easyConsole_pushFloat(EasyConsole *c, float i) {
 }
 
 
+static inline void easyConsole_pushV3(EasyConsole *c, V3 i) {
+	DEBUG_TIME_BLOCK()
+	char buf[32];
+	sprintf(buf, "%f, %f, %f", i.x, i.y, i.z);
+	easyConsole_addToStream(c, buf);
+}
+
 
 static inline void easyConsole_pushInt(EasyConsole *c, int i) {
 	DEBUG_TIME_BLOCK()

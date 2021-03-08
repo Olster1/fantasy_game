@@ -42,7 +42,9 @@ static inline void easyTransform_initTransform_withScale(EasyTransform *t, V3 po
 	t->scale =  scale;
 }
 
-static inline Matrix4 easyTransform_getTransform(EasyTransform *T) {
+#define easyTransform_getTransform(T) easyTransform_getTransform_(T, true)
+#define easyTransform_getTransform_withoutScale(T) easyTransform_getTransform_(T, false)
+static inline Matrix4 easyTransform_getTransform_(EasyTransform *T, bool withPosition) {
 	Matrix4 result = mat4();
 	EasyTransform *parent = T;
 
@@ -67,8 +69,10 @@ static inline Matrix4 easyTransform_getTransform(EasyTransform *T) {
 		parent = parent->parent;
 	}
 
-	//NOTE(ollie): Add the translation component. See comment above to see why
-	result = Mat4Mult(Matrix4_translate(mat4(), translation), result);
+	if(withPosition) {
+		//NOTE(ollie): Add the translation component. See comment above to see why
+		result = Mat4Mult(Matrix4_translate(mat4(), translation), result);
+	}
 
 	return result;
 	

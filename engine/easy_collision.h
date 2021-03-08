@@ -292,10 +292,6 @@ static inline void easyCollision_getWitnessPoints(EasySimplex *simplex, V3 *poin
 		}break; 
 		case 2:
 			{
-				#if 0
-					*point1 = simplex->points[0].pointB;
-					*point2 = simplex->points[1].pointB;
-				#else 			
 				assert(!(simplex->points[0].indexA == simplex->points[1].indexA && simplex->points[0].indexB == simplex->points[1].indexB));
 				
 				float u = s * simplex->points[0].u;
@@ -304,7 +300,6 @@ static inline void easyCollision_getWitnessPoints(EasySimplex *simplex, V3 *poin
 				*point2 = v3_plus(v3_scale(u, simplex->points[0].pointB), v3_scale(v, simplex->points[1].pointB));
 				// we use the divisor here since we only need the actual value (0 - 1) once we are mapping back to the original polygons 
 				// this is our uA + vB equation -> (u being the percentage A - B), (v being the percentage B - A)
-				#endif
 			}
 			break;
 

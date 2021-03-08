@@ -7,7 +7,8 @@ typedef enum {
 	EDITOR_CREATE_CHECKPOINT,
 	EDITOR_CREATE_TORCH,
 	EDITOR_CREATE_AUDIO_CHECKPOINT,
-	EDITOR_CREATE_TERRAIN
+	EDITOR_CREATE_TERRAIN,
+	EDITOR_CREATE_WEREWOLF
 } EditorCreateMode;
 
 typedef enum {
@@ -19,12 +20,12 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d"};
+char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf"};
 
 typedef struct {
 	void *entitySelected;
 	int entityIndex;
-	V2 grabOffset;
+	V3 grabOffset;
 
 	EditorCreateMode createMode;
 
@@ -32,6 +33,10 @@ typedef struct {
 	EditorGizmoSelect gizmoSelect;
 	V2 startMouseP_inWorldP;
 	//
+
+
+	u32 prevSelectedEntities_count;
+	void *prevSelectedEntities[64];
 
 } EditorState;
 
@@ -41,7 +46,7 @@ static EditorState *initEditorState(Arena *arena) {
 	result->entitySelected = 0;
 	result->entityIndex = 0;
 
-	result->grabOffset = v2(0, 0);
+	result->grabOffset = v3(0, 0, 0);
 
 	result->gizmoSelect = EDITOR_GIZMO_NONE;
 	result->startMouseP_inWorldP = v2(0, 0);
