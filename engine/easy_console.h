@@ -72,6 +72,7 @@ inline void easyConsole_initConsole(EasyConsole *c, ButtonType hotkey) {
 inline void easyConsole_addToStream(EasyConsole *c, char *toAdd) {
 	DEBUG_TIME_BLOCK()
 
+	
 	MemoryArenaMark perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 
 	char *at = easy_createString_printf(&globalPerFrameArena, "%.2fs: %s", globalTimeSinceStart, toAdd);

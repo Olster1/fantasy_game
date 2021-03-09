@@ -22,6 +22,7 @@ static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 #include "gameState.h"
 #include "gameScene.c"
 #include "editor.h"
+#include "enemy_ai.c"
 #include "entity.c"
 #include "saveload.c"
 
@@ -41,6 +42,9 @@ static Texture *getInvetoryTexture(EntityType type) {
         case ENTITY_HEALTH_POTION_1: {
             t = findTextureAsset("blue_jar.png");
             // assert(false);
+        } break;
+        case ENTITY_SWORD: {
+            t = findTextureAsset("player_sword.png");
         } break;
         default: {
 
@@ -137,10 +141,11 @@ int main(int argc, char *args[]) {
             //WIZARD ANIMATIONS
             easyAnimation_initAnimation(&gameState->wizardRun, "wizardRun");
             // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
-            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+            easyAnimation_pushFrame(&gameState->wizardRun, "player_empty.png");
+            easyAnimation_pushFrame(&gameState->wizardRun, "player_empty1.png");
 
             easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
-            easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
+            easyAnimation_pushFrame(&gameState->wizardIdle, "player_empty.png");
             // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
             easyAnimation_initAnimation(&gameState->wizardAttack, "wizardAttack");
@@ -586,7 +591,7 @@ int main(int argc, char *args[]) {
 
                    outlineTransform.pos = hitP;
 
-                   easyConsole_pushFloat(DEBUG_globalEasyConsole, outlineTransform.pos.y);
+                   // easyConsole_pushFloat(DEBUG_globalEasyConsole, outlineTransform.pos.y);
 
                    Matrix4 outlineT = easyTransform_getTransform(&outlineTransform);
                    setModelTransform(globalRenderGroup, outlineT);
@@ -607,7 +612,29 @@ int main(int argc, char *args[]) {
             }
             ////////////////////////////
 
-           
+            for(int i = 0; i < manager->entities.count; ++i) {
+                Entity *e = (Entity *)getElement(&manager->entities, i);
+                if(e) {
+                    if(e->model) {
+                        Quaternion Q = e->T.Q;
+                        Quaternion Q1 = eulerAnglesToQuaternion(0, 0, e->rotation);
+
+                        e->T.Q = quaternion_mult(Q, Q1);
+
+                        Matrix4 T = easyTransform_getTransform(&e->T);
+
+                        e->T.Q = Q;
+                        setModelTransform(globalRenderGroup, T);
+                        renderSetShader(globalRenderGroup, &phongProgram);
+                        renderModel(globalRenderGroup, e->model, e->colorTint);
+                    }    
+                }
+                
+            }
+
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+            
 
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -623,7 +650,8 @@ int main(int argc, char *args[]) {
                 
             }
 
-                       
+            renderSetShader(globalRenderGroup, mainShader); 
+
             { //NOTE: Add entities that need adding
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
@@ -666,8 +694,6 @@ int main(int argc, char *args[]) {
                         EasyPhysics_removeRigidBody(&gameState->physicsWorld, e->rb);
 
                         removeElement_ordered(&manager->entities, *indexToDelete);
-
-
                     }
                 }
 
@@ -764,6 +790,20 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_WEREWOLF: {
                             if(pressed) {
                                 editorState->entitySelected = initWerewolf(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_SWORD: {
+                            if(pressed) {
+                                editorState->entitySelected = initSword(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_SIGN: {
+                            if(pressed) {
+                                editorState->entitySelected = initSign(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
@@ -1020,6 +1060,10 @@ int main(int argc, char *args[]) {
                     if(e->collider1) {
                         easyEditor_pushFloat2(appInfo->editor, "Collider 2: ", &e->collider1->dim2f.x, &e->collider1->dim2f.y);
                     }
+
+                    if(e->type == ENTITY_SIGN) {
+                        e->message = easyEditor_pushTextBox(appInfo->editor, "Message: ", e->message);
+                    }
                     
 
                     // easyEditor_pushInt1(appInfo->editor, "Health: ", &e->health);
@@ -1220,6 +1264,8 @@ int main(int argc, char *args[]) {
                                 EntityType tempType = gameState->playerHolding[0];
 
                                 gameState->playerHolding[0] = manager->player->itemSpots[i];
+
+
                                 manager->player->itemSpots[i] = tempType;
 
                                 gameState->animationItemTimersHUD[0] = 0.0f;

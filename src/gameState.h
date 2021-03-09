@@ -10,6 +10,7 @@ FUNC(ENITY_CHECKPOINT)\
 FUNC(ENTITY_TERRAIN)\
 FUNC(ENTITY_WEREWOLF)\
 FUNC(ENTITY_SWORD)\
+FUNC(ENTITY_SIGN)\
 
 typedef enum {
     MY_ENTITY_TYPE(ENUM)
@@ -131,6 +132,8 @@ typedef struct {
 
 	EasyTerrainDataPacket terrainPacket;
 
+	WavFile *successSound;
+
 } GameState; 
 
 static GameState *initGameState(float yOverX_aspectRatio) {
@@ -191,6 +194,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->playerAttackSounds[1] = easyAudio_findSound("player_attack2.wav");
 	state->playerAttackSounds[2] = easyAudio_findSound("player_attack3.wav");
 
+	state->successSound = findSoundAsset("success.wav");
 
 
 	state->terrainPacket.textureCount = 4;;

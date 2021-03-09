@@ -663,7 +663,6 @@ typedef struct {
     EasyMesh *meshes[128];    
 
     Rect3f bounds;
-    V4 colorTint;
 
     char *name; //the file name
 } EasyModel;

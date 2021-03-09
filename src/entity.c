@@ -52,6 +52,11 @@ typedef struct {
 	EntityType itemSpots[MAX_PLAYER_ITEM_COUNT];
 	/////
 
+	//For signs
+	char *message;
+
+	EasyModel *model;
+
 	float rotation;
 
 	float healthBarTimer; 
@@ -157,6 +162,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
 
+	if(type == ENTITY_SWORD) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
+
 	if(type == ENTITY_HEALTH_POTION_1) { isTrigger = false;  }
 
 	if(type == ENITY_CHECKPOINT || type == ENITY_AUDIO_CHECKPOINT) { isTrigger = true; }
@@ -172,7 +179,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF) { 
 			//Add a trigger aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -191,6 +198,12 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			} break;
 			case ENTITY_SKELETON: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
+			} break;
+			case ENTITY_SWORD: {
+				entity->collider->layer = EASY_COLLISION_LAYER_ITEMS;
+			} break;
+			case ENTITY_SIGN:  {
+				entity->collider->layer = EASY_COLLISION_LAYER_WORLD;
 			} break;
 			case ENTITY_HEALTH_POTION_1: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ITEM_RIGID;
@@ -288,7 +301,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		Animation *animToAdd = 0;
 
-		if(entity->rb->dP.x < -1 || entity->rb->dP.x > 1) {
+		if(entity->rb->dP.x < -1 || entity->rb->dP.x > 1 || entity->rb->dP.y < -1 || entity->rb->dP.y > 1) {
 			if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle)) {
 				animToAdd = &gameState->wizardRun;
 				
@@ -324,7 +337,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 						gameState->playerHolding[0] = ENTITY_NULL;
 					} break;
 					case ENTITY_SWORD: {
-						 
+									 
 					};
 				}
 			} 
@@ -391,6 +404,58 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 
+	if(entity->type == ENTITY_SWORD) {
+		entity->rotation += dt;
+
+		if(entity->collider->collisionCount > 0) {
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	player->itemSpots[player->itemCount++] = ENTITY_SWORD;
+            	
+            	playGameSound(&globalLongTermArena, gameState->successSound, 0, AUDIO_FOREGROUND);
+
+            	entity->isDead = true; //remove from entity list
+            	
+            }
+		}
+	}
+
+		if(entity->type == ENTITY_SIGN) {
+
+			if(entity->collider1->collisionCount > 0) {
+
+	            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+	            if(info.found) {
+	            	if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
+	            	{
+	            		easyFlashText_addText(&globalFlashTextManager, entity->message);
+	            		easyConsole_addToStream(DEBUG_globalEasyConsole, entity->message);
+	            	}
+	            }
+			}
+		}
+
+	if(entity->type == ENTITY_WEREWOLF) {
+		V3 worldP = easyTransform_getWorldPos(&player->T);
+		V3 entP = easyTransform_getWorldPos(&entity->T);
+
+		V3 diff = v3_minus(worldP, entP);
+
+		V2 dir = normalizeV2(diff.xy);
+
+		if(getLength(diff.xy) < 10) {
+			entity->rb->dP.xy = v2_scale(10.0f, dir);  
+		}
+
+		if(entity->collider1->collisionCount > 0) {
+
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	info.e->rb->accumForceOnce.xy = v2_plus(info.e->rb->accumForceOnce.xy, v2_scale(100000, dir));
+            }
+		}
+	}
+
 	if(entity->type == ENTITY_SKELETON) {
 		Animation *animToAdd = 0;
 
@@ -447,9 +512,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	if(entity->type == ENTITY_PLAYER_PROJECTILE) {
 			
-		char str[256];
-		sprintf(str, "%f", entity->rb->inverseWeight);
-		easyConsole_addToStream(DEBUG_globalEasyConsole, str);
+		// char str[256];
+		// sprintf(str, "%f", entity->rb->inverseWeight);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
 
 		if(entity->collider->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_SKELETON, EASY_COLLISION_ENTER);	
@@ -519,12 +584,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		assert(entity->collider1->layer == EASY_COLLISION_LAYER_ITEMS);
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, "Potion");
 		assert(sprite);
-
-		
-
 		
 	}
-	if(!sprite && entity->type != ENTITY_TERRAIN) {
+	if(!sprite && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD) {
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
 	
@@ -584,7 +646,13 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	setModelTransform(globalRenderGroup, T);
 	
-	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES) { renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES) { renderSetShader(globalRenderGroup, &glossProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+
+	// if(entity->model) {
+	// 	renderSetShader(globalRenderGroup, &phongProgram);
+	// 	// easyConsole_addToStream(DEBUG_globalEasyConsole, "HAS MODEL");
+	// 	renderModel(globalRenderGroup, entity->model, entity->colorTint);
+	// }
 	
 
 	// renderDrawQuad(globalRenderGroup, COLOR_RED);
@@ -636,15 +704,27 @@ static Entity *initOneWayPlatform(GameState *gameState, EntityManager *manager, 
 } 
 
 static Entity *initCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, true);
 }
 
 static Entity *initTerrain(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TERRAIN, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TERRAIN, 0, &globalWhiteTexture, COLOR_BLUE, -1, true);
 }
 
 static Entity *initAudioCheckPoint(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
+	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, true);
+}
+
+static Entity *initSword(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SWORD, 0, 0, COLOR_WHITE, -1, true);
+	e->model = findModelAsset_Safe("sword.obj"); 
+	return e;
+}
+
+static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, findTextureAsset("sign.png"), COLOR_WHITE, -1, true);
+	e->message = easyString_copyToHeap("Empty");
+	return e;
 }
 
 static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics_World *physicsWorld) {

@@ -78,6 +78,10 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 	        	addVar(&fileContents, e->audioFile->fileName, "audioFileName", VAR_CHAR_STAR);	
 	        } 
 
+
+            if(e->message) {
+                addVar(&fileContents, e->message, "messageString", VAR_CHAR_STAR);  
+            }
 	        
 	        
 	        // addVar(&fileContents, &card->level, "rotation", VAR_INT);
@@ -193,6 +197,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
         		WavFile *audioFile = 0;
 
+                char *message = 0;
+
         		// s32 teleporterIds[256];
         		// Entity *teleportEnts[256];
         		// u32 idCount = 0;
@@ -282,6 +288,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         		releaseInfiniteAlloc(&data);
                     		}
 
+                            if(stringsMatchNullN("messageString", token.at, token.size)) {
+                                char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                                message = easyString_copyToHeap(name);
+
+                                ////////////////////////////////////////////////////////////////////
+                                releaseInfiniteAlloc(&data);
+                            }
+
             				if(stringsMatchNullN("spriteName", token.at, token.size)) {
             		    		char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
             		    		if(easyString_stringsMatch_nullTerminated(name, "white texture") ) {
@@ -338,6 +352,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     				case ENTITY_SKELETON: {
     					newEntity = initSkeleton(gameState, manager, position);
     				} break;
+                    case ENTITY_SWORD: {
+                        newEntity = initSword(gameState, manager, position);
+                    } break;
+                    case ENTITY_SIGN: {
+                        newEntity = initSign(gameState, manager, position);
+                    } break;
                     case ENTITY_WEREWOLF: {
                         newEntity = initWerewolf(gameState, manager, position);
                     } break;
@@ -384,6 +404,11 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
     			newEntity->layer = layer;
     			newEntity->maxHealth = maxHealth;
+
+                if(message) {
+                    newEntity->message = message;    
+                }
+                
                 
                 if(newEntity->type == ENTITY_TERRAIN) {
                     gameState->currentTerrainEntity = newEntity;
