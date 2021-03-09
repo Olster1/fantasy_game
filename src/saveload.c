@@ -404,6 +404,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
     			newEntity->layer = layer;
     			newEntity->maxHealth = maxHealth;
+                newEntity->health = maxHealth;
 
                 if(message) {
                     newEntity->message = message;    

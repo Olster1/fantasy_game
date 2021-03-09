@@ -52,6 +52,10 @@ typedef struct {
 	EntityType itemSpots[MAX_PLAYER_ITEM_COUNT];
 	/////
 
+	//Player stamina
+	float stamina;
+	float maxStamina;
+
 	//For signs
 	char *message;
 
@@ -132,8 +136,11 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->sprite = sprite;
 	entity->type = type;
 	entity->rotation = 0;
-	
-	entity->maxHealth = 3;
+			
+	entity->maxStamina = 10;
+	entity->stamina = entity->maxStamina;
+
+	entity->maxHealth = 10;
 	entity->health = entity->maxHealth;
 
 	float gravityFactor = gameState->gravityScale; //150
@@ -265,6 +272,16 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
 void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused) {
 
 	if(entity->type == ENTITY_WIZARD) {
+
+		if(!isPaused) {
+			entity->stamina += dt;
+
+			if(entity->stamina > entity->maxStamina) {
+				entity->stamina = entity->maxStamina;
+			}
+
+		}
+
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -gameState->walkPower;
@@ -452,6 +469,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
             	info.e->rb->accumForceOnce.xy = v2_plus(info.e->rb->accumForceOnce.xy, v2_scale(100000, dir));
+
+            	if(info.e->health > 0.0f) {
+            		info.e->health -= 1.0f;	
+            	}
+            	
+
             }
 		}
 	}

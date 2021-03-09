@@ -644,7 +644,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	    ////////////////////////////////////////////////////////////////////
 
-	        rb->dP = v3_minus(rb->dP, v3_scale(0.25f*rb->dragFactor, rb->dP)); 
+	        rb->dP = v3_minus(rb->dP, v3_scale(rb->dragFactor, rb->dP)); 
 
 	        //Decay the forces so it averages out over different frame rates
 			rb->accumForceOnce = NULL_VECTOR3;

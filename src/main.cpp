@@ -1191,19 +1191,90 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
+            //DRAW THE PLAYER HUD
+            {
+
+                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+
+
+                float fuaxWidth = 1920.0f;
+                float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight));
+
+                Entity *p = manager->player;
+
+                float staminaPercent = p->stamina / p->maxStamina;
+
+                float maxBarPixels = 300;
+                float barHeight = 60;
+
+                float x = 0.1*fuaxWidth;  
+                float y = fuaxHeight - (0.1f*fuaxHeight);
+
+                //Stamina points backing
+                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
+
+                float barWidth = staminaPercent*maxBarPixels;
+                float xOffset = 0.5f*(maxBarPixels - barWidth);
+
+                //Stamina points percent bar
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREEN);
+
+
+
+                //////////////////////////// HEALTH BAR //////////////////////////////////////////
+
+
+                float healthPercent = (float)p->health / (float)p->maxHealth;
+
+                assert(healthPercent <= 1.0f);
+
+                y -= 1.5f*barHeight;
+
+                //health points backing
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
+
+                barWidth = healthPercent*maxBarPixels;
+                xOffset = 0.5f*(maxBarPixels - barWidth);
+
+                assert(barWidth <= maxBarPixels);
+
+                //hea;th points percent bar
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
+
+                // easyConsole_pushFloat(DEBUG_globalEasyConsole, barWidth);
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_RED);
+
+                ///////////////////////////////////////////////////////////////////////
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+            }
+            /////////////////////////////
 
 
             
             //NOTE(ollie): Make sure the transition is on top
-            // renderClearDepthBuffer(mainFrameBuffer.bufferId);
+            renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
             FrameBuffer *endBuffer = &mainFrameBuffer;
             if(gameState->isLookingAtItems) {
 
                 easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
                 endBuffer = &bloomFrameBuffer;
-
-
 
                 renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
 
