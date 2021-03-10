@@ -473,6 +473,9 @@ static float easyRender_getTextureAspectRatio_HOverW(Texture *t) {
 static Texture globalWhiteTexture;
 static bool globalWhiteTextureInited;
 
+static Texture globalPinkTexture;
+static bool globalPinkTextureInited;
+
 typedef struct {
     int w;
     int h;
@@ -1083,7 +1086,21 @@ void initRenderGroup(RenderGroup *group, float bufferWidth, float bufferHeight) 
         easy3d_initMaterial(&globalWhiteMaterial_HalfAmbient);
         globalWhiteMaterial_HalfAmbient.defaultAmbient = v4(0.5f, 0.5f, 0.5f, 1.0f);
         
-    } 
+    }
+
+     if(!globalPinkTextureInited) {
+         u32 *imageData = pushArray(&globalPerFrameArena, 32*32, u32);
+         for(int y = 0; y < 32; ++y) {
+             for(int x = 0; x < 32; ++x) {
+                 imageData[y*32 + x] = 0xFFFF00FF;     
+             }
+         }
+         
+         globalPinkTexture = createTextureOnGPU((unsigned char *)imageData, 32, 32, 4, TEXTURE_FILTER_LINEAR, false);
+         globalPinkTextureInited = true;
+         globalPinkTexture.name = "pink texture";
+         
+     }
 }
 
 static inline void renderClearDepthBuffer(u32 frameBufferId) {

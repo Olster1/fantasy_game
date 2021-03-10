@@ -1,0 +1,15 @@
+{
+
+	id: 82;
+	type: "ENTITY_SHEILD";
+	position: 33.000000 -41.000000 -2.000000;
+	scale: 2.000000 2.000000 2.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.707107 -0.707107 0.000000 0.000000;
+	maxHealth: 10;
+	layer: -1.000000;
+	subtype: 0;
+	colliderScale: 1.000000 1.000000;
+	model: "shield.obj";
+}
+

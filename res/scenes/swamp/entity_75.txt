@@ -10,5 +10,6 @@
 	layer: 1.000000;
 	subtype: 0;
 	colliderScale: 0.250000 0.150000;
+	colliderScale2: 1.000000 1.000000;
 }
 
