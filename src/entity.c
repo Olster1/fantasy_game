@@ -169,7 +169,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	if(type == ENTITY_PLAYER_PROJECTILE) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
 
-	if(type == ENTITY_SWORD) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
+	if(type == ENTITY_SWORD || type == ENTITY_SHEILD) { isTrigger = true; dragFactor = 0; gravityFactor = 0; }
 
 	if(type == ENTITY_HEALTH_POTION_1) { isTrigger = false;  }
 
@@ -206,6 +206,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENTITY_SKELETON: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
+			case ENTITY_SHEILD:
 			case ENTITY_SWORD: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ITEMS;
 			} break;
@@ -356,6 +357,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					case ENTITY_SWORD: {
 									 
 					};
+					case ENTITY_SHEILD: {
+									 
+					};
 				}
 			} 
 		} 
@@ -421,13 +425,13 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 
-	if(entity->type == ENTITY_SWORD) {
+	if(entity->type == ENTITY_SWORD || entity->type == ENTITY_SHEILD) {
 		entity->rotation += dt;
 
 		if(entity->collider->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
-            	player->itemSpots[player->itemCount++] = ENTITY_SWORD;
+            	player->itemSpots[player->itemCount++] = entity->type;
             	
             	playGameSound(&globalLongTermArena, gameState->successSound, 0, AUDIO_FOREGROUND);
 
@@ -472,6 +476,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
             	if(info.e->health > 0.0f) {
             		info.e->health -= 1.0f;	
+            	}
+
+            	if(info.e->health <= 0.0f) {
+            		gameState->gameModeType = GAME_MODE_GAME_OVER;
             	}
             	
 
@@ -609,7 +617,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		assert(sprite);
 		
 	}
-	if(!sprite && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD) {
+	if(!sprite && !entity->model && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD && entity->type != ENTITY_SHEILD) {
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
 	
@@ -741,6 +749,21 @@ static Entity *initAudioCheckPoint(GameState *gameState, EntityManager *manager,
 static Entity *initSword(GameState *gameState, EntityManager *manager, V3 worldP) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SWORD, 0, 0, COLOR_WHITE, -1, true);
 	e->model = findModelAsset_Safe("sword.obj"); 
+	return e;
+}
+
+static Entity *initSheild(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SHEILD, 0, 0, COLOR_WHITE, -1, true);
+	e->model = findModelAsset_Safe("shield.obj"); 
+	e->T.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
+	return e;
+}
+
+static Entity *init3dTree(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, true);
+	e->model = findModelAsset_Safe("tree.obj"); 
+	e->sprite = 0;
+	e->T.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
 	return e;
 }
 

@@ -46,6 +46,9 @@ static Texture *getInvetoryTexture(EntityType type) {
         case ENTITY_SWORD: {
             t = findTextureAsset("player_sword.png");
         } break;
+        case ENTITY_SHEILD: {
+            t = findTextureAsset("sheild_inventory.png");
+        } break;
         default: {
 
         }
@@ -71,8 +74,8 @@ int main(int argc, char *args[]) {
     V2 resolution = v2(DEFINES_RESOLUTION_X, DEFINES_RESOLUTION_Y);
 
     #if GIF_MODE
-    resolution.x *= 0.3f;
-    resolution.y *= 0.3f;
+    resolution.x *= 0.5f;
+    resolution.y *= 0.5f;
     #endif
     
     OSAppInfo *appInfo = easyOS_createApp("Fantasy Game", &screenDim, false);
@@ -125,6 +128,8 @@ int main(int argc, char *args[]) {
         
         EasyTransform sunTransform;
         easyTransform_initTransform(&sunTransform, v3(0, -10, 0), EASY_TRANSFORM_TRANSIENT_ID);
+
+        sunTransform.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
         
         EasyLight *light = easy_makeLight(&sunTransform, EASY_LIGHT_DIRECTIONAL, 1.0f, v3(1, 1, 1));
         easy_addLight(globalRenderGroup, light);
@@ -172,7 +177,7 @@ int main(int argc, char *args[]) {
         {
             easyAnimation_initAnimation(&gameState->werewolfIdle, "werewolfIdle");
             // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
-            easyAnimation_pushFrame(&gameState->werewolfIdle, "werewolf2.png");
+            easyAnimation_pushFrame(&gameState->werewolfIdle, "zombie.png");
             
         }
 
@@ -617,9 +622,22 @@ int main(int argc, char *args[]) {
                 if(e) {
                     if(e->model) {
                         Quaternion Q = e->T.Q;
-                        Quaternion Q1 = eulerAnglesToQuaternion(0, 0, e->rotation);
+                        V3 rotation = v3(0, 0, 0);
 
-                        e->T.Q = quaternion_mult(Q, Q1);
+                        if(e->type == ENTITY_SHEILD) {
+                            rotation.z = e->rotation;
+                            // rotation.y = 0.5f*PI32;
+
+                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.x, rotation.y, rotation.z);
+                            e->T.Q = quaternion_mult(Q1, Q);
+
+                        } else {
+                            rotation.z = e->rotation;
+                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.x, rotation.y, rotation.z);
+
+                            e->T.Q = quaternion_mult(Q, Q1);
+                        }
+                        
 
                         Matrix4 T = easyTransform_getTransform(&e->T);
 
@@ -752,6 +770,13 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
                         } break;
+                        case EDITOR_CREATE_TREE_3D: {
+                            if(pressed) {
+                                editorState->entitySelected = init3dTree(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                            }
+                        } break;
                         case EDITOR_CREATE_TERRAIN: {
                             if(pressed) {
                                 editorState->entitySelected = initTerrain(gameState, manager, hitP);
@@ -797,6 +822,13 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SWORD: {
                             if(pressed) {
                                 editorState->entitySelected = initSword(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_SHEILD: {
+                            if(pressed) {
+                                editorState->entitySelected = initSheild(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
@@ -1349,6 +1381,23 @@ int main(int argc, char *args[]) {
                                 // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(itemPosition1.xy, v2_scale(0.5f, gameState->fuaxResolution), player->itemSpots[i]);
                             }
                         }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
+                            if(manager->player->itemSpots[i] != ENTITY_NULL) {
+                                //NOTE: Equip item sound
+                                playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                                EntityType tempType = gameState->playerHolding[1];
+
+                                gameState->playerHolding[1] = manager->player->itemSpots[i];
+
+
+                                manager->player->itemSpots[i] = tempType;
+
+                                gameState->animationItemTimersHUD[1] = 0.0f;
+
+                            }
+                        }
                     }
 
                     angle += angleUpdate; 
@@ -1356,6 +1405,18 @@ int main(int argc, char *args[]) {
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
+            } else if(gameState->gameModeType == GAME_MODE_GAME_OVER) {
+                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                endBuffer = &bloomFrameBuffer;
+                renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
+
+                setViewTransform(globalRenderGroup, cameraLookAt_straight);
+
+
+                V2 size = getBounds("GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
+ 
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
 
              //NOTE: Draw what the player is holding

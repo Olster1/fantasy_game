@@ -82,6 +82,10 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
             if(e->message) {
                 addVar(&fileContents, e->message, "messageString", VAR_CHAR_STAR);  
             }
+
+            if(e->model) {
+                addVar(&fileContents, e->model->name, "model", VAR_CHAR_STAR);  
+            }
 	        
 	        
 	        // addVar(&fileContents, &card->level, "rotation", VAR_INT);
@@ -199,6 +203,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 char *message = 0;
 
+                EasyModel *model = 0;
+
         		// s32 teleporterIds[256];
         		// Entity *teleportEnts[256];
         		// u32 idCount = 0;
@@ -270,6 +276,17 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         		////////////////////////////////////////////////////////////////////
                         		releaseInfiniteAlloc(&data);
                     		}
+
+                            if(stringsMatchNullN("model", token.at, token.size)) {
+                                char *modelString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+
+                                model = findModelAsset_Safe(modelString);
+
+                                ////////////////////////////////////////////////////////////////////
+                                releaseInfiniteAlloc(&data);
+                            }
+
+                            
                     		if(stringsMatchNullN("rotation", token.at, token.size)) {
                         		V4 rot = buildV4FromDataObjects(&data, &tokenizer);
                         		rotation.E[0] = rot.x;
@@ -355,6 +372,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     case ENTITY_SWORD: {
                         newEntity = initSword(gameState, manager, position);
                     } break;
+                    case ENTITY_SHEILD: {
+                        newEntity = initSheild(gameState, manager, position);
+                    } break;
                     case ENTITY_SIGN: {
                         newEntity = initSign(gameState, manager, position);
                     } break;
@@ -424,7 +444,11 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 newEntity->T.scale = scale;
         		newEntity->colorTint = color;
 
+                if(model) {
+                    newEntity->model = model;
+                }
 
+                
         		//reset the values
         		position = v3(0, 0, 0);
         		rotation = identityQuaternion();

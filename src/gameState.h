@@ -11,6 +11,15 @@ FUNC(ENTITY_TERRAIN)\
 FUNC(ENTITY_WEREWOLF)\
 FUNC(ENTITY_SWORD)\
 FUNC(ENTITY_SIGN)\
+FUNC(ENTITY_SHEILD)\
+
+
+typedef enum {
+	GAME_MODE_PLAY,
+	GAME_MODE_GAME_OVER	
+} GameModeType;
+
+
 
 typedef enum {
     MY_ENTITY_TYPE(ENUM)
@@ -76,6 +85,8 @@ typedef struct {
 	Animation werewolfIdle;
 
 	Texture *playerTexture;
+
+	GameModeType gameModeType;
 
 	bool isLookingAtItems;
 	ItemGrowTimerUI lookingAt_animTimer;
@@ -180,6 +191,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->currentSceneName = 0;
 	state->sceneFileNameTryingToSave = 0;
 
+	state->gameModeType = GAME_MODE_PLAY;
+
 	state->splatList = initInfinteAlloc(char *);
 	state->splatTextures = initInfinteAlloc(Texture *);
 
@@ -221,6 +234,12 @@ static Texture *gameState_findSplatTexture(GameState *gameState, char *textureNa
 			break;
 		}
 	}	
+
+	if(!found) {
+
+		easyConsole_addToStream(DEBUG_globalEasyConsole, easy_createString_printf(&globalPerFrameArena, "Couldn't find texture: %s", textureName));
+		found = &globalPinkTexture;
+	}
 
 	return found;
 }
