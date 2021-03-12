@@ -674,6 +674,9 @@ static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V
 	            case SDLK_BACKQUOTE: {
 	                buttonType = BUTTON_TILDE;
 	            } break;
+	            case SDLK_DELETE: {
+	                buttonType = BUTTON_DELETE;
+	            } break;
 	            case SDLK_F1: {
 	                buttonType = BUTTON_F1;
 	            } break;

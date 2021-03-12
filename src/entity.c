@@ -9,16 +9,17 @@ typedef enum {
 	ENTITY_SUB_TYPE_NONE = 0,
 	ENTITY_SUB_TYPE_TORCH = 1 << 0,
 	ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM = 1 << 1,
+	ENTITY_SUB_TYPE_SWORD = 2 << 1,
 } SubEntityType;
-
-
-
-
 
 typedef struct {
 	EntityType type;
 
 	u64 flags;
+
+
+	//NOTE: This is for the redo undo system, and to save entities that shouldn't be deleted like the sword and shield
+	bool isDeleted;
 
 	//NOTE: If the entity is flipped on the x-Axis
 	bool isFlipped; 
@@ -39,10 +40,14 @@ typedef struct {
 	EasyCollider *collider;
 	EasyCollider *collider1;
 
+	bool shieldInUse;
+	bool staminaMaxedOut;
+
 	float layer; //NOTE: zero for infront, +ve for more behind
 
 	////////////////  Different entity sub types ////////////////
 	float lifeSpanLeft;
+	float maxLifeSpan;
 
 	bool isDying;
 	int health;
@@ -55,6 +60,7 @@ typedef struct {
 	//Player stamina
 	float stamina;
 	float maxStamina;
+	float staminaTimer;
 
 	//For signs
 	char *message;
@@ -86,6 +92,8 @@ typedef struct {
 	EntityType type;
 	V3 position;
 	V3 dP;
+	EasyTransform *parentT;
+	SubEntityType subType;
 } EntityToAdd;
 
 static void initEntityManager(EntityManager *manager) {
@@ -95,6 +103,169 @@ static void initEntityManager(EntityManager *manager) {
 	initArray(&manager->entitiesToDeleteForFrame, int);
 
 	manager->lastEntityIndex = 0;
+}
+
+
+typedef struct {
+    Entity *e;
+    EasyCollisionType collisionType;
+    bool found;
+} MyEntity_CollisionInfo;
+
+static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manager, EasyCollider *collider, EntityType type, EasyCollisionType colType) {
+    
+    MyEntity_CollisionInfo result;
+    result.found = false;
+    
+    for(int i = 0; i < collider->collisionCount && !result.found; ++i) {
+        EasyCollisionInfo info = collider->collisions[i];
+
+        if(info.type == colType) {
+            int id = info.objectId; 
+            for(int j = 0; j < manager->entities.count && !result.found; ++j) {
+                Entity *e = (Entity *)getElement(&manager->entities, j);
+                if(e) { //can be null
+                    if(e->T.id == id && e->type == type) {
+                        result.e = e;
+                        result.collisionType = info.type;
+                        result.found = true;
+                        break;
+                    }
+                }
+            }
+        }
+    } 
+    
+    return result;
+}
+
+
+static inline void player_useAttackItem(EntityManager *manager, float damage, Entity *entity) {
+	assert(entity->collider1->isTrigger);
+    if(entity->collider1->collisionCount > 0) {
+    	
+    	easyConsole_addToStream(DEBUG_globalEasyConsole, "had collision");
+
+        //Check if it got hurt 
+        MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WEREWOLF, EASY_COLLISION_STAY);	
+        if(info.found) {
+        	easyConsole_addToStream(DEBUG_globalEasyConsole, "In bounds");
+
+        	Entity *enemy = info.e;
+
+        	easyConsole_addToStream(DEBUG_globalEasyConsole, "WEREWOLF GOT HURT");
+
+
+        	V3 worldP = easyTransform_getWorldPos(&enemy->T);
+        	V3 projectileP = easyTransform_getWorldPos(&entity->T);
+
+        	//Knock the enemy back
+        	V2 dir = normalizeV2(v2_minus(worldP.xy, projectileP.xy));
+        	// enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(100000, dir));
+        	///
+
+        	//Damage the enemy
+        	if(enemy->health > 0.0f) {
+        		enemy->health -= 1.0f;	
+        	}
+
+        	//See if the enemey is dead
+        	if(enemy->health <= 0.0f) {
+        		enemy->isDead = true;
+
+        		//////////////////Release items /////////////////
+        		//Add items skelton leaves behind
+        		for(int i = 0; i < 10; ++i) {
+        			// easyConsole_addToStream(DEBUG_globalEasyConsole, "creating potion");
+	        		ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+	        		EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+	        		entityToAdd->type = ENTITY_HEALTH_POTION_1;
+	        		entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
+
+	        		entityToAdd->dP.y = 0;
+	        		entityToAdd->dP.x = 0;//randomBetween(-5, 5);
+	        	}
+        		/////////////////////////////////////////
+        	}
+        }
+	}
+}
+
+
+
+static inline void entity_useItem(EntityManager *manager, GameState *gameState, Entity *entity, EntityType type, int itemIndex) {
+
+	/////////Play sounds to signify use of item
+	int attackSoundIndex = randomBetween(0, 3);
+	if(attackSoundIndex == 3) {
+		attackSoundIndex = 2;
+	}
+
+	// playGameSound(&globalLongTermArena, gameState->playerAttackSounds[attackSoundIndex], 0, AUDIO_FOREGROUND);
+
+	////////////////////
+
+	switch(type) {
+		case ENTITY_HEALTH_POTION_1: {
+			entity->health++;
+
+			if(entity->health > entity->maxHealth) {
+				entity->health = entity->maxHealth;
+			}
+			//EMPTY OUT THE SPOT
+			gameState->playerHolding[itemIndex] = ENTITY_NULL;
+			
+		} break;
+		case ENTITY_STAMINA_POTION_1: {
+			entity->stamina++;
+
+			if(entity->stamina > entity->maxStamina) {
+				entity->stamina = entity->maxStamina;
+			}
+			//EMPTY OUT THE SPOT
+			gameState->playerHolding[itemIndex] = ENTITY_NULL;
+			
+		} break;
+		case ENTITY_SWORD: {
+			easyConsole_pushInt(DEBUG_globalEasyConsole, (int)entity->shieldInUse);
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Used Sword");
+			if(entity->stamina >= 3.0f && !entity->shieldInUse) {
+
+				player_useAttackItem(manager, 1, entity);
+
+				 gameState->swordSwingTimer = 0;
+
+				// ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+				// EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+				// entityToAdd->type = ENTITY_PLAYER_PROJECTILE;
+				// entityToAdd->position = v3(0.0f, 1.0f, 0);
+				// entityToAdd->parentT = &entity->T;
+				// easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
+				// entityToAdd->dP.x = 0;
+				// entityToAdd->dP.y = 0;
+				// entityToAdd->subType = ENTITY_SUB_TYPE_SWORD;
+
+				entity->stamina -= 3.0f;
+				entity->staminaTimer = 0.0f;
+
+				if(entity->stamina <= 0.0f) {
+					entity->stamina = 0;
+					entity->staminaMaxedOut = true;
+				}
+			}
+		} break;
+		case ENTITY_SHEILD: {
+			//can't use shield when using the sword
+			if(gameState->swordSwingTimer < 0.0f) {
+				entity->shieldInUse = true; 
+			}
+		} break;
+		default: {
+
+		}
+	}
+
+	
 }
 
 
@@ -136,9 +307,13 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->sprite = sprite;
 	entity->type = type;
 	entity->rotation = 0;
+	entity->shieldInUse = false;
+	entity->isDeleted = false;
 			
 	entity->maxStamina = 10;
 	entity->stamina = entity->maxStamina;
+
+	entity->staminaTimer = -1.0f;
 
 	entity->maxHealth = 10;
 	entity->health = entity->maxHealth;
@@ -186,10 +361,22 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF) { 
-			//Add a trigger aswell
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD) { 
+			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
+
+			//FOR WIZARD CREATE THE HIT BOX WHEN ENTITIES ARE INSIDE IT 
+			if(type == ENTITY_WIZARD) {
+				float newHeight = entity->collider1->dim2f.y * 2.0f;
+				float diff = newHeight - entity->collider1->dim2f.y;
+
+				easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.y);
+				//Offset the trigger in front of the player
+				entity->collider1->offset.y += 2.5f;
+				entity->collider1->layer = EASY_COLLISION_LAYER_PLAYER_BULLET;
+			}
+
 		}
 
 
@@ -233,39 +420,6 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 }
 
 
-typedef struct {
-    Entity *e;
-    EasyCollisionType collisionType;
-    bool found;
-} MyEntity_CollisionInfo;
-
-static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manager, EasyCollider *collider, EntityType type, EasyCollisionType colType) {
-    
-    MyEntity_CollisionInfo result;
-    result.found = false;
-    
-    for(int i = 0; i < collider->collisionCount && !result.found; ++i) {
-        EasyCollisionInfo info = collider->collisions[i];
-
-        if(info.type == colType) {
-            int id = info.objectId; 
-            for(int j = 0; j < manager->entities.count && !result.found; ++j) {
-                Entity *e = (Entity *)getElement(&manager->entities, j);
-                if(e) { //can be null
-                    if(e->T.id == id && e->type == type) {
-                        result.e = e;
-                        result.collisionType = info.type;
-                        result.found = true;
-                        break;
-                    }
-                }
-            }
-        }
-    } 
-    
-    return result;
-}
-
 
 ////////////////////////////////////////////////////////////////////
 
@@ -275,28 +429,47 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	if(entity->type == ENTITY_WIZARD) {
 
 		if(!isPaused) {
-			entity->stamina += dt;
+
+			if(entity->staminaTimer >= 0.0f) {
+				entity->staminaTimer += dt;
+
+				if(entity->staminaTimer >= 1.0f) {
+					entity->staminaTimer = -1.0f;
+				}
+
+			} else {
+				entity->stamina += dt;	
+			}
+			
 
 			if(entity->stamina > entity->maxStamina) {
 				entity->stamina = entity->maxStamina;
+				entity->staminaMaxedOut = false;
 			}
 
 		}
 
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
+			
+			float walkModifier = 1;
+
+			if(entity->shieldInUse) {
+				walkModifier = 0.5f;
+			}
+
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
-				entity->rb->accumForce.x += -gameState->walkPower;
+				entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
-				entity->rb->accumForce.x += gameState->walkPower;
+				entity->rb->accumForce.x += gameState->walkPower*walkModifier;
 			}
 			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
-				entity->rb->accumForce.y += gameState->walkPower;
+				entity->rb->accumForce.y += gameState->walkPower*walkModifier;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
-				entity->rb->accumForce.y += -gameState->walkPower;
+				entity->rb->accumForce.y += -gameState->walkPower*walkModifier;
 			}
 
 
@@ -332,51 +505,44 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_X) && !isPaused) {
-			animToAdd = &gameState->wizardAttack;
-		} else if(wasPressed(keyStates->gameButtons, BUTTON_Z)) {
-			animToAdd = &gameState->wizardAttack2;
-			
-			int attackSoundIndex = randomBetween(0, 3);
-			if(attackSoundIndex == 3) {
-				attackSoundIndex = 2;
-			}
 
-			playGameSound(&globalLongTermArena, gameState->playerAttackSounds[attackSoundIndex], 0, AUDIO_FOREGROUND);
+			// playGameSound(&globalLongTermArena, gameState->playerAttackSounds[attackSoundIndex], 0, AUDIO_FOREGROUND);
+
+			if(gameState->playerHolding[1] != ENTITY_NULL) {
+				EntityType type = gameState->playerHolding[1];
+				entity_useItem(manager, gameState, entity, type, 1);
+				
+			} 
+
+
+
+		} else if(wasPressed(keyStates->gameButtons, BUTTON_Z) && !isPaused) {
+			// animToAdd = &gameState->wizardAttack2;
 
 			if(gameState->playerHolding[0] != ENTITY_NULL) {
-				switch(gameState->playerHolding[0]) {
-					case ENTITY_HEALTH_POTION_1: {
-						entity->health++;
-
-						if(entity->health > entity->maxHealth) {
-							entity->health = entity->maxHealth;
-						}
-						//EMPTY OUT THE SPOT
-						gameState->playerHolding[0] = ENTITY_NULL;
-					} break;
-					case ENTITY_SWORD: {
-									 
-					};
-					case ENTITY_SHEILD: {
-									 
-					};
-				}
+				EntityType type = gameState->playerHolding[0];
+				entity_useItem(manager, gameState, entity, type, 0);
 			} 
 		} 
 
+		if((wasReleased(keyStates->gameButtons, BUTTON_X) && gameState->playerHolding[1] == ENTITY_SHEILD) ||
+		(wasReleased(keyStates->gameButtons, BUTTON_Z) && gameState->playerHolding[0] == ENTITY_SHEILD)) {
+			entity->shieldInUse = false;
+		}
+
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_2)) {
-			animToAdd = &gameState->wizardHit;
+			// animToAdd = &gameState->wizardHit;
 		}
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_3)) {
-			animToAdd = &gameState->wizardDeath;
+			// animToAdd = &gameState->wizardDeath;
 		}
 
 		
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_5)) {
-			animToAdd = &gameState->wizardFall;
+			// animToAdd = &gameState->wizardFall;
 		}
 
 		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
@@ -465,26 +631,57 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		V2 dir = normalizeV2(diff.xy);
 
 		if(getLength(diff.xy) < 10) {
-			entity->rb->dP.xy = v2_scale(10.0f, dir);  
+			//Move towards the player
+			// entity->rb->dP.xy = v2_scale(10.0f, dir);  
 		}
 
+
+		//WEREWOLF HURTING THE PLAYER//
 		if(entity->collider1->collisionCount > 0) {
+			assert(entity->collider1->isTrigger);
 
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
-            	info.e->rb->accumForceOnce.xy = v2_plus(info.e->rb->accumForceOnce.xy, v2_scale(100000, dir));
+            	float maxReboundForce = 100000;
+            	float reboundForce = maxReboundForce;
+
+            	float damage = 1.0f;
+
+            	if(info.e->shieldInUse) {
+            		reboundForce = maxReboundForce*0.1f;
+            		damage = 0.0f;//0.5f;
+
+            		if(info.e->stamina > 0.0f && !info.e->staminaMaxedOut) {
+            			info.e->stamina -= 1.0f;
+            			info.e->staminaTimer = 0; 
+
+            			if(info.e->stamina < 0.0f) {
+            				info.e->stamina = 0.0f;
+            				info.e->staminaMaxedOut = true;
+            			}	
+            		} else {
+            			damage = 0.5f;
+            			reboundForce = 0.5f*maxReboundForce;
+            		}
+            		
+            	}
+
+            	info.e->rb->accumForceOnce.xy = v2_plus(info.e->rb->accumForceOnce.xy, v2_scale(reboundForce, dir));
 
             	if(info.e->health > 0.0f) {
-            		info.e->health -= 1.0f;	
+            		info.e->health -= damage;	
+            		easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
             	}
 
             	if(info.e->health <= 0.0f) {
             		gameState->gameModeType = GAME_MODE_GAME_OVER;
             	}
-            	
-
             }
-		}
+        }
+        //////////////////////////////////////////////
+
+        
+		
 	}
 
 	if(entity->type == ENTITY_SKELETON) {
@@ -547,15 +744,24 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		// sprintf(str, "%f", entity->rb->inverseWeight);
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
 
-		if(entity->collider->collisionCount > 0) {
+ 		if(entity->collider->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_SKELETON, EASY_COLLISION_ENTER);	
             if(info.found) {
             	easyConsole_addToStream(console, "skeleton hit 2");
             	
             }
+
+            info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WEREWOLF, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	easyConsole_addToStream(console, "werewolf hit");
+            }
 		}
 
+
+
 		entity->lifeSpanLeft -= dt;
+
+		
 
 		if(entity->lifeSpanLeft <= 0.0f) {
 			entity->isDead = true;
@@ -712,7 +918,7 @@ static Entity *initSkeleton(GameState *gameState, EntityManager *manager, V3 wor
 }
 
 static Entity *initWerewolf(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_WEREWOLF, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.5f, 0.25f), gameState, ENTITY_WEREWOLF, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
 }
 
 

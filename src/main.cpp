@@ -18,6 +18,8 @@ static bool DEBUG_GRAVITY = false;
 static bool DEBUG_DRAW_TERRAIN = true;
 static bool DEBUG_LOCK_POSITION_TO_GRID = true;
 static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
+static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
+static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
 
 #include "gameState.h"
 #include "gameScene.c"
@@ -63,7 +65,6 @@ static V3 roundToGridBoard(V3 in) {
     return result;
 }
 
-static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 
 
 int main(int argc, char *args[]) {
@@ -177,7 +178,7 @@ int main(int argc, char *args[]) {
         {
             easyAnimation_initAnimation(&gameState->werewolfIdle, "werewolfIdle");
             // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
-            easyAnimation_pushFrame(&gameState->werewolfIdle, "zombie.png");
+            easyAnimation_pushFrame(&gameState->werewolfIdle, "werewolf2.png");
             
         }
 
@@ -313,7 +314,7 @@ int main(int argc, char *args[]) {
 
         treeT.Q = eulerAnglesToQuaternion(-0.5f*PI32, -0.5f*PI32, 0.5f*PI32);
 
-        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("GrandQuest.wav"), 0, AUDIO_BACKGROUND));
+        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
 
         EasyTransform outlineTransform;
         easyTransform_initTransform_withScale(&outlineTransform, v3(0, 0, 0), v3(1, 1, 1), EASY_TRANSFORM_TRANSIENT_ID); 
@@ -330,7 +331,7 @@ int main(int argc, char *args[]) {
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
-                    if(e && e->rb && e->rb->gravityFactor > 0) {
+                    if(e && e->rb && e->rb->gravityFactor > 0 && !e->rb->isDeleted) {
                         e->rb->gravityFactor = gameState->gravityScale;
                     }
                 }
@@ -355,23 +356,25 @@ int main(int argc, char *args[]) {
 
             camMove = (EasyCamera_MoveType)((int)camMove | canCameraMove | canCamRotate);
     
-            //FOLLOW PLAYER    
-            V3 worldP = easyTransform_getWorldPos(&manager->player->T);
-            {//update x position
-                float distance = absVal(worldP.x - camera.hidden_pos.x);
+            //FOLLOW PLAYER  
+            if(!canCameraMove) {
+                V3 worldP = easyTransform_getWorldPos(&manager->player->T);
+                {//update x position
+                    float distance = absVal(worldP.x - camera.hidden_pos.x);
 
-                if(distance > gameState->cameraSnapDistance) {
-                    float newPosX = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*10.f), worldP.x);
-                    camera.hidden_pos.x = newPosX;
+                    if(distance > gameState->cameraSnapDistance) {
+                        float newPosX = lerp(camera.hidden_pos.x, clamp01(appInfo->dt*10.f), worldP.x);
+                        camera.hidden_pos.x = newPosX;
+                    }
                 }
-            }
 
-            {//update y position
-                float distance = absVal(worldP.y - 10 - camera.hidden_pos.y);
+                {//update y position
+                    float distance = absVal(worldP.y - 10 - camera.hidden_pos.y);
 
-                if(distance > gameState->cameraSnapDistance) {
-                    float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - 10);
-                    camera.hidden_pos.y = newPosY;
+                    if(distance > gameState->cameraSnapDistance) {
+                        float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - 10);
+                        camera.hidden_pos.y = newPosY;
+                    }
                 }
             }
             ////////////////
@@ -475,7 +478,7 @@ int main(int argc, char *args[]) {
 
             AppKeyStates gameKeyStates = appInfo->keyStates;
             AppKeyStates consoleKeyStates = appInfo->keyStates;
-            if(appInfo->console.isInFocus) {
+            if(appInfo->console.isInFocus || canCameraMove) {
                 gameKeyStates = {};
             } else if(easyConsole_isOpen(&appInfo->console)) {
                 consoleKeyStates = {};
@@ -531,11 +534,14 @@ int main(int argc, char *args[]) {
 
 
                         //Draw the DEBUG collider info 
-                        if(e->collider) {   
+                        if(e->collider && DEBUG_DRAW_COLLISION_BOUNDS) {   
                             V3 prevScale = e->T.scale;
 
                             e->T.scale.x *= e->collider->dim2f.x;
                             e->T.scale.y *= e->collider->dim2f.y;
+
+                            e->T.pos.x += e->collider->offset.x;
+                            e->T.pos.y += e->collider->offset.y; 
 
                             Quaternion Q = e->T.Q;
 
@@ -558,12 +564,48 @@ int main(int argc, char *args[]) {
                         
 
                             setModelTransform(globalRenderGroup, T);
-                            if(DEBUG_DRAW_COLLISION_BOUNDS) {
-                                renderDrawQuad(globalRenderGroup, color);    
-                            }
+                            
+                            renderDrawQuad(globalRenderGroup, color);    
+                            
                             
                             e->T.scale = prevScale;
                             e->T.pos.z = prevZ;
+                        }
+
+                        if(e->collider1 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
+                            V3 prevScale = e->T.scale;
+
+                            e->T.scale.x *= e->collider1->dim2f.x;
+                            e->T.scale.y *= e->collider1->dim2f.y;
+
+                            Quaternion Q = e->T.Q;
+
+                            V3 prevPos = e->T.pos;
+
+                            e->T.pos.x += e->collider1->offset.x;
+                            e->T.pos.y += e->collider1->offset.y; 
+                            e->T.pos.z = 0;
+
+                            // easyConsole_pushFloat(DEBUG_globalEasyConsole, e->collider1->offset.y);
+                            
+
+                            e->T.Q = identityQuaternion();
+
+                            Matrix4 T = easyTransform_getTransform(&e->T);
+
+                            e->T.Q = Q;
+
+                            V4 color = COLOR_RED;
+
+                            assert(e->collider1->isTrigger);
+                            color = COLOR_YELLOW;
+                        
+
+                            setModelTransform(globalRenderGroup, T);
+                            renderDrawQuad(globalRenderGroup, color);    
+                            
+                            e->T.scale = prevScale;
+                            e->T.pos = prevPos;
                         }
                     }
                     
@@ -650,6 +692,117 @@ int main(int argc, char *args[]) {
                 
             }
 
+            //Render Player holding inventory item
+            {
+                for(int i = 0; i < arrayCount(gameState->playerHolding); ++i) {
+                    EntityType type = gameState->playerHolding[i];
+
+                    if(type != ENTITY_NULL) {
+
+                        Entity *p = manager->player;
+                        EasyTransform T = p->T;
+
+                        V3 rotation = v3(0, 0, 0);
+
+                        Matrix4 offsetMatrix = mat4();
+
+                        T.scale = v3(2, 2, 2);
+
+                        EasyModel *model = 0;
+
+                        V3 offset = v3(0, 0, 0);
+
+                        if(i == 0) { //left hand
+                            offset.x = -0.5f;
+                        } else { //right hand
+                            offset.x = 0.5f;
+                        }
+
+                        offset.y += 0.5f;
+
+                        offset.z = -1;
+
+                        switch(type) {
+                            case ENTITY_SWORD: {
+                                model = findModelAsset_Safe("sword.obj"); 
+                                offset.y += 1.0f;
+                                T.scale = v3(5, 5, 5);
+                                rotation.y = 0.5*PI32;
+
+                                // rotation.x = -0.5f*PI32;
+
+                                if(gameState->swordSwingTimer >= 0.0f) {
+
+                                    gameState->swordSwingTimer += appInfo->dt;
+
+                                    float sideFactor = -1;
+
+                                    if(i == 1) {
+                                        sideFactor = 1;
+                                    }
+
+                                    float swordLifeLeft = (float)gameState->swordSwingTimer / (float)0.3f;
+                                    float lerpT = smoothStep00(0, swordLifeLeft, sideFactor*0.25f*PI32);
+                                    // easyConsole_pushFloat(DEBUG_globalEasyConsole, swordLifeLeft);
+
+                                    rotation.x = lerpT;
+
+                                    
+
+                                    offsetMatrix = Matrix4_translate(offsetMatrix, v3(0, 0.15f, 0));
+                                    offset.y -= 0.15f;
+
+                                    if(swordLifeLeft >= 1.0f) {
+                                        gameState->swordSwingTimer = -1.0f;
+                                    }
+                                }
+                                
+
+                            } break;
+                            case ENTITY_SHEILD: {
+                                model = findModelAsset_Safe("shield.obj"); 
+                                offset.y += 0.5f;
+                                offset.z = -0.5f;
+
+                                float sideFactor = 1;
+                                 if(i == 1) { //right
+                                    sideFactor = -1;
+                                }
+
+                                if(p->shieldInUse) {
+                                    offset.z -= 0.5f;
+                                    offset.x += sideFactor*0.5f;                                    
+                                }
+
+                                rotation.x = 0.5f*PI32;
+                            } break;
+                            default: {
+
+                            }
+                        }
+
+                        Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
+
+                        T.Q = Q1;
+
+                        Matrix4 Tm = Mat4Mult(easyTransform_getTransform(&T), offsetMatrix);
+
+                        Tm = Mat4Mult(Matrix4_translate(mat4(), offset), Tm);
+
+                        if(model) {
+                            setModelTransform(globalRenderGroup, Tm);
+                            renderSetShader(globalRenderGroup, &phongProgram);
+                            renderModel(globalRenderGroup, model, COLOR_WHITE);
+                        }
+                    }
+
+                }
+            }
+            
+
+
+            ////
+
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
             
@@ -689,13 +842,32 @@ int main(int argc, char *args[]) {
                             inverse_weight = 1.0f / 20.0f; 
                             size = v2(0.4f, 0.4f);
                             reboundFactor = 0.98f;
-                        } 
+
+                            easyConsole_addToStream(DEBUG_globalEasyConsole, "Creating potion");
+                        }
+
+
 
                         Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, size, v2(0.9f, 0.9f), gameState, e->type, inverse_weight, t, COLOR_WHITE, layer, true);
                         e1->rb->dP = e->dP;
+
                         
+
+                        //NOTE: This isn't a thing anymore
+                        if(e->subType == ENTITY_SUB_TYPE_SWORD) {
+                            //sword life span
+                            lifeSpan = 0.3f;
+                        } 
+                            
+                        e1->maxLifeSpan = lifeSpan;
                         e1->lifeSpanLeft = lifeSpan;
                         e1->rb->reboundFactor = reboundFactor;
+                        // easyConsole_pushFloat(DEBUG_globalEasyConsole, lifeSpan);
+
+
+                        e1->subEntityType = e->subType;
+
+                        e1->T.parent = e->parentT;
                     }
                 }
             }
@@ -708,10 +880,18 @@ int main(int argc, char *args[]) {
                     if(indexToDelete) {
                         Entity *e = (Entity *)getElement(&manager->entities, *indexToDelete);
 
-                        EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider);
-                        EasyPhysics_removeRigidBody(&gameState->physicsWorld, e->rb);
+                        e->isDeleted = true;
 
-                        removeElement_ordered(&manager->entities, *indexToDelete);
+                        if(e->collider) {
+                            EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider);
+                        }
+
+                        if(e->rb) {
+                            EasyPhysics_removeRigidBody(&gameState->physicsWorld, e->rb);
+                        }
+
+
+                        // removeElement_ordered(&manager->entities, *indexToDelete);
                     }
                 }
 
@@ -876,6 +1056,11 @@ int main(int argc, char *args[]) {
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS) ? "Bounds Off" : "Bounds On")) {
                     DEBUG_DRAW_COLLISION_BOUNDS = !DEBUG_DRAW_COLLISION_BOUNDS;
+                    // manager->player->collider1->offset.y = 0;
+                }
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
+                    DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = !DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS;
                 }
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_TERRAIN) ? "Terrain Off" : "Terrain On")) {
@@ -897,6 +1082,17 @@ int main(int argc, char *args[]) {
 
                 if(easyEditor_pushButton(appInfo->editor, "Zero Pos Player")) {
                     manager->player->T.pos.xy = v2(0, 0);
+                }
+
+                if(easyEditor_pushButton(appInfo->editor, "Undo")) {
+                    if(editorState->entitiesDeletedBuffer.count > 0) {
+                        EditorUndoState *u = (EditorUndoState *)getElement(&editorState->entitiesDeletedBuffer, editorState->entitiesDeletedBuffer.count - 1);
+                        if(u) {
+
+
+                            removeElement_ordered(&manager->entities, editorState->entitiesDeletedBuffer.count - 1);
+                        }
+                    }
                 }
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_GRAVITY) ? "Gravity Off" : "Gravity On")) {
@@ -1102,7 +1298,7 @@ int main(int argc, char *args[]) {
                     // easyEditor_pushInt1(appInfo->editor, "Max Health: ", &e->maxHealth);
 
 
-                    if(e->type != ENTITY_WIZARD && easyEditor_pushButton(appInfo->editor, "Delete Entity")) {
+                    if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity") || wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE))) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                         int *indexToAdd = (int *)arrayInfo.elm;
                         *indexToAdd = editorState->entityIndex;
@@ -1417,6 +1613,11 @@ int main(int argc, char *args[]) {
                 outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
  
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+                    gameState->gameModeType = GAME_MODE_PLAY;
+                    manager->player->health = manager->player->maxHealth;
+                }
             }
 
              //NOTE: Draw what the player is holding

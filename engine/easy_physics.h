@@ -144,6 +144,8 @@ static inline bool EasyPhysics_layersCanCollider(EasyCollisionLayer a, EasyColli
 	} else if((a == EASY_COLLISION_LAYER_ITEMS || b == EASY_COLLISION_LAYER_ITEMS) && (a == EASY_COLLISION_LAYER_PLAYER || b == EASY_COLLISION_LAYER_PLAYER)) {
 		result = true;
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, "ITEM");
+	// } else if((a == EASY_COLLISION_LAYER_PLAYER_BULLET || b == EASY_COLLISION_LAYER_PLAYER_BULLET) && (a == EASY_COLLISION_LAYER_ENEMIES || b == EASY_COLLISION_LAYER_ENEMIES)) {
+	// 	result = false;
 	} else if((a == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP || b == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) && (a == EASY_COLLISION_LAYER_PLAYER || a == EASY_COLLISION_LAYER_ENEMIES || a == EASY_COLLISION_LAYER_ITEMS || b == EASY_COLLISION_LAYER_PLAYER || b == EASY_COLLISION_LAYER_ENEMIES || b == EASY_COLLISION_LAYER_ITEMS)) {
 		result = true;
 	}
@@ -437,6 +439,9 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	a_->T->pos.z = 0;
 	b_->T->pos.z = 0;
 
+	a_->T->pos.x += a_->offset.x;
+	b_->T->pos.y += b_->offset.y;
+
 	b_->T->Q = identityQuaternion();
 	a_->T->Q = identityQuaternion();
 
@@ -697,11 +702,17 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                EasyCollider *b = (EasyCollider *)getElement(colliders, j);
 
-	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer)) {
+	                
+
+	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer) && !(a->isTrigger && b->isTrigger)) {
 	                	bool hit = false;
+
 	                	/*
 	                		If both objects aren't triggers, actually process the physics
 	                		using minkowski-baycentric coordinates
+
+	                		IMPORTANT: Two rigid bodies don't record collision information via EasyCollider_addCollisionInfo,
+	                		only two triggers, or rigid body and a trigger will record collision information.
 
 	                	*/
 	                	if(!a->isTrigger && !b->isTrigger) {
@@ -739,9 +750,14 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                	/*
 	                		If there is a trigger involved, just do overlap collision detection
 	                	*/
+
+	                		assert(!(a->isTrigger && b->isTrigger));
 	                		
 	                		V3 aPos = v3_plus(easyTransform_getWorldPos(a->T), a->offset);
 	                		V3 bPos = v3_plus(easyTransform_getWorldPos(b->T), b->offset);
+
+	                		V3 scaleA = easyTransform_getWorldScale(a->T);
+	                		V3 scaleB = easyTransform_getWorldScale(b->T);
 
 	                		bool circle = a->type == EASY_COLLIDER_CIRCLE || b->type == EASY_COLLIDER_CIRCLE;
 
@@ -749,8 +765,8 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		if(circle && rectangle) {
 	                			assert(false);
 	                		} else if(a->type == EASY_COLLIDER_RECTANGLE && b->type == EASY_COLLIDER_RECTANGLE) { //both rectangles
-
-	                			V2 hDim = v2(0.5f*b->dim2f.x, 0.5f*b->dim2f.y);
+	                			//Scale rigid body by the scale of the _local_ Transform. I think we just want the local transform? 
+	                			V2 hDim = v2(0.5f*b->dim2f.x*scaleB.x, 0.5f*b->dim2f.y*scaleB.y);
 
 	                			V2 points[] = { v2(-hDim.x, -hDim.y), 
 	                							v2(hDim.x, -hDim.y),
@@ -759,13 +775,13 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                			for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
 	                				V2 p = v2_plus(points[pointI], bPos.xy);
-	                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x, a->dim2f.y), BOUNDS_RECT)) {
+	                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x*scaleA.x, a->dim2f.y*scaleA.y), BOUNDS_RECT)) {
 	                					hit = true;
 	                				}
 	                			}
 
 	                			if(!hit) {
-	                				hDim = v2(0.5f*a->dim2f.x, 0.5f*a->dim2f.y);
+	                				hDim = v2(0.5f*a->dim2f.x*scaleA.x, 0.5f*a->dim2f.y*scaleA.y);
 
 	                				V2 points2[] = { v2(-hDim.x, -hDim.y), 
 	                								v2(hDim.x, -hDim.y),
@@ -774,7 +790,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                				for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
 	                					V2 p = v2_plus(points2[pointI], aPos.xy);
-	                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x, b->dim2f.y), BOUNDS_RECT)) {
+	                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x*scaleB.x, b->dim2f.y*scaleB.y), BOUNDS_RECT)) {
 	                						hit = true;
 	                					}
 	                				}

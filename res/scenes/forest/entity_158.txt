@@ -1,15 +1,14 @@
 {
 
-	id: 7;
+	id: 158;
 	type: "ENTITY_SCENERY";
-	position: 45.000000 -28.000000 -1.000000;
-	scale: 3.000000 3.000000 1.000000;
+	position: 56.000000 -17.000000 -2.000000;
+	scale: 6.000000 6.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	maxHealth: 3;
 	layer: -1.000000;
 	subtype: 0;
-	spriteName: "stump";
-	colliderScale: 0.250000 0.150000;
+	spriteName: "tree (1)";
 }
 

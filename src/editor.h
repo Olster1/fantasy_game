@@ -42,7 +42,32 @@ typedef struct {
 	u32 prevSelectedEntities_count;
 	void *prevSelectedEntities[64];
 
+
+	Array_Dynamic entitiesDeletedBuffer;
+
 } EditorState;
+
+
+typedef enum {
+	EDITOR_UNDO_HAS_COLLIDER_FLAG,
+	EDITOR_UNDO_HAS_RIGID_BODY_FLAG
+} EditorUndoEntityFlag;
+
+typedef enum {
+	EDITOR_UNDO_ENTITY_DELETE,
+} EditorUndoType;
+
+
+typedef struct {
+	EditorUndoType type;
+
+	Entity *e;
+
+	//we block copy the collider and rigid body
+	int flags;
+	EasyCollider c;
+	EasyRigidBody rb;
+} EditorUndoState;
 
 static EditorState *initEditorState(Arena *arena) {
 	EditorState *result = pushStruct(arena, EditorState);
@@ -55,5 +80,8 @@ static EditorState *initEditorState(Arena *arena) {
 	result->gizmoSelect = EDITOR_GIZMO_NONE;
 	result->startMouseP_inWorldP = v2(0, 0);
 
+	initArray(&result->entitiesDeletedBuffer, EditorUndoState);
+
 	return result;
 }
+

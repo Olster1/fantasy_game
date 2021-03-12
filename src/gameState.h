@@ -12,6 +12,8 @@ FUNC(ENTITY_WEREWOLF)\
 FUNC(ENTITY_SWORD)\
 FUNC(ENTITY_SIGN)\
 FUNC(ENTITY_SHEILD)\
+FUNC(ENTITY_PLAYER_HIT_BOX)\
+FUNC(ENTITY_STAMINA_POTION_1)\
 
 
 typedef enum {
@@ -95,6 +97,7 @@ typedef struct {
 	//Extra player stuff we don't want to put on the entity
 	EntityType playerHolding[2];
 
+	bool inventoryInUse[2];
 
 	ItemGrowTimerUI animationItemTimers[MAX_PLAYER_ITEM_COUNT];
 	//NOTE: The two item spots the player can hold
@@ -103,7 +106,6 @@ typedef struct {
 	int itemAnimationCount;
 	ItemAnimationInfo item_animations[32];
 	//////
-
 
 	//SOUNDS
 
@@ -141,6 +143,8 @@ typedef struct {
 
 	void *currentTerrainEntity;
 
+	float swordSwingTimer;
+
 	EasyTerrainDataPacket terrainPacket;
 
 	WavFile *successSound;
@@ -165,7 +169,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 
 	//NOTE: Clear out what the player is holding
-	state->playerHolding[0] = ENTITY_NULL;
+	state->playerHolding[0] = ENTITY_SWORD;
 	state->playerHolding[1] = ENTITY_NULL;
 
 	state->itemAnimationCount = 0;
@@ -199,6 +203,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->walkPower = 400;
 
 	state->gravityScale = 150;
+
+	state->swordSwingTimer = -1.0f;
 
 	EasyPhysics_beginWorld(&state->physicsWorld);
 
