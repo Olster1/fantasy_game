@@ -282,6 +282,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                                 model = findModelAsset_Safe(modelString);
 
+                                if(!model) {
+                                    //Default to a pink texture so it doesnt crash 
+                                    //COuld change to a more bogus model 
+                                    splatTexture = &globalPinkTexture;
+                                }
+
                                 ////////////////////////////////////////////////////////////////////
                                 releaseInfiniteAlloc(&data);
                             }

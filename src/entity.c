@@ -848,6 +848,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 	if(!sprite && !entity->model && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD && entity->type != ENTITY_SHEILD) {
+		//NOTE: If the program is crashing here, it most likely could find a model or sprite on load time that it was looking for 
+
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
 	
