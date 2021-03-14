@@ -1,4 +1,4 @@
-#define invalidCodePathStr(msg) { printf(msg); exit(0); }
+#define invalidCodePathStr(msg) { printf(msg); assert(false); }
 #if DEVELOPER_MODE //turn off for crash assert
 // #define assert(statement) if(!(statement)) { int *a = 0; a = 0;}
 #define assert(statement) if(!(statement)) {printf("Something went wrong at %d in %s\n", __LINE__, __FILE__);  int *a = 0; *a = 0;}

@@ -8,11 +8,11 @@
 #endif 
 
 #if !defined invalidCodePathStr
-#define invalidCodePathStr(msg) { printf(msg); exit(0); }
+#define invalidCodePathStr(msg) if(!(statement)) { int *i_ = 0; *i_ = 0; }
 #endif
 
 #if !defined assert 
-#if 1 //easy assert
+#if  //easy assert
 #define assert(statement) if(!(statement)) {printf("Something went wrong at %d", __LINE__); exit(0);}
 #else 
 #define assert(statement) if(!(statement)) { int *i_ = 0; *i_ = 0; }
@@ -314,30 +314,32 @@ ArrayElementInfo getEmptyElementWithInfo(Array_Dynamic *array) {
     return result;
 }
 
-void removeElement_unordered(Array_Dynamic *array, int absIndex) {
-    DEBUG_TIME_BLOCK()
-    PoolInfo info = getPoolInfo(array, absIndex);
+// void removeElement_unordered(Array_Dynamic *array, int absIndex) {
+//     DEBUG_TIME_BLOCK()
+//     PoolInfo info = getPoolInfo(array, absIndex);
     
-    Pool *pool = info.pool;
-    int index = info.indexAt;
-    if(pool && index < pool->indexAt && index >= 0 && isElmValid(info.pool, info.indexAt)) {
+//     Pool *pool = info.pool;
+//     int index = info.indexAt;
+//     if(pool && index < pool->indexAt && index >= 0 && isElmValid(info.pool, info.indexAt)) {
         
-        void *elm = pool->memory + (index*array->sizeofType);
-        unsigned int lastIndex = --pool->indexAt;
-        if(lastIndex != index) {
-            assert(index < lastIndex);
-            void *elm2 = pool->memory + (lastIndex*array->sizeofType);
-            //get element from the end. 
-            memcpy(elm, elm2, array->sizeofType);
-        }
-        assert(info.indexAt < INCREMENT_COUNT);
-        pool->inValid |= (u64)((u64)1 << (u64)info.indexAt);
-        array->count--;
-    } else {
-        invalidCodePathStr("index not valid");
-    }
+//         void *elm = pool->memory + (index*array->sizeofType);
+//         unsigned int lastIndex = --pool->indexAt;
+//         if(lastIndex != index) {
+//             assert(index < lastIndex);
+//             void *elm2 = pool->memory + (lastIndex*array->sizeofType);
+//             //get element from the end. 
+//             memcpy(elm, elm2, array->sizeofType);
+//         }
+//         assert(info.indexAt < INCREMENT_COUNT);
+//         pool->inValid |= (u64)((u64)1 << (u64)info.indexAt);
+//         array->count--;
+//     } else {
+//         //NOTE: Do nothing since it's already removed
+
+
+//     }
     
-}
+// }
 
 //
 void *getLastElement(Array_Dynamic *array) { //returns the last element on the list. [array->count - 1]
@@ -348,11 +350,6 @@ void *getLastElement(Array_Dynamic *array) { //returns the last element on the l
 }
 
 
-inline void easyArray_clear(Array_Dynamic *array) {
-    for(int i = array->count - 1; i >= 0; --i) {
-        removeElement_unordered(array, i);
-    }
-}
 
 //This is when we want to keep the order consistent. i.e. we're using indexes as ids etc. 
 void removeElement_ordered(Array_Dynamic *array, int absIndex) {
@@ -392,7 +389,14 @@ void removeElement_ordered(Array_Dynamic *array, int absIndex) {
             array->count--;
         }
     } else {
-        assert(false);
+        // assert(false);
+    }
+}
+
+
+inline void easyArray_clear(Array_Dynamic *array) {
+    for(int i = array->count - 1; i >= 0; --i) {
+        removeElement_ordered(array, i);
     }
 }
 
@@ -402,15 +406,10 @@ typedef enum {
 
 } RemoveType;
 
-void removeSectionOfElements(Array_Dynamic *array, RemoveType type, int min, int max) {
+void removeSectionOfElements(Array_Dynamic *array, int min, int max) {
     DEBUG_TIME_BLOCK()
     for(int i = min; i < max; ++i) {
-        if(type == REMOVE_ORDERED) {
             removeElement_ordered(array, i);
-        } else {
-            assert(type == REMOVE_UNORDERED);
-            removeElement_unordered(array, i);
-        }
     }
     if(max >= array->count) {
         array->count = min;

@@ -6,7 +6,7 @@ pushd ..\bin
 
 REM compile the icon into a .res file
 REM uncomment line below to compile the file
-REM RC ../src/myres.rc
+REM RC ../bin/myres.rc
 
 
 set commonCompilerFlags=-nologo -FC -Zi -Gm- -GR- -EHa- -Zo -Oi -Zi -Od

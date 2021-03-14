@@ -18,7 +18,8 @@ FUNC(ENTITY_STAMINA_POTION_1)\
 
 typedef enum {
 	GAME_MODE_PLAY,
-	GAME_MODE_GAME_OVER	
+	GAME_MODE_GAME_OVER,
+	GAME_MODE_READING_TEXT,
 } GameModeType;
 
 
@@ -128,6 +129,9 @@ typedef struct {
 
 	float inverse_weight;
 
+	//Message for the message box
+	char *currentTalkText;
+
 
 	InfiniteAlloc splatList;
 	InfiniteAlloc splatTextures;
@@ -139,6 +143,14 @@ typedef struct {
 	float cameraSnapDistance;
 	//
 
+	//Button prompts ////
+	Texture *spacePrompt;
+
+	Quaternion angledQ;
+	EasyTransform tempTransform;
+
+	///////////////////////////
+
 	WavFile *playerAttackSounds[3];
 
 	void *currentTerrainEntity;
@@ -148,6 +160,7 @@ typedef struct {
 	EasyTerrainDataPacket terrainPacket;
 
 	WavFile *successSound;
+	bool gameIsPaused;
 
 } GameState; 
 
@@ -175,8 +188,19 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->itemAnimationCount = 0;
 
 	state->indexInItems = 0;
+	state->gameIsPaused = false;
 
 	state->openMenuSound = state->equipItemSound = state->clickSound = findSoundAsset("click2.wav");
+
+
+	//NOTE: This is used for the key prompts in a IMGUI fashion
+	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
+
+	easyTransform_initTransform(&state->tempTransform, v3(0, 0, 0), EASY_TRANSFORM_TRANSIENT_ID);
+	state->tempTransform.Q = state->angledQ;
+	state->spacePrompt = findTextureAsset("space_prompt.png");
+	//////
+
 
 
 	//NOTE: Initialize the ui item pickers to nothing

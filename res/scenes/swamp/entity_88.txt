@@ -1,0 +1,15 @@
+{
+
+	id: 88;
+	type: "ENTITY_SCENERY";
+	position: 29.770216 -29.217402 0.000000;
+	scale: 1.000000 1.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.707107 -0.707107 0.000000 0.000000;
+	maxHealth: 10;
+	layer: -1.000000;
+	subtype: 0;
+	colliderScale: 1.000000 1.000000;
+	model: "Fence.obj";
+}
+

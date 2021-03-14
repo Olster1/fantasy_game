@@ -12,7 +12,7 @@ typedef enum {
 	EDITOR_CREATE_SWORD,
 	EDITOR_CREATE_SIGN,
 	EDITOR_CREATE_SHEILD,
-	EDITOR_CREATE_TREE_3D
+	EDITOR_CREATE_3D_MODEL
 } EditorCreateMode;
 
 typedef enum {
@@ -24,7 +24,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "tree 3d"};
+char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model"};
 
 typedef struct {
 	void *entitySelected;
@@ -61,7 +61,7 @@ typedef enum {
 typedef struct {
 	EditorUndoType type;
 
-	Entity *e;
+	void *e;
 
 	//we block copy the collider and rigid body
 	int flags;

@@ -65,6 +65,9 @@ typedef struct {
 	//For signs
 	char *message;
 
+	//For key prompts
+	float tBob;
+
 	EasyModel *model;
 
 	float rotation;
@@ -309,7 +312,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->rotation = 0;
 	entity->shieldInUse = false;
 	entity->isDeleted = false;
-			
+	entity->tBob = 0;
+
 	entity->maxStamina = 10;
 	entity->stamina = entity->maxStamina;
 
@@ -613,11 +617,31 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
 	            if(info.found) {
-	            	if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
-	            	{
-	            		easyFlashText_addText(&globalFlashTextManager, entity->message);
-	            		easyConsole_addToStream(DEBUG_globalEasyConsole, entity->message);
-	            	}
+
+	            	if(gameState->gameModeType != GAME_MODE_READING_TEXT) {
+	            		entity->tBob += dt;
+
+	            		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 1.5f + 0.2f*sin(entity->tBob), 0));
+
+	            		
+
+	            		gameState->tempTransform.pos = position;
+	            		float width = 2;
+	            		float height = gameState->spacePrompt->aspectRatio_h_over_w*width;
+
+	            		gameState->tempTransform.scale.xy = v2(width, height);
+
+	            		setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+	            		renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+	            		
+	            		
+	            		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
+	            		{
+	            			gameState->gameModeType = GAME_MODE_READING_TEXT;
+	            			gameState->currentTalkText = entity->message;
+	            			easyConsole_addToStream(DEBUG_globalEasyConsole, entity->message);
+	            		}	
+	            	} 
 	            }
 			}
 		}
@@ -965,11 +989,10 @@ static Entity *initSheild(GameState *gameState, EntityManager *manager, V3 world
 	return e;
 }
 
-static Entity *init3dTree(GameState *gameState, EntityManager *manager, V3 worldP) {
+static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worldP, EasyModel *model) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, true);
-	e->model = findModelAsset_Safe("tree.obj"); 
+	e->model = model; 
 	e->sprite = 0;
-	e->T.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
 	return e;
 }
 

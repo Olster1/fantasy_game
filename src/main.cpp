@@ -267,6 +267,7 @@ int main(int argc, char *args[]) {
                 EasyAssetLoader_AssetArray allModelsForEditor = {};
                 allModelsForEditor.count = 0;
                 allModelsForEditor.assetType = ASSET_MODEL;
+
                 
                 for(int dirIndex = 0; dirIndex < arrayCount(modelDirs); ++dirIndex) {
                     char *dir = modelDirs[dirIndex];
@@ -279,6 +280,14 @@ int main(int argc, char *args[]) {
                     fileTypes[0] = "obj";
                     easyAssetLoader_loadAndAddAssets(&allModelsForEditor, dir, fileTypes, arrayCount(fileTypes), ASSET_MODEL, EASY_ASSET_LOADER_FLAGS_NULL);
 
+                }
+
+                char **modelsLoadedNames = pushArray(&globalLongTermArena, allModelsForEditor.count, char *);
+
+                for(int i = 0; i < allModelsForEditor.count; ++i) {
+                    char *nameOfModel = allModelsForEditor.array[i].model->name;
+
+                    modelsLoadedNames[i] = nameOfModel;
                 }
 
 
@@ -321,6 +330,8 @@ int main(int argc, char *args[]) {
 
         Texture *outlineSprite = findTextureAsset("outline.png");
 
+        Texture *fadeBlackTexture = findTextureAsset("fade_black.png");
+
         while(appInfo->running) {
 
             if(refreshTweakFile(tweakerFileName, tweaker)) {
@@ -331,7 +342,7 @@ int main(int argc, char *args[]) {
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
-                    if(e && e->rb && e->rb->gravityFactor > 0 && !e->rb->isDeleted) {
+                    if(e && e->rb && e->rb->gravityFactor > 0) {
                         e->rb->gravityFactor = gameState->gravityScale;
                     }
                 }
@@ -393,6 +404,8 @@ int main(int argc, char *args[]) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
                 gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
                 gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
+
+                if(gameState->gameIsPaused) { gameState->gameIsPaused = false; }
 
                 gameState->indexInItems = 0;
                 gameState->animationItemTimers[0].target = UI_ITEM_PICKER_MAX_SIZE;
@@ -670,12 +683,12 @@ int main(int argc, char *args[]) {
                             rotation.z = e->rotation;
                             // rotation.y = 0.5f*PI32;
 
-                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.x, rotation.y, rotation.z);
+                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
                             e->T.Q = quaternion_mult(Q1, Q);
 
                         } else {
                             rotation.z = e->rotation;
-                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.x, rotation.y, rotation.z);
+                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
 
                             e->T.Q = quaternion_mult(Q, Q1);
                         }
@@ -810,7 +823,7 @@ int main(int argc, char *args[]) {
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->isLookingAtItems);        
+                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused);        
                 
                     if(e->isDead) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -891,7 +904,7 @@ int main(int argc, char *args[]) {
                         }
 
 
-                        // removeElement_ordered(&manager->entities, *indexToDelete);
+                        removeElement_ordered(&manager->entities, *indexToDelete);
                     }
                 }
 
@@ -903,6 +916,83 @@ int main(int argc, char *args[]) {
             if(!appInfo->console.isInFocus && wasPressed(appInfo->keyStates.gameButtons, BUTTON_F5)) {
                 gameState->isEditorOpen = !gameState->isEditorOpen;
             }
+
+
+            //DRAW THE PLAYER HUD
+            {
+
+                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+
+                float fuaxWidth = 1920.0f;
+                float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight));
+
+                Entity *p = manager->player;
+
+                float staminaPercent = p->stamina / p->maxStamina;
+
+                float maxBarPixels = 300;
+                float barHeight = 60;
+
+                float x = 0.1*fuaxWidth;  
+                float y = fuaxHeight - (0.1f*fuaxHeight);
+
+                //Stamina points backing
+                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
+
+                float barWidth = staminaPercent*maxBarPixels;
+                float xOffset = 0.5f*(maxBarPixels - barWidth);
+
+                //Stamina points percent bar
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREEN);
+
+
+
+                //////////////////////////// HEALTH BAR //////////////////////////////////////////
+
+
+                float healthPercent = (float)p->health / (float)p->maxHealth;
+
+                assert(healthPercent <= 1.0f);
+
+                y -= 1.5f*barHeight;
+
+                //health points backing
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
+
+                barWidth = healthPercent*maxBarPixels;
+                xOffset = 0.5f*(maxBarPixels - barWidth);
+
+                assert(barWidth <= maxBarPixels);
+
+                //hea;th points percent bar
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
+
+                // easyConsole_pushFloat(DEBUG_globalEasyConsole, barWidth);
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_RED);
+
+                ///////////////////////////////////////////////////////////////////////
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+                renderClearDepthBuffer(mainFrameBuffer.bufferId);
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+            }
+            /////////////////////////////
+
 
                 
             if(gameState->isEditorOpen){
@@ -917,11 +1007,17 @@ int main(int argc, char *args[]) {
 
                 int splatIndexOn = 0;
                 if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM) {
-                    splatIndexOn = easyEditor_pushList(appInfo->editor, "Splat Names: ", (char **)gameState->splatList.memory, gameState->splatList.count);    
+                    
+                }   
+
+                EasyModel *modelSelected = 0;
+
+                if(editorState->createMode == EDITOR_CREATE_3D_MODEL) {
+                    int modelIndex = easyEditor_pushList(appInfo->editor, "Models: ", modelsLoadedNames, allModelsForEditor.count); 
+
+                    modelSelected = allModelsForEditor.array[modelIndex].model;   
+
                 }
-
-
-
                 
 
                 bool pressed = wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE);
@@ -950,9 +1046,9 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
                         } break;
-                        case EDITOR_CREATE_TREE_3D: {
+                        case EDITOR_CREATE_3D_MODEL: {
                             if(pressed) {
-                                editorState->entitySelected = init3dTree(gameState, manager, hitP);
+                                editorState->entitySelected = init3dModel(gameState, manager, hitP, modelSelected);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                             }
@@ -1090,6 +1186,8 @@ int main(int argc, char *args[]) {
                         if(u) {
 
 
+
+                            /////////// Remove the element at the end
                             removeElement_ordered(&manager->entities, editorState->entitiesDeletedBuffer.count - 1);
                         }
                     }
@@ -1254,31 +1352,42 @@ int main(int argc, char *args[]) {
 
                     ////////////////////////////////////////////////////////////////////
                     //NOTE(ollie): Rotation with euler angles
-                    
+                        
+                    //NOTE: The rotation of a _single_ quaternion formed from euler angles, the shape keeps their original axis _tied_ to the shape. 
+                    //      So as it rotates on Y and turns the X and z axis stays with the shape. This isn't the case when we concat rotations togeether.   
+
+
                     V3 tempEulerAngles = easyMath_QuaternionToEulerAngles(e->T.Q);
                     
                     
-                    //NOTE(ollie): Swap to degrees 
-                    // tempEulerAngles.x = easyMath_radiansToDegrees(tempEulerAngles.x);
-                    // tempEulerAngles.y = easyMath_radiansToDegrees(tempEulerAngles.y);
+                    // NOTE(ollie): Swap to degrees 
+                    tempEulerAngles.x = easyMath_radiansToDegrees(tempEulerAngles.x);
+                    tempEulerAngles.y = easyMath_radiansToDegrees(tempEulerAngles.y);
                     tempEulerAngles.z = easyMath_radiansToDegrees(tempEulerAngles.z);
 
 
-                    easyEditor_pushSlider(appInfo->editor, "Rotation: ", &tempEulerAngles.z, 0, 360.0f);
+                    easyEditor_pushFloat3(appInfo->editor, "Rotation: ", &tempEulerAngles.x, &tempEulerAngles.y, &tempEulerAngles.z);
                     
-                    //NOTE(ollie): Convert back to radians
-                    // tempEulerAngles.x = easyMath_degreesToRadians(tempEulerAngles.x);
-                    // tempEulerAngles.y = easyMath_degreesToRadians(tempEulerAngles.y);
+                    // NOTE(ollie): Convert back to radians
+                    tempEulerAngles.x = easyMath_degreesToRadians(tempEulerAngles.x);
+                    tempEulerAngles.y = easyMath_degreesToRadians(tempEulerAngles.y);
                     tempEulerAngles.z = easyMath_degreesToRadians(tempEulerAngles.z);
-                    
+
                     e->T.Q = eulerAnglesToQuaternion(tempEulerAngles.y, tempEulerAngles.x, tempEulerAngles.z);
-                    
+
+                    // tempEulerAngles = easyMath_QuaternionToEulerAngles(e->T.Q);
+                        
+
+                    // float tempValue = easyMath_radiansToDegrees(e->rotation);
+
+                    // easyEditor_pushFloat1(appInfo->editor, "Rotation: ", &tempValue);
+
+                    // e->rotation = easyMath_degreesToRadians(tempValue);
+
                     ////////////////////////////////////////////////////////////////////
 
                     easyEditor_pushColor(appInfo->editor, "Color: ", &e->colorTint);
                     easyEditor_pushInt1(appInfo->editor, "MaxHealth: ", &e->maxHealth);
-
-                    easyEditor_pushSlider(appInfo->editor, "Layer: ", &e->layer, -5, 5.0f);
 
 
                     if(e->collider) {
@@ -1297,8 +1406,8 @@ int main(int argc, char *args[]) {
                     // easyEditor_pushInt1(appInfo->editor, "Health: ", &e->health);
                     // easyEditor_pushInt1(appInfo->editor, "Max Health: ", &e->maxHealth);
 
-
-                    if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity") || wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE))) {
+                    //wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE)
+                    if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity"))) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                         int *indexToAdd = (int *)arrayInfo.elm;
                         *indexToAdd = editorState->entityIndex;
@@ -1322,16 +1431,20 @@ int main(int argc, char *args[]) {
 
                         switch(e->type) {
                             case ENTITY_SCENERY: {
-                                if(e->subEntityType & ENTITY_SUB_TYPE_TORCH) {
-                                    newEntity = initTorch(gameState, manager, position);
-                                } else if(e->subEntityType & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
-                                    newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
+                                if(e->model) {
+                                    newEntity = init3dModel(gameState, manager, position, e->model);
                                 } else {
-                                    if(colliderSet) {
-                                        newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
+                                    if(e->subEntityType & ENTITY_SUB_TYPE_TORCH) {
+                                        newEntity = initTorch(gameState, manager, position);
+                                    } else if(e->subEntityType & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
+                                        newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
                                     } else {
-                                        newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);    
-                                    }   
+                                        if(colliderSet) {
+                                            newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
+                                        } else {
+                                            newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);    
+                                        }   
+                                    }
                                 }
                                 
                             } break;
@@ -1354,7 +1467,7 @@ int main(int argc, char *args[]) {
                                 newEntity = initCheckPoint(gameState, manager, position);
                             } break;
                             default: {
-
+                                easyFlashText_addText(&globalFlashTextManager, "Can't duplicate yet, please add in editor");
                             }
                         }
 
@@ -1368,7 +1481,6 @@ int main(int argc, char *args[]) {
                                 newEntity->collider1->dim2f = e->collider1->dim2f;   
                             }
 
-                            newEntity->layer = e->layer;
                             newEntity->maxHealth = e->maxHealth;
                             newEntity->T.Q = e->T.Q;
                             newEntity->T.scale = e->T.scale;
@@ -1419,88 +1531,62 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-            //DRAW THE PLAYER HUD
-            {
-
-                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
-
-
-
-                float fuaxWidth = 1920.0f;
-                float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
-
-                setViewTransform(globalRenderGroup, mat4());
-                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight));
-
-                Entity *p = manager->player;
-
-                float staminaPercent = p->stamina / p->maxStamina;
-
-                float maxBarPixels = 300;
-                float barHeight = 60;
-
-                float x = 0.1*fuaxWidth;  
-                float y = fuaxHeight - (0.1f*fuaxHeight);
-
-                //Stamina points backing
-                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
-
-                float barWidth = staminaPercent*maxBarPixels;
-                float xOffset = 0.5f*(maxBarPixels - barWidth);
-
-                //Stamina points percent bar
-                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
-                
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREEN);
-
-
-
-                //////////////////////////// HEALTH BAR //////////////////////////////////////////
-
-
-                float healthPercent = (float)p->health / (float)p->maxHealth;
-
-                assert(healthPercent <= 1.0f);
-
-                y -= 1.5f*barHeight;
-
-                //health points backing
-                T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREY);
-
-                barWidth = healthPercent*maxBarPixels;
-                xOffset = 0.5f*(maxBarPixels - barWidth);
-
-                assert(barWidth <= maxBarPixels);
-
-                //hea;th points percent bar
-                T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
-
-                // easyConsole_pushFloat(DEBUG_globalEasyConsole, barWidth);
-                
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_RED);
-
-                ///////////////////////////////////////////////////////////////////////
-
-                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-
-                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
-            }
-            /////////////////////////////
-
+            
 
             
             //NOTE(ollie): Make sure the transition is on top
             renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
+            /////////////// Draw the text ///////////////////
+
+            if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
+
+                //Make sure game is paused
+                gameState->gameIsPaused = true;
+                //DRAW THE PLAYER HUD
+
+               EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+
+               float fuaxWidth = 1920.0f;
+               float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+               setViewTransform(globalRenderGroup, mat4());
+               setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
+
+               float textBg_height = 0.4f*fuaxHeight;
+
+               float textureY = -0.5f*fuaxHeight + 0.5f*textBg_height;
+
+               //Stamina points backing
+               Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, textBg_height, 0)), v3(0, textureY, 0.4f));
+               setModelTransform(globalRenderGroup, T);
+               renderDrawSprite(globalRenderGroup, fadeBlackTexture, COLOR_WHITE);
+
+               
+
+               V2 size = getBounds(gameState->currentTalkText, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                
+
+               float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+               float fonty = fuaxHeight - 0.3f*textBg_height;
+
+               outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, gameState->fuaxResolution, gameState->currentTalkText, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
+
+
+               drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+               renderClearDepthBuffer(mainFrameBuffer.bufferId);
+
+               easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+            }
+            ///////////////////////////
+
             FrameBuffer *endBuffer = &mainFrameBuffer;
             if(gameState->isLookingAtItems) {
 
+                gameState->gameIsPaused = true;
                 easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
                 endBuffer = &bloomFrameBuffer;
 
