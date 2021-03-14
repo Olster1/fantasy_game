@@ -35,7 +35,7 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false;
 // #define STB_IMAGE_RESIZE_IMPLEMENTATION
 // #include "stb_resize.h"
 
-#define GIF_MODE 0
+#define GIF_MODE 1
 
 
 static Texture *getInvetoryTexture(EntityType type) {

@@ -8,9 +8,6 @@
 
 /res/fonts/*
 
-/res/models/*
-!/res/models/robertModels
-
 /res/particles_images/*
 /res/sounds/not_using/*
 /res/img/*

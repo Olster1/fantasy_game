@@ -169,7 +169,7 @@ static inline void player_useAttackItem(EntityManager *manager, float damage, En
 
         	//Damage the enemy
         	if(enemy->health > 0.0f) {
-        		enemy->health -= 1.0f;	
+        		enemy->health -= damage;	
         	}
 
         	//See if the enemey is dead
@@ -234,7 +234,7 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Used Sword");
 			if(entity->stamina >= 3.0f && !entity->shieldInUse) {
 
-				player_useAttackItem(manager, 1, entity);
+				player_useAttackItem(manager, 20, entity);
 
 				 gameState->swordSwingTimer = 0;
 
@@ -656,7 +656,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(getLength(diff.xy) < 10) {
 			//Move towards the player
-			// entity->rb->dP.xy = v2_scale(10.0f, dir);  
+			entity->rb->dP.xy = v2_scale(10.0f, dir);  
 		}
 
 
@@ -672,7 +672,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             	float damage = 1.0f;
 
             	if(info.e->shieldInUse) {
-            		reboundForce = maxReboundForce*0.1f;
+            		reboundForce = maxReboundForce*0.5f;
             		damage = 0.0f;//0.5f;
 
             		if(info.e->stamina > 0.0f && !info.e->staminaMaxedOut) {
