@@ -35,8 +35,44 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false;
 // #define STB_IMAGE_RESIZE_IMPLEMENTATION
 // #include "stb_resize.h"
 
-#define GIF_MODE 1
+#define GIF_MODE 0
 
+
+static void drawTriggerCollider_DEBUG(Entity *e, EasyCollider *collider) {
+        V3 prevScale = e->T.scale;
+
+        e->T.scale.x *= collider->dim2f.x;
+        e->T.scale.y *= collider->dim2f.y;
+
+        Quaternion Q = e->T.Q;
+
+        V3 prevPos = e->T.pos;
+
+        e->T.pos.x += collider->offset.x;
+        e->T.pos.y += collider->offset.y; 
+        e->T.pos.z = 0;
+
+        // easyConsole_pushFloat(DEBUG_globalEasyConsole, e->collider1->offset.y);
+        
+
+        e->T.Q = identityQuaternion();
+
+        Matrix4 T = easyTransform_getTransform(&e->T);
+
+        e->T.Q = Q;
+
+        V4 color = COLOR_RED;
+
+        assert(collider->isTrigger);
+        color = COLOR_YELLOW;
+    
+
+        setModelTransform(globalRenderGroup, T);
+        renderDrawQuad(globalRenderGroup, color);    
+        
+        e->T.scale = prevScale;
+        e->T.pos = prevPos;
+}
 
 static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
@@ -151,7 +187,7 @@ int main(int argc, char *args[]) {
             easyAnimation_pushFrame(&gameState->wizardRun, "player_empty1.png");
 
             easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
-            easyAnimation_pushFrame(&gameState->wizardIdle, "player_empty.png");
+            easyAnimation_pushFrame(&gameState->wizardIdle, "pixelperson.png");
             // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
             easyAnimation_initAnimation(&gameState->wizardAttack, "wizardAttack");
@@ -400,6 +436,14 @@ int main(int argc, char *args[]) {
             Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
             Matrix4 perspectiveMatrix_inventory = projectionMatrixFOV(60.0f, resolution.x/resolution.y);
 
+            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_1) && !gameState->isEditorOpen) {
+                gameState->gameModeType = GAME_MODE_PAUSE_MENU;
+                //Open  close menu sound
+                playGameSound(&globalLongTermArena, gameState->openMenuSound, 0, AUDIO_BACKGROUND);
+            }
+
+
+
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I)) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
                 gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
@@ -586,39 +630,16 @@ int main(int argc, char *args[]) {
                         }
 
                         if(e->collider1 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
-                            V3 prevScale = e->T.scale;
-
-                            e->T.scale.x *= e->collider1->dim2f.x;
-                            e->T.scale.y *= e->collider1->dim2f.y;
-
-                            Quaternion Q = e->T.Q;
-
-                            V3 prevPos = e->T.pos;
-
-                            e->T.pos.x += e->collider1->offset.x;
-                            e->T.pos.y += e->collider1->offset.y; 
-                            e->T.pos.z = 0;
-
-                            // easyConsole_pushFloat(DEBUG_globalEasyConsole, e->collider1->offset.y);
-                            
-
-                            e->T.Q = identityQuaternion();
-
-                            Matrix4 T = easyTransform_getTransform(&e->T);
-
-                            e->T.Q = Q;
-
-                            V4 color = COLOR_RED;
-
-                            assert(e->collider1->isTrigger);
-                            color = COLOR_YELLOW;
-                        
-
-                            setModelTransform(globalRenderGroup, T);
-                            renderDrawQuad(globalRenderGroup, color);    
-                            
-                            e->T.scale = prevScale;
-                            e->T.pos = prevPos;
+                            drawTriggerCollider_DEBUG(e, e->collider1);
+                        }
+                        if(e->collider2 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
+                            drawTriggerCollider_DEBUG(e, e->collider2);
+                        }
+                        if(e->collider3 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
+                            drawTriggerCollider_DEBUG(e, e->collider3);
+                        }
+                        if(e->collider4 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
+                            drawTriggerCollider_DEBUG(e, e->collider4);
                         }
                     }
                     
@@ -823,7 +844,7 @@ int main(int argc, char *args[]) {
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused);        
+                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused, EasyCamera_getZAxis(&camera));        
                 
                     if(e->isDead) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -1007,7 +1028,8 @@ int main(int argc, char *args[]) {
 
                 int splatIndexOn = 0;
                 if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM) {
-                    
+                    int splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
+
                 }   
 
                 EasyModel *modelSelected = 0;
@@ -1045,6 +1067,13 @@ int main(int argc, char *args[]) {
                     switch(editorState->createMode) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
+                        } break;
+                        case EDITOR_CREATE_BLOCK_TO_PUSH: {
+                            if(pressed) {
+                                editorState->entitySelected = initPushRock(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                            }
                         } break;
                         case EDITOR_CREATE_3D_MODEL: {
                             if(pressed) {
@@ -1343,6 +1372,8 @@ int main(int argc, char *args[]) {
 
                     easyEditor_startDockedWindow(appInfo->editor, "Entity Window", EASY_EDITOR_DOCK_TOP_LEFT);
                     
+                    easyEditor_pushInt1(appInfo->editor, "Id: ", &(int)e->T.id);
+                    easyEditor_pushInt1(appInfo->editor, "Flags: ", &(int)e->flags);
 
                     easyEditor_pushButton(appInfo->editor, MyEntity_EntityTypeStrings[(int)e->type]);
                     easyEditor_pushInt1(appInfo->editor, "Subtype: ", &(int)e->subEntityType);
@@ -1388,6 +1419,7 @@ int main(int argc, char *args[]) {
 
                     easyEditor_pushColor(appInfo->editor, "Color: ", &e->colorTint);
                     easyEditor_pushInt1(appInfo->editor, "MaxHealth: ", &e->maxHealth);
+                    easyEditor_pushFloat1(appInfo->editor, "MaxStamina: ", &e->maxStamina);
 
 
                     if(e->collider) {
@@ -1537,6 +1569,89 @@ int main(int argc, char *args[]) {
             //NOTE(ollie): Make sure the transition is on top
             renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
+            FrameBuffer *endBuffer = &mainFrameBuffer;
+
+            ////////////////// Draw the Pause menu //////////////////////
+            if(gameState->gameModeType == GAME_MODE_PAUSE_MENU) {
+                //Make sure game is paused
+                gameState->gameIsPaused = true;
+
+                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                endBuffer = &bloomFrameBuffer;
+
+                renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
+
+                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+
+                float fuaxWidth = 1920.0f;
+                float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
+
+
+                char *pauseMenuItems[] = { "Continue", "Settings", "Exit" };
+
+                float yT = fuaxHeight / (float)(arrayCount(pauseMenuItems) + 1);
+
+                float fonty = yT;
+
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
+                    gameState->currentMenuIndex++;
+
+                   if(gameState->currentMenuIndex >= arrayCount(pauseMenuItems)) {
+                       gameState->currentMenuIndex = arrayCount(pauseMenuItems) - 1;
+                   }
+                }
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
+                    gameState->currentMenuIndex--;
+
+                    if(gameState->currentMenuIndex <= 0) {
+                        gameState->currentMenuIndex = 0;
+                    }
+                }
+
+                for(int i = 0; i < arrayCount(pauseMenuItems); ++i) {
+                    char *title = pauseMenuItems[i];
+
+                    V4 color = COLOR_WHITE;
+                    if(gameState->currentMenuIndex == i) {
+                        color = COLOR_GOLD;
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+                            if(gameState->currentMenuIndex == 0) {
+                                gameState->gameModeType = GAME_MODE_PLAY;
+                                gameState->gameIsPaused = false;
+                            }
+                        }
+                    }
+
+                    //Draw the text
+                    V2 size = getBounds(title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                     
+                    float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+                    
+
+                    
+
+                    outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, gameState->fuaxResolution, title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 2, true, 1);
+                    /////////////////////////
+
+                    fonty += yT;
+                }
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+                renderClearDepthBuffer(mainFrameBuffer.bufferId);
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);  
+
+                fonty += yT;       
+            }
+
             /////////////// Draw the text ///////////////////
 
             if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
@@ -1544,6 +1659,12 @@ int main(int argc, char *args[]) {
                 //Make sure game is paused
                 gameState->gameIsPaused = true;
                 //DRAW THE PLAYER HUD
+
+                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                endBuffer = &bloomFrameBuffer;
+
+                renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
+
 
                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
@@ -1583,7 +1704,7 @@ int main(int argc, char *args[]) {
             }
             ///////////////////////////
 
-            FrameBuffer *endBuffer = &mainFrameBuffer;
+            
             if(gameState->isLookingAtItems) {
 
                 gameState->gameIsPaused = true;

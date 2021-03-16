@@ -38,10 +38,16 @@ typedef struct {
 
 	EasyRigidBody *rb;
 	EasyCollider *collider;
+	//Four colliders for the rock
 	EasyCollider *collider1;
+	EasyCollider *collider2;
+	EasyCollider *collider3;
+	EasyCollider *collider4;
 
 	bool shieldInUse;
 	bool staminaMaxedOut;
+
+	float flashHurtTimer;
 
 	float layer; //NOTE: zero for infront, +ve for more behind
 
@@ -143,6 +149,26 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
 }
 
 
+static inline float findMaxStamina(EntityType type) {
+
+	if(type == ENTITY_WEREWOLF) { return 3; }
+
+	if(type == ENTITY_WIZARD) { return 10; }
+
+	return 10.0f; //default value
+}
+
+
+static inline float findMaxHealth(EntityType type) {
+
+	if(type == ENTITY_WEREWOLF) { return 10; }
+
+	if(type == ENTITY_WIZARD) { return 10; }
+
+	return 10.0f; //default value
+}
+
+
 static inline void player_useAttackItem(EntityManager *manager, float damage, Entity *entity) {
 	assert(entity->collider1->isTrigger);
     if(entity->collider1->collisionCount > 0) {
@@ -159,12 +185,15 @@ static inline void player_useAttackItem(EntityManager *manager, float damage, En
         	easyConsole_addToStream(DEBUG_globalEasyConsole, "WEREWOLF GOT HURT");
 
 
+        	enemy->flashHurtTimer = 0;
+        	enemy->healthBarTimer = 0;
+
         	V3 worldP = easyTransform_getWorldPos(&enemy->T);
         	V3 projectileP = easyTransform_getWorldPos(&entity->T);
 
         	//Knock the enemy back
         	V2 dir = normalizeV2(v2_minus(worldP.xy, projectileP.xy));
-        	// enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(100000, dir));
+        	enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(700000, dir));
         	///
 
         	//Damage the enemy
@@ -234,7 +263,7 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Used Sword");
 			if(entity->stamina >= 3.0f && !entity->shieldInUse) {
 
-				player_useAttackItem(manager, 20, entity);
+				player_useAttackItem(manager, 1, entity);
 
 				 gameState->swordSwingTimer = 0;
 
@@ -314,12 +343,14 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->isDeleted = false;
 	entity->tBob = 0;
 
-	entity->maxStamina = 10;
+	entity->flashHurtTimer = -1.0f;
+
+	entity->maxStamina = findMaxStamina(type);
 	entity->stamina = entity->maxStamina;
 
 	entity->staminaTimer = -1.0f;
 
-	entity->maxHealth = 10;
+	entity->maxHealth = findMaxHealth(type);
 	entity->health = entity->maxHealth;
 
 	float gravityFactor = gameState->gravityScale; //150
@@ -428,30 +459,33 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis) {
+
+
+	if(!isPaused) {
+
+		if(entity->staminaTimer >= 0.0f) {
+			entity->staminaTimer += dt;
+
+			if(entity->staminaTimer >= 1.0f) {
+				entity->staminaTimer = -1.0f;
+			}
+
+		} else {
+			entity->stamina += dt;	
+		}
+		
+
+		if(entity->stamina > entity->maxStamina) {
+			entity->stamina = entity->maxStamina;
+			entity->staminaMaxedOut = false;
+		}
+
+	}
+
 
 	if(entity->type == ENTITY_WIZARD) {
 
-		if(!isPaused) {
-
-			if(entity->staminaTimer >= 0.0f) {
-				entity->staminaTimer += dt;
-
-				if(entity->staminaTimer >= 1.0f) {
-					entity->staminaTimer = -1.0f;
-				}
-
-			} else {
-				entity->stamina += dt;	
-			}
-			
-
-			if(entity->stamina > entity->maxStamina) {
-				entity->stamina = entity->maxStamina;
-				entity->staminaMaxedOut = false;
-			}
-
-		}
 
 		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
 			
@@ -646,6 +680,20 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			}
 		}
 
+
+	if(entity->flashHurtTimer >= 0.0f) {
+		entity->flashHurtTimer += dt;
+
+		float canVal = entity->flashHurtTimer / 0.5f; 
+
+		entity->colorTint = smoothStep01010V4(COLOR_WHITE, canVal, COLOR_RED);
+
+
+		if(canVal >= 1.0f) {
+			entity->flashHurtTimer = -1.0f;
+		}
+	}
+
 	if(entity->type == ENTITY_WEREWOLF) {
 		V3 worldP = easyTransform_getWorldPos(&player->T);
 		V3 entP = easyTransform_getWorldPos(&entity->T);
@@ -654,10 +702,19 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		V2 dir = normalizeV2(diff.xy);
 
+		float werewolfMoveSpeed = 5;
+
+		//WEREWOLF ATTACKING//
+		if(entity->stamina < entity->maxStamina) {
+			werewolfMoveSpeed = 2;
+		}
+
 		if(getLength(diff.xy) < 10) {
 			//Move towards the player
-			entity->rb->dP.xy = v2_scale(10.0f, dir);  
+			entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);  
 		}
+
+
 
 
 		//WEREWOLF HURTING THE PLAYER//
@@ -666,10 +723,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
-            	float maxReboundForce = 100000;
+
+            	//use 3 stamina
+            	entity->stamina -= 3;
+            	
+            	float maxReboundForce = 600000;
             	float reboundForce = maxReboundForce;
 
-            	float damage = 1.0f;
+            	float damage = 5.0f;
 
             	if(info.e->shieldInUse) {
             		reboundForce = maxReboundForce*0.5f;
@@ -684,8 +745,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             				info.e->staminaMaxedOut = true;
             			}	
             		} else {
+            			//out of stamina - sheild not working very well
             			damage = 0.5f;
-            			reboundForce = 0.5f*maxReboundForce;
+            			reboundForce = maxReboundForce;
             		}
             		
             	}
@@ -707,6 +769,51 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
         
 		
 	}
+
+	if(entity->type == ENTITY_BLOCK_TO_PUSH) {
+
+		float margin_dP = 0.0f;
+
+		float speedFactor = 1.1f;
+
+		//left collider
+		MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+		if(info.found) {
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Left");
+			if(info.e->rb->dP.x > margin_dP) {
+				entity->rb->dP.x = speedFactor*info.e->rb->dP.x;
+			}
+		}
+
+		//right collider
+		info = MyEntity_hadCollisionWithType(manager, entity->collider2, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+		if(info.found) {
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Right");
+			if(info.e->rb->dP.x < margin_dP) {
+				entity->rb->dP.x = speedFactor*info.e->rb->dP.x;
+			}
+		}
+
+		//Top collider
+		info = MyEntity_hadCollisionWithType(manager, entity->collider3, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+		if(info.found) {
+			if(info.e->rb->dP.y < -margin_dP) {
+				entity->rb->dP.y = speedFactor*info.e->rb->dP.y;
+			}
+		}
+
+		//bottom collider
+		info = MyEntity_hadCollisionWithType(manager, entity->collider4, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+		if(info.found) {
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Bottom");
+			if(info.e->rb->dP.y > margin_dP) {
+				entity->rb->dP.y = speedFactor*info.e->rb->dP.y;
+			}
+		}
+
+	}
+
+
 
 	if(entity->type == ENTITY_SKELETON) {
 		Animation *animToAdd = 0;
@@ -795,12 +902,13 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	//NOTE: DRAWING HEALTH BAR OVER ENEMIES
 	if(entity->flags & ENTITY_SHOW_HEALTH_BAR) {
 
+
 		V3 worldP = easyTransform_getWorldPos(&player->T);
 
 		V3 entP = easyTransform_getWorldPos(&entity->T);
 		float distance = getLengthSqrV3(v3_minus(worldP, entP));
 
-		if(distance < 4.0f || entity->healthBarTimer >= 0.0f) { //Show health bar
+		if(distance < 100.0f || entity->healthBarTimer >= 0.0f) { //Show health bar
 			float percent = (float)entity->health / (float)entity->maxHealth;
 
 			V4 color = COLOR_GREEN;
@@ -809,21 +917,26 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				color = COLOR_RED;
 			}
 
-			float w = 0.8f; //game world meters
-			float h = 0.1f; //game world meters
 
-			Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(w, h, 0)), v3_plus(entP, v3(0, 0.5f, 0)));
+			float w = 1.2f; //game world meters
+			float h = 0.3f; //game world meters
 
-			setModelTransform(globalRenderGroup, T);
+			V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -2.0f));
+
+			gameState->tempTransform.pos = position;
+
+			gameState->tempTransform.scale.xy = v2(w, h);
+
+			setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
 			renderDrawQuad(globalRenderGroup, COLOR_LIGHT_GREY);
 
-			T.a.x = percent*w;
-			T.d.z -= 0.05f;
+			gameState->tempTransform.scale.x = percent*w;
+			gameState->tempTransform.pos = v3_plus(gameState->tempTransform.pos, v3_scale(-0.05f, cameraZ_axis));
 
 			float overhang = w - percent*w;
-			T.d.x -= 0.5f*overhang;			
+			gameState->tempTransform.pos.x -= 0.5f*overhang;		
 
-			setModelTransform(globalRenderGroup, T);
+			setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
 			renderDrawQuad(globalRenderGroup, color);
 
 			if(entity->healthBarTimer >= 0.0f) {
@@ -1001,6 +1114,37 @@ static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worl
 static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, findTextureAsset("sign.png"), COLOR_WHITE, -1, true);
 	e->message = easyString_copyToHeap("Empty");
+	return e;
+}
+
+static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 worldP) {
+	float blockDim = 2;
+
+	Entity *e = initEntity(manager, 0, worldP, v2(blockDim, blockDim), v2(1, 1), gameState, ENTITY_BLOCK_TO_PUSH, gameState->inverse_weight, findTextureAsset("crate.jpg"), COLOR_WHITE, -1, true);
+		
+	e->T.pos.z = -0.5f;
+	//Add triggers to see if player is pushing	
+
+	float triggerSize = 0.4f;
+
+	float offset = 0.5f*blockDim + 0.5f*triggerSize;
+
+	float longTiggerSize = 0.8f;
+
+	//Left
+	e->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &e->T, e->rb, EASY_COLLIDER_RECTANGLE, v3(-offset, 0, 0), true, v3(triggerSize, longTiggerSize, 0));
+	e->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
+	//Right
+	e->collider2 = EasyPhysics_AddCollider(&gameState->physicsWorld, &e->T, e->rb, EASY_COLLIDER_RECTANGLE, v3(offset, 0, 0), true, v3(triggerSize, longTiggerSize, 0));
+	e->collider2->layer = EASY_COLLISION_LAYER_ITEMS;
+	//Top
+	e->collider3 = EasyPhysics_AddCollider(&gameState->physicsWorld, &e->T, e->rb, EASY_COLLIDER_RECTANGLE, v3(0, offset, 0), true, v3(longTiggerSize, triggerSize, 0));
+	e->collider3->layer = EASY_COLLISION_LAYER_ITEMS;
+	//Bottom
+	e->collider4 = EasyPhysics_AddCollider(&gameState->physicsWorld, &e->T, e->rb, EASY_COLLIDER_RECTANGLE, v3(0, -offset, 0), true, v3(longTiggerSize, triggerSize, 0));
+	e->collider4->layer = EASY_COLLISION_LAYER_ITEMS;
+	/////////////////////////////////////////////////////
+
 	return e;
 }
 

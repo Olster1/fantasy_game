@@ -57,7 +57,6 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 	        addVar(&fileContents, &e->T.scale, "scale", VAR_V3);
 	        addVar(&fileContents, &e->colorTint, "color", VAR_V4);
 	        addVar(&fileContents, &e->T.Q.E, "rotation", VAR_V4);
-	        addVar(&fileContents, &e->maxHealth, "maxHealth", VAR_INT);
 	        addVar(&fileContents, &e->layer, "layer", VAR_FLOAT);
 	        addVar(&fileContents, (int *)(&e->subEntityType), "subtype", VAR_INT);
 
@@ -188,7 +187,6 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		bool foundId = false;
         		int id = 0;
 
-        		int maxHealth = 3;
 
         		bool colliderSet = false;
         		bool colliderSet2 = false;
@@ -242,9 +240,6 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         		id = getIntFromDataObjects(&data, &tokenizer);
                         		foundId = true;
                     		}
-            				if(stringsMatchNullN("maxHealth", token.at, token.size)) {
-            		    		maxHealth = getIntFromDataObjects(&data, &tokenizer);
-            				}
     						if(stringsMatchNullN("layer", token.at, token.size)) {
     				    		layer = getFloatFromDataObjects(&data, &tokenizer);
     						}
@@ -378,6 +373,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     case ENTITY_SWORD: {
                         newEntity = initSword(gameState, manager, position);
                     } break;
+                    case ENTITY_BLOCK_TO_PUSH: {
+                        newEntity = initPushRock(gameState, manager, position);
+                    } break;
                     case ENTITY_SHEILD: {
                         newEntity = initSheild(gameState, manager, position);
                     } break;
@@ -429,8 +427,6 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     			}
 
     			newEntity->layer = layer;
-    			newEntity->maxHealth = maxHealth;
-                newEntity->health = maxHealth;
 
                 if(message) {
                     newEntity->message = message;    

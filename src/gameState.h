@@ -14,12 +14,15 @@ FUNC(ENTITY_SIGN)\
 FUNC(ENTITY_SHEILD)\
 FUNC(ENTITY_PLAYER_HIT_BOX)\
 FUNC(ENTITY_STAMINA_POTION_1)\
+FUNC(ENTITY_BLOCK_TO_PUSH)\
 
 
 typedef enum {
 	GAME_MODE_PLAY,
 	GAME_MODE_GAME_OVER,
 	GAME_MODE_READING_TEXT,
+	GAME_MODE_MAIN_MENU,
+	GAME_MODE_PAUSE_MENU,
 } GameModeType;
 
 
@@ -99,6 +102,8 @@ typedef struct {
 	EntityType playerHolding[2];
 
 	bool inventoryInUse[2];
+
+	int currentMenuIndex;
 
 	ItemGrowTimerUI animationItemTimers[MAX_PLAYER_ITEM_COUNT];
 	//NOTE: The two item spots the player can hold
@@ -183,7 +188,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	//NOTE: Clear out what the player is holding
 	state->playerHolding[0] = ENTITY_SWORD;
-	state->playerHolding[1] = ENTITY_NULL;
+	state->playerHolding[1] = ENTITY_SHEILD;
 
 	state->itemAnimationCount = 0;
 
