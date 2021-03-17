@@ -8,7 +8,7 @@ typedef struct {
 	char *name;
 
 	int jointCount;
-	EasySkeletonJoint *joints;
+	InfiniteAlloc joints;
 } EasySkeleton;
 
 typedef struct {
@@ -51,22 +51,22 @@ typedef struct {
 } EasySkeleton_Controller;
 
 static inline void easySkeleton_initSkeleton(EasySkeleton *s, char *name) {
-	s->joints = initInfinteAlloc(EasyJoint);
+	s->joints = initInfinteAlloc(EasySkeletonJoint);
 	s->name = name;
 }
 
 static inline EasySkeleton_SQT easySkeleton_lerpSQT(EasySkeleton_SQT a, EasySkeleton_SQT b, float t) {
 	EasySkeleton_SQT result;
 
-	result.Q = lerpV4(a.Q, b.Q, t);
-	result.pos = lerpV3(a.pos, b.pos, t);
-	result.scale = lerp(a.scale, b.scale, t);
+	result.Q = lerpV4(a.Q, t, b.Q);
+	result.pos = lerpV3(a.pos, t, b.pos);
+	result.scale = lerp(a.scale, t, b.scale);
 
 	return result;
 }
 
 static inline Matrix4 easySkeleton_SQT_to_Matrix4(EasySkeleton_SQT in) {
-	Matrix4 result = quaternionToMatrix(in.Q);
+ 	Matrix4 result = quaternionToMatrix(in.Q);
 	result = Mat4Mult(Matrix4_scale(mat4(), in.scale), result);
 	result = Mat4Mult(Matrix4_translate(mat4(), in.pos), result);
 

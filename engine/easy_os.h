@@ -320,7 +320,7 @@ void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
 
     // easyFont_createSDFFont(concatInArena(globalExeBasePath, "/fonts/UbuntuMono-Regular.ttf", &globalPerFrameArena), 0, 255);    
     globalDebugFont = easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_UbuntuMono-Regular", &globalPerFrameArena), &globalLongTermArena);   
-
+    
     ///////////////////////********** Setup the console & editor etc. ***************////////////////////    
     
     

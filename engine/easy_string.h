@@ -1,5 +1,4 @@
 
-//NOTE(ollie): I don't think this handles unicode?
 static char *easyString_copyToHeap(char *at) {
     u32 length = easyString_getSizeInBytes_utf8(at);
     //NOTE(ollie): Get memory from heap

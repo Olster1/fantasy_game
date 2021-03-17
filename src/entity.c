@@ -59,8 +59,7 @@ typedef struct {
 	int health;
 	int maxHealth;
 
-	int itemCount;
-	EntityType itemSpots[MAX_PLAYER_ITEM_COUNT];
+	
 	/////
 
 	//Player stamina
@@ -92,6 +91,8 @@ typedef struct {
 	Array_Dynamic entitiesToAddForFrame;
 	Array_Dynamic entitiesToDeleteForFrame;
 
+	Array_Dynamic damageNumbers;
+
 	int lastEntityIndex;
 
 	Entity *player;
@@ -105,11 +106,19 @@ typedef struct {
 	SubEntityType subType;
 } EntityToAdd;
 
+typedef struct {
+	float aliveTimer;
+	char *str;
+	V3 pos;
+} Entity_DamageNumber;
+
 static void initEntityManager(EntityManager *manager) {
 	initArray(&manager->entities, Entity);
 
 	initArray(&manager->entitiesToAddForFrame, EntityToAdd);
 	initArray(&manager->entitiesToDeleteForFrame, int);
+
+	initArray(&manager->damageNumbers, Entity_DamageNumber);
 
 	manager->lastEntityIndex = 0;
 }
@@ -149,6 +158,30 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
 }
 
 
+static inline void createDamageNumbers(EntityManager *manager, float value, V3 position) {
+
+	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->damageNumbers);
+	Entity_DamageNumber *number = (Entity_DamageNumber *)arrayInfo.elm;
+
+    number->aliveTimer = 0;
+    number->pos = position;
+    	
+    bool hasFractional = (((float)value - ((int)value)) > 0.0f);
+
+    char *resultStr = 0;
+
+    if(hasFractional) {
+    	resultStr = easy_createString_printf(&globalPerFrameArena, "%.1f", (float)value);
+    } else {
+    	resultStr = easy_createString_printf(&globalPerFrameArena, "%d", (int)value);
+    }
+    
+    number->str = easyString_copyToHeap(resultStr);
+
+
+}
+
+
 static inline float findMaxStamina(EntityType type) {
 
 	if(type == ENTITY_WEREWOLF) { return 3; }
@@ -157,7 +190,6 @@ static inline float findMaxStamina(EntityType type) {
 
 	return 10.0f; //default value
 }
-
 
 static inline float findMaxHealth(EntityType type) {
 
@@ -169,7 +201,16 @@ static inline float findMaxHealth(EntityType type) {
 }
 
 
-static inline void player_useAttackItem(EntityManager *manager, float damage, Entity *entity) {
+static inline float findDamage(EntityType type) {
+
+	if(type == ENTITY_SWORD) { return 1; }
+
+	if(type == ENTITY_WEREWOLF) { return 5; }
+
+	return 1.0f; //default value
+}
+
+static inline void player_useAttackItem(GameState *gameState, EntityManager *manager, float damage, Entity *entity) {
 	assert(entity->collider1->isTrigger);
     if(entity->collider1->collisionCount > 0) {
     	
@@ -193,12 +234,14 @@ static inline void player_useAttackItem(EntityManager *manager, float damage, En
 
         	//Knock the enemy back
         	V2 dir = normalizeV2(v2_minus(worldP.xy, projectileP.xy));
-        	enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(700000, dir));
+        	enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(gameState->werewolf_knockback_distance, dir));
         	///
 
         	//Damage the enemy
         	if(enemy->health > 0.0f) {
-        		enemy->health -= damage;	
+        		enemy->health -= damage;
+
+        		createDamageNumbers(manager, damage, v3_plus(worldP, v3(0, 0, -1.0f)));	
         	}
 
         	//See if the enemey is dead
@@ -263,7 +306,7 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Used Sword");
 			if(entity->stamina >= 3.0f && !entity->shieldInUse) {
 
-				player_useAttackItem(manager, 1, entity);
+				player_useAttackItem(gameState, manager, findDamage(type), entity);
 
 				 gameState->swordSwingTimer = 0;
 
@@ -333,7 +376,6 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->healthBarTimer = -1;
 
 	entity->isDying = false;
-	entity->itemCount = 0;
 	
 	entity->layer = layer;
 	entity->sprite = sprite;
@@ -486,8 +528,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	if(entity->type == ENTITY_WIZARD) {
 
+		Animation *animToAdd = 0;
 
-		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
+		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardBottom) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRight) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardLeft) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
 			
 			float walkModifier = 1;
 
@@ -497,27 +540,23 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
+				animToAdd = &gameState->wizardLeft;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 				entity->rb->accumForce.x += gameState->walkPower*walkModifier;
+				animToAdd = &gameState->wizardRight;
 			}
 			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
 				entity->rb->accumForce.y += gameState->walkPower*walkModifier;
+				animToAdd = &gameState->wizardRun;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
 				entity->rb->accumForce.y += -gameState->walkPower*walkModifier;
+				animToAdd = &gameState->wizardBottom;
 			}
 
-
-			// float angle = ATan2_0toTau(entity->rb->dP.y, entity->rb->dP.x);
-
-			// angle -= 0.5f*PI32;
-			// //NOTE(ollie): Wrap the angle so it moves from 0 -> Tau to -Pi -> PI
-			// if(angle > PI32) {
-			// 	angle = angle - TAU32;
-			// }
 
 			// entity->rotation = angle;
 
@@ -528,7 +567,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		// easyConsole_addToStream(console, string);
 
 
-		Animation *animToAdd = 0;
+		
 
 		if(entity->rb->dP.x < -1 || entity->rb->dP.x > 1 || entity->rb->dP.y < -1 || entity->rb->dP.y > 1) {
 			if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle)) {
@@ -537,9 +576,40 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			}
 		} else {
 			if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)) {
-				easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
+				// easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
+				// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
 			}
+		}
+
+		{
+			// float angle = ATan2_0toTau(entity->rb->dP.y, entity->rb->dP.x);
+
+			// angle -= 0.5f*PI32;
+			// // //NOTE(ollie): Wrap the angle so it moves from 0 -> Tau to -Pi -> PI
+
+			// if(angle < -0.25f*PI32) {
+			// 	;
+			// }
+
+			// float bestValue = INFINITY_VALUE;
+
+			// float values[] = { 0, 0.5f*PI32, PI32, 1.5f*PI32 };
+
+			//  easyConsole_pushFloat(DEBUG_globalEasyConsole, angle);
+
+			// for(int i = 0; i < arrayCount(values); ++i) {
+			// 	float value = absVal(angle - values[i]);
+
+			// 	if(value < bestValue) {
+			// 		bestValue = value;
+			// 		if(i == 0) { animToAdd = &gameState->wizardRun;  }
+			// 		if(i == 1) { animToAdd = &gameState->wizardLeft;  }
+			// 		if(i == 2) { animToAdd = &gameState->wizardBottom; }
+			// 		if(i == 3) { animToAdd = &gameState->wizardRight; }
+			// 	}
+			// }
+
+
 		}
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_X) && !isPaused) {
@@ -610,7 +680,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
 			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);
-			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
+			// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
 		}
 
 		
@@ -620,7 +690,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		if(entity->collider1->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
-            	player->itemSpots[player->itemCount++] = ENTITY_HEALTH_POTION_1;
+            	gameState->itemSpots[gameState->itemCount++].type = ENTITY_HEALTH_POTION_1;
 
             	entity->isDead = true; //remove from entity list
             	
@@ -635,7 +705,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		if(entity->collider->collisionCount > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
             if(info.found) {
-            	player->itemSpots[player->itemCount++] = entity->type;
+            	gameState->itemSpots[gameState->itemCount++].type = entity->type;
             	
             	playGameSound(&globalLongTermArena, gameState->successSound, 0, AUDIO_FOREGROUND);
 
@@ -702,11 +772,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		V2 dir = normalizeV2(diff.xy);
 
-		float werewolfMoveSpeed = 5;
+		float werewolfMoveSpeed = gameState->werewolf_attackSpeed;
 
 		//WEREWOLF ATTACKING//
 		if(entity->stamina < entity->maxStamina) {
-			werewolfMoveSpeed = 2;
+			werewolfMoveSpeed = gameState->werewolf_restSpeed;
 		}
 
 		if(getLength(diff.xy) < 10) {
@@ -717,7 +787,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 
 
-		//WEREWOLF HURTING THE PLAYER//
+		//WEREWOLF HURT PLAYER//
 		if(entity->collider1->collisionCount > 0) {
 			assert(entity->collider1->isTrigger);
 
@@ -727,14 +797,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             	//use 3 stamina
             	entity->stamina -= 3;
             	
-            	float maxReboundForce = 600000;
+            	float maxReboundForce = gameState->player_knockback_distance;
             	float reboundForce = maxReboundForce;
 
-            	float damage = 5.0f;
+            	float damage = findDamage(entity->type);
 
             	if(info.e->shieldInUse) {
             		reboundForce = maxReboundForce*0.5f;
-            		damage = 0.0f;//0.5f;
+            		damage = 0.0f; //shield blocks all damage
 
             		if(info.e->stamina > 0.0f && !info.e->staminaMaxedOut) {
             			info.e->stamina -= 1.0f;
@@ -746,7 +816,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             			}	
             		} else {
             			//out of stamina - sheild not working very well
-            			damage = 0.5f;
+            			damage = 0.5f*findDamage(entity->type);
             			reboundForce = maxReboundForce;
             		}
             		
@@ -755,7 +825,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             	info.e->rb->accumForceOnce.xy = v2_plus(info.e->rb->accumForceOnce.xy, v2_scale(reboundForce, dir));
 
             	if(info.e->health > 0.0f) {
-            		info.e->health -= damage;	
+            		info.e->health -= damage;
+            		createDamageNumbers(manager, damage, v3_plus(worldP, v3(0, 0, -1.0f)));	
+
             		easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
             	}
 
@@ -1152,6 +1224,7 @@ static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics
 	easyArray_clear(&manager->entitiesToDeleteForFrame);
 	easyArray_clear(&manager->entities);
 	easyArray_clear(&manager->entitiesToAddForFrame);
+	easyArray_clear(&manager->damageNumbers);
 
 	EasyPhysics_emptyPhysicsWorld(physicsWorld);
 	

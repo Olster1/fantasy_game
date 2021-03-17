@@ -112,24 +112,21 @@ inline void easyConsole_addToStream(EasyConsole *c, char *toAdd) {
 
 static inline void easyConsole_pushFloat(EasyConsole *c, float i) {
 	DEBUG_TIME_BLOCK()
-	char buf[32];
-	sprintf(buf, "%f", i);
+	char *buf = easy_createString_printf(&globalPerFrameArena, "%f", i);
 	easyConsole_addToStream(c, buf);
 }
 
 
 static inline void easyConsole_pushV3(EasyConsole *c, V3 i) {
 	DEBUG_TIME_BLOCK()
-	char buf[32];
-	sprintf(buf, "%f, %f, %f", i.x, i.y, i.z);
+	char *buf = easy_createString_printf(&globalPerFrameArena, "%f, %f, %f", i.x, i.y, i.z);
 	easyConsole_addToStream(c, buf);
 }
 
 
 static inline void easyConsole_pushInt(EasyConsole *c, int i) {
 	DEBUG_TIME_BLOCK()
-	char buf[32];
-	sprintf(buf, "%d", i);
+	char *buf = easy_createString_printf(&globalPerFrameArena, "%d", i);
 	easyConsole_addToStream(c, buf);
 }
 

@@ -82,10 +82,10 @@ static Texture *getInvetoryTexture(EntityType type) {
             // assert(false);
         } break;
         case ENTITY_SWORD: {
-            t = findTextureAsset("player_sword.png");
+            t = findTextureAsset("inventory_sword.png");
         } break;
         case ENTITY_SHEILD: {
-            t = findTextureAsset("sheild_inventory.png");
+            t = findTextureAsset("inventory_shield.png");
         } break;
         default: {
 
@@ -149,6 +149,8 @@ int main(int argc, char *args[]) {
 
         loadAndAddImagesToAssets("img/engine_icons/");
         loadAndAddImagesToAssets("img/temp_images/");
+        loadAndAddImagesToAssets("img/inventory/");
+
 
         //Setup the gravity if it's on or not. GAMEPLAY: Could be an interesting gameplay feature: magentic rooms
         if(DEBUG_GRAVITY) {
@@ -183,12 +185,24 @@ int main(int argc, char *args[]) {
             //WIZARD ANIMATIONS
             easyAnimation_initAnimation(&gameState->wizardRun, "wizardRun");
             // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
-            easyAnimation_pushFrame(&gameState->wizardRun, "player_empty.png");
-            easyAnimation_pushFrame(&gameState->wizardRun, "player_empty1.png");
+            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
 
             easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
-            easyAnimation_pushFrame(&gameState->wizardIdle, "pixelperson.png");
+            easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
             // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
+
+
+            easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
+            easyAnimation_pushFrame(&gameState->wizardBottom, "player_down.png");
+
+            easyAnimation_initAnimation(&gameState->wizardLeft, "wizardLeft");
+            easyAnimation_pushFrame(&gameState->wizardLeft, "player_left.png");
+
+            easyAnimation_initAnimation(&gameState->wizardRight, "wizardRight");
+            easyAnimation_pushFrame(&gameState->wizardRight, "player_right.png");
+
+            ////////////////////////////////////////////////////////////////////////////
 
             easyAnimation_initAnimation(&gameState->wizardAttack, "wizardAttack");
             loadAndAddImagesStripToAssets(&gameState->wizardAttack, "img/fantasy_sprites/wizard/Attack1.png", 231);
@@ -256,7 +270,7 @@ int main(int argc, char *args[]) {
 
 
         V4 lightBrownColor = hexARGBTo01Color(0xFFF5DEB3);
-        Texture *t_square = findTextureAsset("square_img.png");
+        Texture *t_square = findTextureAsset("inventory_equipped.png");
         Texture *particleImage = findTextureAsset("light_03.png");
 
         V3 itemPosition1 = v3(100, 100, 0.2f);
@@ -368,6 +382,8 @@ int main(int argc, char *args[]) {
 
         Texture *fadeBlackTexture = findTextureAsset("fade_black.png");
 
+        EasyFont_Font *gameFont = easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
+
         while(appInfo->running) {
 
             if(refreshTweakFile(tweakerFileName, tweaker)) {
@@ -375,6 +391,13 @@ int main(int argc, char *args[]) {
                 gameState->walkPower = getIntFromTweakData(tweaker, "walkPower");
                 gameState->gravityScale = (float)getFloatFromTweakData(tweaker, "gravityScale");
                 gameState->cameraSnapDistance = (float)getFloatFromTweakData(tweaker, "cameraSnapDistance");
+
+                gameState->werewolf_attackSpeed = (float)getFloatFromTweakData(tweaker, "werewolf_attackSpeed");
+                gameState->werewolf_restSpeed = (float)getFloatFromTweakData(tweaker, "werewolf_restSpeed");
+
+                gameState->werewolf_knockback_distance = (float)getFloatFromTweakData(tweaker, "werewolf_knockback_distance");
+                gameState->player_knockback_distance = (float)getFloatFromTweakData(tweaker, "player_knockback_distance");
+
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -446,8 +469,8 @@ int main(int argc, char *args[]) {
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I)) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
-                gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
-                gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
+                // gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
+                // gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
 
                 if(gameState->gameIsPaused) { gameState->gameIsPaused = false; }
 
@@ -459,8 +482,16 @@ int main(int argc, char *args[]) {
                     gameState->animationItemTimers[i].target = UI_ITEM_PICKER_MIN_SIZE;
                     gameState->animationItemTimers[i].current = UI_ITEM_PICKER_MIN_SIZE;
                 }
-                //Open  close menu sound
-                playGameSound(&globalLongTermArena, gameState->openMenuSound, 0, AUDIO_BACKGROUND);
+
+                if(gameState->isLookingAtItems) {
+                    //Open  close menu sound
+                    playGameSound(&globalLongTermArena, easyAudio_findSound("mapopen1.wav"), 0, AUDIO_BACKGROUND)->volume = 3.0f;
+
+                } else {
+                    playGameSound(&globalLongTermArena, easyAudio_findSound("mapclose.wav"), 0, AUDIO_BACKGROUND)->volume = 3.0f;
+                }
+               
+                
             }
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_F1)) {
@@ -499,7 +530,7 @@ int main(int argc, char *args[]) {
 
 
                     if(gameState->indexInItems < 0) {
-                        gameState->indexInItems = arrayCount(manager->player->itemSpots) - 1;
+                        gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
                     }
 
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
@@ -510,7 +541,7 @@ int main(int argc, char *args[]) {
 
                     gameState->indexInItems++;
                     playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
-                    if(gameState->indexInItems >= arrayCount(manager->player->itemSpots)) {
+                    if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
                         gameState->indexInItems = 0;
                     }
 
@@ -855,12 +886,82 @@ int main(int argc, char *args[]) {
                 
             }
 
+
+            { //NOTE: Update the damage numbers
+                for(int i = 0; i < manager->damageNumbers.count; ++i) {
+                    Entity_DamageNumber *num = (Entity_DamageNumber *)getElement(&manager->damageNumbers, i);
+
+                    if(num) {
+                        num->aliveTimer += appInfo->dt;
+
+                        float canVal = num->aliveTimer / 1.0f;
+
+                        char *at = num->str;
+
+                        float xAt = 0; 
+
+                        float fontSize_to_worldSize = 1.3f / (float)gameFont->fontHeight;
+
+                        num->pos = v3_plus(num->pos, v3_scale(appInfo->dt, v3(0, 0, -3)));  
+
+                        while(*at) {
+
+                            unsigned int unicodePoint = easyUnicode_utf8_codepoint_To_Utf32_codepoint((char **)&at, true);
+                            
+                            // easyConsole_addToStream(DEBUG_globalEasyConsole, "Update Number");
+
+                            EasyFont_Glyph *g = easyFont_findGlyph(gameFont, unicodePoint); 
+                            assert(g->codepoint == unicodePoint);
+
+                            if(g->hasTexture) {
+
+                                V3 position = v3_plus(num->pos, v3(xAt, -fontSize_to_worldSize*g->yOffset, -1.0f)); //num->pos;//
+
+                                // easyConsole_pushV3(DEBUG_globalEasyConsole, position);
+
+                                gameState->tempTransform.pos = position;
+
+                                float width = g->texture.width*fontSize_to_worldSize;
+                                float height = g->texture.height*fontSize_to_worldSize;
+
+                                gameState->tempTransform.scale.xy = v2(width, height);
+
+                                V4 color = COLOR_WHITE;
+
+                                color.w = 1.0f - canVal;
+
+                                setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+                                renderdrawGlyph(globalRenderGroup, &g->texture, color);
+                            
+                            }
+
+                            xAt += (g->texture.width + g->xOffset)*fontSize_to_worldSize;
+                        }
+                        
+
+                        // num->pos;
+                        // num->str;
+
+
+
+                        if(canVal >= 1.0f) {
+                            //free the string
+                            easyPlatform_freeMemory(num->str);
+
+                            //remove the damaage number of the list
+                            removeElement_ordered(&manager->damageNumbers, i);
+                        }
+                    }
+                }
+            }
+
             renderSetShader(globalRenderGroup, mainShader); 
 
             { //NOTE: Add entities that need adding
                 for(int i = 0; i < manager->entitiesToAddForFrame.count; ++i) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
                     if(e) {
+
                         float layer = -0.5f;    
                         float lifeSpan = 3.0f;
 
@@ -1713,98 +1814,182 @@ int main(int argc, char *args[]) {
 
                 renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
 
-                setViewTransform(globalRenderGroup, cameraLookAt_straight);
+                setViewTransform(globalRenderGroup, mat4());
 
-                V2 size = getBounds("INVENTORY", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
-                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "INVENTORY", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 2, true, 1);
+                V2 size = getBounds("ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
                 
                 float fuaxWidth = 1920.0f;
+                float fuaxHeight = appInfo->aspectRatio_yOverX*fuaxWidth;
                 
-                setProjectionTransform(globalRenderGroup, perspectiveMatrix_inventory);//OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
 
                 //Update animation timer
-                gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);
+                // gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);
                 ////
 
 
-                Matrix4 T_ = Matrix4_scale(mat4(), v3(2, 2, 0));
-                Matrix4 T_1 = Matrix4_scale(mat4(), v3(0.8f, 0.8f, 0));
+                //DRAW BACKGROUND
+                Texture *t = findTextureAsset("inventory_backing.png");
+                                        
+                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, fuaxHeight, 0)), v3(0, 0, 0.4f));
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+                //////////////////////////////////////////////////////////////
+                t = findTextureAsset("inventory_spot.png");
+                Texture *hover_t = findTextureAsset("targeting2.png");
+                float xAt = 0;
+                float yAt = 0;
+
+                float spacing = 180;
+                float circleSize = 150;
+
+                for(int i = 1; i < 13; ++i) {   
+
+                    Texture *t_todraw = t;
+
+                    if(gameState->indexInItems == (i - 1)) {
+                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(1.3f*circleSize, 1.3f*circleSize, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.3f));
+                                            
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
+
+                        t_todraw = findTextureAsset("inventory_spot1.png");
+                    }
+
+
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.4f));
+                    
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, t_todraw, COLOR_WHITE);
+
+                    
+
+                    xAt += spacing;
+
+                    if((i % 4) == 0) {
+                        yAt += spacing;
+                        xAt = 0;
+                    }
+    
+                }
+                
+                /////////////////////////////////////////////////
+
+                //LEFT SIDE OF INVENTORY
+                t = findTextureAsset("inventory_marker.png");
+                xAt = 0;
+                yAt = 0;
 
                 
-                float angle = PI32/2.0f;
-                float angleUpdate = 2*PI32 / arrayCount(manager->player->itemSpots);
-                float radius = gameState->lookingAt_animTimer.current*3.5f;
-                for(int i = 0; i < arrayCount(manager->player->itemSpots); ++i) {
+                for(int i = 1; i < 9; ++i) {
 
-                    V2 pos = v2(radius*cos(angle), radius*sin(angle));
+                    float xspacing = 120;
+                    float yspacing = 150;
+                    circleSize = 20;
 
-                    gameState->animationItemTimers[i].current = lerp(gameState->animationItemTimers[i].current, 8*clamp01(appInfo->dt), gameState->animationItemTimers[i].target);                    
+                    if(i == 7) { t = findTextureAsset("inventory_sword.png"); circleSize = 100; }
+                    if(i == 8) { t = findTextureAsset("inventory_shield.png"); circleSize = 100; }
 
-                    float growthSize = gameState->animationItemTimers[i].current;
-
-                    if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                        Texture *t = getInvetoryTexture(manager->player->itemSpots[i]);
-                        
-                        Matrix4 T = Matrix4_translate(Matrix4_scale(T_1, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.4f));
-                        
-                        setModelTransform(globalRenderGroup, T);
-                        renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-                    }
-
-
-                    Matrix4 T = Matrix4_translate(Matrix4_scale(T_, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.5f));
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(-0.4f*fuaxWidth + xAt, -0.2f*fuaxHeight + yAt, 0.4f));
+                    
                     setModelTransform(globalRenderGroup, T);
-                    renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
 
+                    xAt += xspacing;
 
-                    if(i == gameState->indexInItems) {
-                        Matrix4 T = Matrix4_translate(T_, v3(pos.x, pos.y, 0.6f));
-                        setModelTransform(globalRenderGroup, T);
-                        // renderDrawSprite(globalRenderGroup, particleImage, COLOR_GOLD);
-
-                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
-                            if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                                //NOTE: Equip item sound
-                                playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
-
-                                EntityType tempType = gameState->playerHolding[0];
-
-                                gameState->playerHolding[0] = manager->player->itemSpots[i];
-
-
-                                manager->player->itemSpots[i] = tempType;
-
-                                gameState->animationItemTimersHUD[0] = 0.0f;
-
-                                //NOTE: This was animating the transfer of the item to the HUD spot, but didn't seen necessary atm?
-                                // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
-                                // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(v2_scale(0.5f, gameState->fuaxResolution), itemPosition1.xy, gameState->playerHolding[0]);
-
-                                // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
-                                // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(itemPosition1.xy, v2_scale(0.5f, gameState->fuaxResolution), player->itemSpots[i]);
-                            }
-                        }
-
-                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
-                            if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                                //NOTE: Equip item sound
-                                playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
-
-                                EntityType tempType = gameState->playerHolding[1];
-
-                                gameState->playerHolding[1] = manager->player->itemSpots[i];
-
-
-                                manager->player->itemSpots[i] = tempType;
-
-                                gameState->animationItemTimersHUD[1] = 0.0f;
-
-                            }
-                        }
+                    if((i % 2) == 0) {
+                        yAt += yspacing;
+                        xAt = 0;
                     }
-
-                    angle += angleUpdate; 
+                
                 }
+
+                ////////////////////////////////////////////////////////////////////////////
+                
+                
+
+                //// Code from Drawing the inventory as a circle //////////////////////// 
+
+                // Matrix4 T_ = Matrix4_scale(mat4(), v3(2, 2, 0));
+                // Matrix4 T_1 = Matrix4_scale(mat4(), v3(0.8f, 0.8f, 0));
+
+                
+                // float angle = PI32/2.0f;
+                // float angleUpdate = 2*PI32 / arrayCount(manager->player->itemSpots);
+                // float radius = gameState->lookingAt_animTimer.current*3.5f;
+                // for(int i = 0; i < arrayCount(manager->player->itemSpots); ++i) {
+
+                //     V2 pos = v2(radius*cos(angle), radius*sin(angle));
+
+                //     gameState->animationItemTimers[i].current = lerp(gameState->animationItemTimers[i].current, 8*clamp01(appInfo->dt), gameState->animationItemTimers[i].target);                    
+
+                //     float growthSize = gameState->animationItemTimers[i].current;
+
+                //     if(manager->player->itemSpots[i] != ENTITY_NULL) {
+                //         Texture *t = getInvetoryTexture(manager->player->itemSpots[i]);
+                        
+                //         Matrix4 T = Matrix4_translate(Matrix4_scale(T_1, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.4f));
+                        
+                //         setModelTransform(globalRenderGroup, T);
+                //         renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+                //     }
+
+
+                //     Matrix4 T = Matrix4_translate(Matrix4_scale(T_, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.5f));
+                //     setModelTransform(globalRenderGroup, T);
+                //     renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+
+
+                //     if(i == gameState->indexInItems) {
+                //         Matrix4 T = Matrix4_translate(T_, v3(pos.x, pos.y, 0.6f));
+                //         setModelTransform(globalRenderGroup, T);
+                //         // renderDrawSprite(globalRenderGroup, particleImage, COLOR_GOLD);
+
+                //         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
+                //             if(manager->player->itemSpots[i] != ENTITY_NULL) {
+                //                 //NOTE: Equip item sound
+                //                 playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                //                 EntityType tempType = gameState->playerHolding[0];
+
+                //                 gameState->playerHolding[0] = manager->player->itemSpots[i];
+
+
+                //                 manager->player->itemSpots[i] = tempType;
+
+                //                 gameState->animationItemTimersHUD[0] = 0.0f;
+
+                //                 //NOTE: This was animating the transfer of the item to the HUD spot, but didn't seen necessary atm?
+                //                 // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
+                //                 // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(v2_scale(0.5f, gameState->fuaxResolution), itemPosition1.xy, gameState->playerHolding[0]);
+
+                //                 // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
+                //                 // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(itemPosition1.xy, v2_scale(0.5f, gameState->fuaxResolution), player->itemSpots[i]);
+                //             }
+                //         }
+
+                //         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
+                //             if(manager->player->itemSpots[i] != ENTITY_NULL) {
+                //                 //NOTE: Equip item sound
+                //                 playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                //                 EntityType tempType = gameState->playerHolding[1];
+
+                //                 gameState->playerHolding[1] = manager->player->itemSpots[i];
+
+
+                //                 manager->player->itemSpots[i] = tempType;
+
+                //                 gameState->animationItemTimersHUD[1] = 0.0f;
+
+                //             }
+                //         }
+                    // }
+
+                    // angle += angleUpdate; 
+                // }
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
@@ -1870,28 +2055,31 @@ int main(int argc, char *args[]) {
                 float canVal1 = 1;
                 if(gameState->animationItemTimersHUD[0] >= 0.0f) { gameState->animationItemTimersHUD[0] += appInfo->dt; canVal0 = gameState->animationItemTimersHUD[0]/0.5f; if(canVal0 >= 1.0f) { gameState->animationItemTimersHUD[0] = -1.0f; } canVal0 = smoothStep00(1, canVal0, 2.5f); }
                 if(gameState->animationItemTimersHUD[1] >= 0.0f) { gameState->animationItemTimersHUD[1] += appInfo->dt; canVal1 = gameState->animationItemTimersHUD[1]/0.5f; if(canVal1 >= 1.0f) { gameState->animationItemTimersHUD[1] = -1.0f; } canVal1 = smoothStep00(1, canVal1, 2.5f); }
-                
+                    
+                float itemScale = 1.4f;
 
+                float xOffset = 8;
+                float yOffset = 8;
                 setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal0, canVal0, 0)), itemPosition1));
-                renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
 
-                outputTextNoBacking(globalDebugFont, itemPosition1.x + 50, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 1, true, 1);
+                outputTextNoBacking(globalDebugFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
                 
                 if(gameState->playerHolding[0] != ENTITY_NULL) {
 
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(canVal0, canVal0, 0)), v3(itemPosition1.x, itemPosition1.y, 0.1f)));
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal0, itemScale*canVal0, 0)), v3(itemPosition1.x + xOffset, itemPosition1.y + yOffset, 0.1f)));
 
                     Texture *t = getInvetoryTexture(gameState->playerHolding[0]);
                     renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
                 }
 
                 setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
-                renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
+                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
 
-                outputTextNoBacking(globalDebugFont, itemPosition2.x + 50, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 1, true, 1);
+                outputTextNoBacking(globalDebugFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
 
                 if(gameState->playerHolding[1] != ENTITY_NULL) {
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(canVal1, canVal1, 0)), v3(itemPosition2.x, itemPosition2.y, 0.1f)));
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(itemPosition2.x + xOffset, itemPosition2.y + yOffset, 0.1f)));
 
                     Texture *t = getInvetoryTexture(gameState->playerHolding[1]);
                     renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);

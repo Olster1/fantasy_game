@@ -42,10 +42,17 @@ static char *MyEntity_EntityTypeStrings[] = { MY_ENTITY_TYPE(STRING) };
 
 typedef struct {
 	EntityType type;
+
 	V2 startP;
 	V2 endP;
 	float tAt;
 } ItemAnimationInfo;
+
+typedef struct {
+	EntityType type;
+	int count; //number of items you have
+	bool isDisposable; //decrements each time you use it. 
+} ItemInfo;
 
 typedef struct {
 	float current;
@@ -81,6 +88,10 @@ typedef struct {
 	Animation wizardJump;
 	Animation wizardFall;
 
+	Animation wizardBottom;
+	Animation wizardLeft;
+	Animation wizardRight;
+
 	Animation skeletonAttack;
 	Animation skeletonDeath;
 	Animation skeltonIdle;
@@ -94,24 +105,38 @@ typedef struct {
 
 	GameModeType gameModeType;
 
+
+	///// INVENTORY MENU attributes ///////
+
+	//
 	bool isLookingAtItems;
-	ItemGrowTimerUI lookingAt_animTimer;
+	//This is for the menu to grow as you open it
+	// ItemGrowTimerUI lookingAt_animTimer;
 	int indexInItems;
 
-	//Extra player stuff we don't want to put on the entity
+	//What items the player has equiped to the x, y keys
 	EntityType playerHolding[2];
-
-	bool inventoryInUse[2];
-
-	int currentMenuIndex;
-
-	ItemGrowTimerUI animationItemTimers[MAX_PLAYER_ITEM_COUNT];
-	//NOTE: The two item spots the player can hold
+	//The animation timer to make them grow when you equip items
 	float animationItemTimersHUD[2];
+
+
+	//NOTE: The items the player has in their inventory
+	int itemCount;
+	ItemInfo itemSpots[MAX_PLAYER_ITEM_COUNT]; //player items
+
+
+	//	
+	ItemGrowTimerUI animationItemTimers[MAX_PLAYER_ITEM_COUNT];
+	
 
 	int itemAnimationCount;
 	ItemAnimationInfo item_animations[32];
+
+
 	//////
+
+	//PAUSE MENU ////////
+	int currentMenuIndex;
 
 	//SOUNDS
 
@@ -120,6 +145,11 @@ typedef struct {
 	WavFile *openMenuSound;
 
 	////
+
+	float werewolf_attackSpeed;
+	float werewolf_restSpeed;
+	float werewolf_knockback_distance;
+	float player_knockback_distance;
 
 
 	//EDITOR STATE
@@ -253,6 +283,12 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->terrainPacket.blendMap = findTextureAsset("black_blend.png");
 	state->currentTerrainEntity = 0;
+
+	state->werewolf_attackSpeed = 5;
+	state->werewolf_restSpeed = 2;
+	state->werewolf_knockback_distance = 700000;
+	state->player_knockback_distance = 600000;
+
 
 	return state;
 }	
