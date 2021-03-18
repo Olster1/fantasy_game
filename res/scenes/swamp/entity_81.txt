@@ -11,6 +11,7 @@
 	spriteName: "sign";
 	colliderScale: 1.000000 1.000000;
 	colliderScale2: 2.000000 2.000000;
-	messageString: "Meditation is offering your genuine presence to yourself in every moment. It's the capacity to recognize clearly that every moment is a gift of life, a gift from the Earth and sky.";
+	audioFileName: "Empty";
+	dialogType: "ENTITY_DIALOG_WEREWOLF_SIGN";
 }
 

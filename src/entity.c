@@ -67,8 +67,8 @@ typedef struct {
 	float maxStamina;
 	float staminaTimer;
 
-	//For signs
-	char *message;
+	//For NPCs and signs
+	DialogInfoType dialogType;
 
 	//For key prompts
 	float tBob;
@@ -80,7 +80,7 @@ typedef struct {
 	float healthBarTimer; 
 
 	//For the audio checklist
-	WavFile *audioFile;
+	char *audioFile;
 
 
 } Entity;
@@ -725,7 +725,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            	if(gameState->gameModeType != GAME_MODE_READING_TEXT) {
 	            		entity->tBob += dt;
 
-	            		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 1.5f + 0.2f*sin(entity->tBob), 0));
+	            		V3 scale = easyTransform_getWorldScale(&entity->T);
+
+	            		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(scale.y + 0.5f + 0.2f*sin(entity->tBob))));
 
 	            		
 
@@ -740,10 +742,29 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            		
 	            		
 	            		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
-	            		{
-	            			gameState->gameModeType = GAME_MODE_READING_TEXT;
-	            			gameState->currentTalkText = entity->message;
-	            			easyConsole_addToStream(DEBUG_globalEasyConsole, entity->message);
+	            		{	
+	            			
+
+	            			if(entity->dialogType != ENTITY_DIALOG_NULL) {
+								gameState->gameModeType = GAME_MODE_READING_TEXT;
+								gameState->currentTalkText = findDialogInfo(entity->dialogType);
+								gameState->messageIndex = 0; //start at the begining
+
+								WavFile *sound = 0;
+								if(gameState->currentTalkText.audioArray) {
+									Asset *asset = findAsset(gameState->currentTalkText.audioArray[0]);
+									if(asset) {
+										sound = (WavFile *)asset->file;
+									}
+								}
+								
+
+								if(sound) {
+									gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+									gameState->talkingNPC->volume = 3.0f;
+								}
+	            			}
+	            			
 	            		}	
 	            	} 
 	            }
@@ -1183,11 +1204,11 @@ static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worl
 	return e;
 }
 
-static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP) {
-	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, findTextureAsset("sign.png"), COLOR_WHITE, -1, true);
-	e->message = easyString_copyToHeap("Empty");
+static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, splatTexture, COLOR_WHITE, -1, true);
 	return e;
 }
+
 
 static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 worldP) {
 	float blockDim = 2;

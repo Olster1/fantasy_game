@@ -1,0 +1,17 @@
+{
+
+	id: 95;
+	type: "ENTITY_SIGN";
+	position: 56.000000 -46.000000 -1.000000;
+	scale: 3.000000 3.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "soilderNPC";
+	colliderScale: 1.000000 1.000000;
+	colliderScale2: 1.500000 1.500000;
+	audioFileName: "anadventurer.wav";
+	dialogType: "ENTITY_DIALOG_ADVENTURER";
+}
+

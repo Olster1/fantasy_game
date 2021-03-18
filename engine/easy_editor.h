@@ -462,6 +462,16 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 	//Clear depth buffer aswell 
 }
 
+#define easyEditor_alterListIndex(e, newIndex) easyEditor_alterListIndex_(e, newIndex, __LINE__, __FILE__)
+static inline void easyEditor_alterListIndex_(EasyEditor *e, int newIndex, int lineNumber, char *fileName) {
+	assert(e->currentWindow);
+	EasyEditorState *w = e->currentWindow;
+	EasyEditorState *state = easyEditor_addDropDownList(e, lineNumber, fileName, 0);
+
+	state->dropDownIndex = newIndex;
+}
+
+
 #define easyEditor_pushList(e, name, options, optionLength) easyEditor_pushList_(e, name, options, optionLength, __LINE__, __FILE__)
 static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options, int optionLength, int lineNumber, char *fileName) {
 	assert(e->currentWindow);

@@ -9,5 +9,6 @@
 	layer: -1.000000;
 	subtype: 0;
 	spriteName: "grass1";
+	dialogType: "ENTITY_DIALOG_NULL";
 }
 

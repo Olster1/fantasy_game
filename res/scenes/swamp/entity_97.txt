@@ -1,0 +1,15 @@
+{
+
+	id: 97;
+	type: "ENTITY_SCENERY";
+	position: 61.000000 -57.000000 -3.500000;
+	scale: 10.000000 10.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "tree";
+	colliderScale: 0.100000 0.100000;
+	dialogType: "ENTITY_DIALOG_NULL";
+}
+

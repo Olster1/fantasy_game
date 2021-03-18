@@ -286,6 +286,8 @@ void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
 
     loadAndAddSoundsToAssets(DEFINES_SOUNDS_FOLDER, &result->audioSpec);
     //////////
+
+    
     
     ////SETUP OPEN GL//
     enableRenderer(resolution->x, resolution->y, &globalLongTermArena);

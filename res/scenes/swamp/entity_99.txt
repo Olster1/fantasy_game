@@ -1,0 +1,15 @@
+{
+
+	id: 99;
+	type: "ENTITY_SCENERY";
+	position: 64.000000 -62.000000 -2.900000;
+	scale: 10.000000 10.000000 10.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "hut";
+	colliderScale: 0.500000 0.500000;
+	dialogType: "ENTITY_DIALOG_NULL";
+}
+

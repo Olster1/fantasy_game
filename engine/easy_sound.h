@@ -153,14 +153,22 @@ typedef struct PlayingSound {
 
 } PlayingSound;
 
+// static void easySound_endAllSounds(PlayingSound *sound) {
+//     //NOTE(ollie): Since the sound is in a linked list, we can't remove
+//     //NOTE(ollie):  it without prev pointer. So we just let the sound loop do it for us 
+//     while(sound) {
+//         sound->bytesAt = sound->wavFile->size;
+//         sound = sound->nextSound;
+//     }
+    
+    
+// }
+
+
 static void easySound_endSound(PlayingSound *sound) {
     //NOTE(ollie): Since the sound is in a linked list, we can't remove
     //NOTE(ollie):  it without prev pointer. So we just let the sound loop do it for us 
-    while(sound) {
-        sound->bytesAt = sound->wavFile->size;
-        sound = sound->nextSound;
-    }
-    
+    sound->bytesAt = sound->wavFile->size;
     
 }
 

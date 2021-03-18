@@ -715,6 +715,13 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		only two triggers, or rigid body and a trigger will record collision information.
 
 	                	*/
+
+	                	V3 aPos = v3_plus(easyTransform_getWorldPos(a->T), a->offset);
+	                	V3 bPos = v3_plus(easyTransform_getWorldPos(b->T), b->offset);
+
+	                	V3 scaleA = easyTransform_getWorldScale(a->T);
+	                	V3 scaleB = easyTransform_getWorldScale(b->T);
+
 	                	if(!a->isTrigger && !b->isTrigger) {
 	                		/*
 								Non trigger collisions
@@ -724,27 +731,68 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                		if(!(rb_a->inverseWeight == 0 && rb_b->inverseWeight == 0)) 
 	                		{	
-	                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
+	                			bool overlap = false;
 
-	                		    // bool ifOneWay_normalIsUp = true;
+	                			{
 
-	                		    // if(b->type == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) {
-	                		    // 	//try make it false
-	                		    // 	ifOneWay_normalIsUp = (dotV2(out.normal.xy, v2(0, 1)) > 0.0f);	
-	                		    // }
+	                				float expandSize = smallestDistance;
+		                			//Scale rigid body by the scale of the _local_ Transform. I think we just want the local transform? 
+		                			V2 hDim = v2(0.5f*b->dim2f.x*scaleB.x + expandSize, 0.5f*b->dim2f.y*scaleB.y + expandSize);
+
+		                			V2 points[] = { v2(-hDim.x, -hDim.y), 
+		                							v2(hDim.x, -hDim.y),
+		                							v2(-hDim.x, hDim.y),
+		                							v2(hDim.x, hDim.y) };
+
+		                			for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+		                				V2 p = v2_plus(points[pointI], bPos.xy);
+		                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x*scaleA.x, a->dim2f.y*scaleA.y), BOUNDS_RECT)) {
+		                					overlap = true;
+		                				}
+		                			}
+
+		                			if(!overlap) {
+		                				hDim = v2(0.5f*a->dim2f.x*scaleA.x + expandSize, 0.5f*a->dim2f.y*scaleA.y + expandSize);
+
+		                				V2 points2[] = { v2(-hDim.x, -hDim.y), 
+		                								v2(hDim.x, -hDim.y),
+		                								v2(-hDim.x, hDim.y),
+		                								v2(hDim.x, hDim.y) };
+
+		                				for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+		                					V2 p = v2_plus(points2[pointI], aPos.xy);
+		                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x*scaleB.x, b->dim2f.y*scaleB.y), BOUNDS_RECT)) {
+		                						overlap = true;
+		                					}
+		                				}
+		                			}
+	                			}
+
+	                			//Coarse phsycis detection first
+	                			if(overlap) {
+		                		    EasyCollisionOutput out = EasyPhysics_SolveRigidBodies(a, b);
+
+		                		    // bool ifOneWay_normalIsUp = true;
+
+		                		    // if(b->type == EASY_COLLISION_LAYER_PLATFORM_ONE_WAY_UP) {
+		                		    // 	//try make it false
+		                		    // 	ifOneWay_normalIsUp = (dotV2(out.normal.xy, v2(0, 1)) > 0.0f);	
+		                		    // }
+		                		    
+
+		                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
+										ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
+										EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
+
+										// char str[256];
+										// sprintf(str, "%f %f", out.normal.x, out.normal.y);
+										// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
+		                		        
+		                		        bundle->hitEnt = b;
+		                		        bundle->outputInfo = out;
+		                		    }	
+	                			}
 	                		    
-
-	                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
-									ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
-									EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
-
-									char str[256];
-									sprintf(str, "%f %f", out.normal.x, out.normal.y);
-									// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
-	                		        
-	                		        bundle->hitEnt = b;
-	                		        bundle->outputInfo = out;
-	                		    }
 	                		}
 	                	} else {
 	                	/*
@@ -753,11 +801,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                		assert(!(a->isTrigger && b->isTrigger));
 	                		
-	                		V3 aPos = v3_plus(easyTransform_getWorldPos(a->T), a->offset);
-	                		V3 bPos = v3_plus(easyTransform_getWorldPos(b->T), b->offset);
-
-	                		V3 scaleA = easyTransform_getWorldScale(a->T);
-	                		V3 scaleB = easyTransform_getWorldScale(b->T);
+	                		
 
 	                		bool circle = a->type == EASY_COLLIDER_CIRCLE || b->type == EASY_COLLIDER_CIRCLE;
 

@@ -73,14 +73,13 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 	        	addVar(&fileContents, &e->collider1->dim2f, "colliderScale2", VAR_V2);	
 	        }	
 
-	        if(e->type == ENITY_AUDIO_CHECKPOINT && e->audioFile) {
-	        	addVar(&fileContents, e->audioFile->fileName, "audioFileName", VAR_CHAR_STAR);	
+	        if(e->audioFile) {
+	        	addVar(&fileContents, e->audioFile, "audioFileName", VAR_CHAR_STAR);	
 	        } 
 
 
-            if(e->message) {
-                addVar(&fileContents, e->message, "messageString", VAR_CHAR_STAR);  
-            }
+
+            addVar(&fileContents, MyDialog_DialogTypeStrings[(int)e->dialogType], "dialogType", VAR_CHAR_STAR);
 
             if(e->model) {
                 addVar(&fileContents, e->model->name, "model", VAR_CHAR_STAR);  
@@ -197,9 +196,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
         		SubEntityType subtype = ENTITY_SUB_TYPE_NONE;
 
-        		WavFile *audioFile = 0;
+        		char *audioFile = 0;
 
-                char *message = 0;
 
                 EasyModel *model = 0;
 
@@ -208,6 +206,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		// u32 idCount = 0;
         		// bool wasTeleporter = false;
 
+                DialogInfoType dialogType = ENTITY_DIALOG_NULL;
 
         		while(parsing) {
             		EasyToken token = lexGetNextToken(&tokenizer);
@@ -272,6 +271,15 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         		releaseInfiniteAlloc(&data);
                     		}
 
+                            if(stringsMatchNullN("dialogType", token.at, token.size)) {
+                                char *typeString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+
+                                dialogType = (DialogInfoType)findEnumValue(typeString, MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings));
+
+                                ////////////////////////////////////////////////////////////////////
+                                releaseInfiniteAlloc(&data);
+                            }
+
                             if(stringsMatchNullN("model", token.at, token.size)) {
                                 char *modelString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
 
@@ -300,19 +308,13 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     		}
                     		if(stringsMatchNullN("audioFileName", token.at, token.size)) {
                         		char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
-                        		audioFile = findSoundAsset(name);
+                        		 audioFile = easyString_copyToHeap(name);
 
                         		////////////////////////////////////////////////////////////////////
                         		releaseInfiniteAlloc(&data);
                     		}
 
-                            if(stringsMatchNullN("messageString", token.at, token.size)) {
-                                char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
-                                message = easyString_copyToHeap(name);
-
-                                ////////////////////////////////////////////////////////////////////
-                                releaseInfiniteAlloc(&data);
-                            }
+                            
 
             				if(stringsMatchNullN("spriteName", token.at, token.size)) {
             		    		char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
@@ -380,7 +382,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         newEntity = initSheild(gameState, manager, position);
                     } break;
                     case ENTITY_SIGN: {
-                        newEntity = initSign(gameState, manager, position);
+                        newEntity = initSign(gameState, manager, position, splatTexture);
                     } break;
                     case ENTITY_WEREWOLF: {
                         newEntity = initWerewolf(gameState, manager, position);
@@ -428,10 +430,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
     			newEntity->layer = layer;
 
-                if(message) {
-                    newEntity->message = message;    
-                }
                 
+                newEntity->dialogType = dialogType;
                 
                 if(newEntity->type == ENTITY_TERRAIN) {
                     gameState->currentTerrainEntity = newEntity;
@@ -448,6 +448,11 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 if(model) {
                     newEntity->model = model;
+                }
+
+
+                if(audioFile) {
+                    newEntity->audioFile = audioFile;
                 }
 
                 

@@ -1,0 +1,20 @@
+{
+	string: Ah an adventuer?;
+	audio: ah an adventurer.wav
+}
+{
+	string: It's not often we see your kind through these parts...;
+	audio: its not often.wav
+}
+{
+	string: Go on, go into the forest...;
+	audio: go on then.wav
+}
+{
+	string: You might not like what you find there...;
+	audio: might not like.wav
+}
+{
+	string: Heh heh heh heh heh....;
+	audio: heheheh.wav
+}

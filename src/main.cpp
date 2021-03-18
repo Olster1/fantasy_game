@@ -21,12 +21,16 @@ static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
 
+#include "npc_dialog.h"
 #include "gameState.h"
 #include "gameScene.c"
 #include "editor.h"
 #include "enemy_ai.c"
+
 #include "entity.c"
 #include "saveload.c"
+
+
 
 
 #define MSF_GIF_IMPL
@@ -279,6 +283,8 @@ int main(int argc, char *args[]) {
         bool recording = false;
         float timeSinceLastFrame = 0.0f;
 
+        loadAndAddSoundsToAssets("sounds/engine_sounds/manbytree/", &appInfo->audioSpec);
+
         //Editor state
         EditorState *editorState = initEditorState(&globalLongTermArena);
 
@@ -472,6 +478,8 @@ int main(int argc, char *args[]) {
                 // gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
                 // gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
 
+                gameState->inventoryBreathSelector = 0;
+
                 if(gameState->gameIsPaused) { gameState->gameIsPaused = false; }
 
                 gameState->indexInItems = 0;
@@ -522,27 +530,63 @@ int main(int argc, char *args[]) {
 
 
             if(gameState->isLookingAtItems) {
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT)) {
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT) && (gameState->indexInItems  != 0 && gameState->indexInItems  != 4 && gameState->indexInItems  != 8)) {
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
 
                     gameState->indexInItems--;
                     playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
 
+                    easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
+                    gameState->inventoryBreathSelector = 0;
 
                     if(gameState->indexInItems < 0) {
+                        gameState->indexInItems = 0;
+                    }
+
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                }
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT) && (gameState->indexInItems  != 3 && gameState->indexInItems  != 7 && gameState->indexInItems  != 11)) {
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                    gameState->inventoryBreathSelector = 0;
+
+
+                    gameState->indexInItems++;
+                    easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
+                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+                    if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
                         gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
                     }
 
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
                 }
 
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP) && (gameState->indexInItems + 4) < 12) {
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
 
-                    gameState->indexInItems++;
+                    gameState->indexInItems += 4;
+                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+                    gameState->inventoryBreathSelector = 0;
+
+                    if(gameState->indexInItems < 0) {
+                        gameState->indexInItems = 0;
+                    }
+
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                }
+
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN) && (gameState->indexInItems - 4) >= 0) {
+                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                    gameState->inventoryBreathSelector = 0;
+
+                    gameState->indexInItems -= 4;
                     playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
                     if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
-                        gameState->indexInItems = 0;
+                        gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
                     }
 
                     gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
@@ -1128,8 +1172,8 @@ int main(int argc, char *args[]) {
                 editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
 
                 int splatIndexOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM) {
-                    int splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN) {
+                    splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
                 }   
 
@@ -1241,7 +1285,7 @@ int main(int argc, char *args[]) {
                         } break;
                         case EDITOR_CREATE_SIGN: {
                             if(pressed) {
-                                editorState->entitySelected = initSign(gameState, manager, hitP);
+                                editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
@@ -1532,7 +1576,11 @@ int main(int argc, char *args[]) {
                     }
 
                     if(e->type == ENTITY_SIGN) {
-                        e->message = easyEditor_pushTextBox(appInfo->editor, "Message: ", e->message);
+
+                        //These have to be on the same line since the editor uses __LINE__ as the uuid.
+                        easyEditor_alterListIndex(appInfo->editor, (int)e->dialogType); DialogInfoType dialogType = (DialogInfoType)easyEditor_pushList(appInfo->editor, "Dialog: ", MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings)); 
+
+                        e->dialogType = dialogType;
                     }
                     
 
@@ -1594,7 +1642,9 @@ int main(int argc, char *args[]) {
                             } break;
                             case ENITY_AUDIO_CHECKPOINT: {
                                 newEntity = initAudioCheckPoint(gameState, manager, position);
-                                newEntity->audioFile = e->audioFile;
+                            } break;
+                            case ENTITY_SIGN: {
+                                newEntity = initSign(gameState, manager, position, e->sprite);
                             } break;
                             case ENITY_CHECKPOINT: {
                                 newEntity = initCheckPoint(gameState, manager, position);
@@ -1618,6 +1668,9 @@ int main(int argc, char *args[]) {
                             newEntity->T.Q = e->T.Q;
                             newEntity->T.scale = e->T.scale;
                             newEntity->colorTint = e->colorTint;
+
+                            newEntity->audioFile = e->audioFile;
+                            newEntity->dialogType = e->dialogType;
                         }
 
                     }
@@ -1726,6 +1779,7 @@ int main(int argc, char *args[]) {
                             if(gameState->currentMenuIndex == 0) {
                                 gameState->gameModeType = GAME_MODE_PLAY;
                                 gameState->gameIsPaused = false;
+
                             }
                         }
                     }
@@ -1757,15 +1811,17 @@ int main(int argc, char *args[]) {
 
             if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
 
+                
+
                 //Make sure game is paused
                 gameState->gameIsPaused = true;
                 //DRAW THE PLAYER HUD
 
-                easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
-                endBuffer = &bloomFrameBuffer;
-
-                renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
-
+                //////////////NOTE: Was blurring when in read test mode
+                // easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
+                // endBuffer = &bloomFrameBuffer;
+                // renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
+                ////////////////////////////
 
                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
@@ -1776,7 +1832,7 @@ int main(int argc, char *args[]) {
                setViewTransform(globalRenderGroup, mat4());
                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
 
-               float textBg_height = 0.4f*fuaxHeight;
+               float textBg_height = 0.5f*fuaxHeight;
 
                float textureY = -0.5f*fuaxHeight + 0.5f*textBg_height;
 
@@ -1785,22 +1841,62 @@ int main(int argc, char *args[]) {
                setModelTransform(globalRenderGroup, T);
                renderDrawSprite(globalRenderGroup, fadeBlackTexture, COLOR_WHITE);
 
-               
+               char *currentTalkText = gameState->currentTalkText.textArray[gameState->messageIndex];
 
-               V2 size = getBounds(gameState->currentTalkText, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+               float fontx = 0.2f*gameState->fuaxResolution.x;
+
+               // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 1.5f, gameState->fuaxResolution, 1);
                 
 
-               float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+               // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
                float fonty = fuaxHeight - 0.3f*textBg_height;
 
-               outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, gameState->fuaxResolution, gameState->currentTalkText, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
+               outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
 
+
+               //Draw prompt button to continue
+               T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
+               setModelTransform(globalRenderGroup, T);
+               renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+               ///////
 
                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
                renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+               //Exit back to game
+               if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+                    if(gameState->talkingNPC) {
+                        easySound_endSound(gameState->talkingNPC);
+                    }
+
+                    if(gameState->messageIndex < (gameState->currentTalkText.count - 1)) {
+                        //still messages left in array
+                        gameState->messageIndex++;
+
+                        WavFile *sound = 0;
+                        if(gameState->currentTalkText.audioArray) {
+                            Asset *asset = findAsset(gameState->currentTalkText.audioArray[gameState->messageIndex]);
+                            if(asset) {
+                                sound = (WavFile *)asset->file;
+                            }
+                            if(sound) {
+                                gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+                                gameState->talkingNPC->volume = 3.0f;
+                            }
+                        }
+
+                    } else {
+                        gameState->gameModeType = GAME_MODE_PLAY;
+                        gameState->gameIsPaused = false;
+                        gameState->talkingNPC = 0;
+                        //go back to start just to make sure the next time someone else tries to play it
+                        gameState->messageIndex = 0;
+                        
+                    }
+                }
 
             }
             ///////////////////////////
@@ -1850,10 +1946,20 @@ int main(int argc, char *args[]) {
                     Texture *t_todraw = t;
 
                     if(gameState->indexInItems == (i - 1)) {
-                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(1.3f*circleSize, 1.3f*circleSize, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.3f));
+                        gameState->inventoryBreathSelector += appInfo->dt;
+
+                        if(gameState->inventoryBreathSelector > 1.0f) {
+                            gameState->inventoryBreathSelector -= 1.0f;
+                        }
+
+                        float s = smoothStep00(1.3f*circleSize, gameState->inventoryBreathSelector, 1.6f*circleSize);
+
+                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.3f));
                                             
                         setModelTransform(globalRenderGroup, T);
                         renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
+
+
 
                         t_todraw = findTextureAsset("inventory_spot1.png");
                     }

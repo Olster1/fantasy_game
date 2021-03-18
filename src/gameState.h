@@ -33,7 +33,7 @@ typedef enum {
 
 static char *MyEntity_EntityTypeStrings[] = { MY_ENTITY_TYPE(STRING) };
 
-#define MAX_PLAYER_ITEM_COUNT 8
+#define MAX_PLAYER_ITEM_COUNT 12
 #define UI_ITEM_PICKER_MIN_SIZE 1.0f
 #define UI_ITEM_PICKER_MAX_SIZE 1.5f
 
@@ -113,6 +113,7 @@ typedef struct {
 	//This is for the menu to grow as you open it
 	// ItemGrowTimerUI lookingAt_animTimer;
 	int indexInItems;
+	float inventoryBreathSelector;
 
 	//What items the player has equiped to the x, y keys
 	EntityType playerHolding[2];
@@ -165,7 +166,9 @@ typedef struct {
 	float inverse_weight;
 
 	//Message for the message box
-	char *currentTalkText;
+	int messageIndex;
+	EntityDialogInfo currentTalkText;
+	PlayingSound *talkingNPC;
 
 
 	InfiniteAlloc splatList;
@@ -276,12 +279,12 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 
 	state->terrainPacket.textureCount = 4;;
-	state->terrainPacket.textures[0] = findTextureAsset("grass_block.png");
+	state->terrainPacket.textures[0] = findTextureAsset("blend_mud.png");
 	state->terrainPacket.textures[1] = findTextureAsset("mud_block.png");
 	state->terrainPacket.textures[2] = findTextureAsset("path_block.png");
 	state->terrainPacket.textures[3] = findTextureAsset("floor_texture.jpg");
 
-	state->terrainPacket.blendMap = findTextureAsset("black_blend.png");
+	state->terrainPacket.blendMap = findTextureAsset("blendmap_house.png");
 	state->currentTerrainEntity = 0;
 
 	state->werewolf_attackSpeed = 5;
