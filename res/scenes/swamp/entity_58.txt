@@ -9,6 +9,7 @@
 	layer: -1.000000;
 	subtype: 0;
 	spriteName: "tree (1)";
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
 

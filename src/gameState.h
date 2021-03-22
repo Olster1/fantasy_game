@@ -15,6 +15,8 @@ FUNC(ENTITY_SHEILD)\
 FUNC(ENTITY_PLAYER_HIT_BOX)\
 FUNC(ENTITY_STAMINA_POTION_1)\
 FUNC(ENTITY_BLOCK_TO_PUSH)\
+FUNC(ENTITY_HORSE)\
+FUNC(ENTITY_CHEST)\
 
 
 typedef enum {
@@ -23,6 +25,7 @@ typedef enum {
 	GAME_MODE_READING_TEXT,
 	GAME_MODE_MAIN_MENU,
 	GAME_MODE_PAUSE_MENU,
+	GAME_MODE_ITEM_COLLECT,
 } GameModeType;
 
 
@@ -76,7 +79,7 @@ typedef struct {
 	EasyAnimation_ListItem *animationFreeList;
 
 	//ANIMATIONS
-	Animation wizardRun;
+	Animation wizardForward;
 	Animation wizardAttack;
 	Animation firePitAnimation;
 	Animation torchAnimation;
@@ -92,12 +95,19 @@ typedef struct {
 	Animation wizardLeft;
 	Animation wizardRight;
 
+	Animation wizardIdleForward;
+	Animation wizardIdleBottom;
+	Animation wizardIdleLeft;
+	Animation wizardIdleRight;
+
 	Animation skeletonAttack;
 	Animation skeletonDeath;
 	Animation skeltonIdle;
 	Animation skeltonShield;
 	Animation skeltonHit;
 	Animation skeltonWalk;
+
+	Animation walkAnimation;
 
 	Animation werewolfIdle;
 
@@ -144,7 +154,7 @@ typedef struct {
 	WavFile *clickSound;
 	WavFile *equipItemSound;
 	WavFile *openMenuSound;
-
+	WavFile *chestOpenSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -164,6 +174,13 @@ typedef struct {
 	char *sceneFileNameTryingToSave;
 
 	float inverse_weight;
+
+
+	////For when collecting item in the Gamestate = GAME_MODE_ITEM_COLLECT
+	EntityType itemCollectType;
+	void *entityChestToDisplay;
+	char *inventoryString_mustFree;
+	/////////////////////////
 
 	//Message for the message box
 	int messageIndex;
@@ -229,7 +246,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->gameIsPaused = false;
 
 	state->openMenuSound = state->equipItemSound = state->clickSound = findSoundAsset("click2.wav");
-
+	state->chestOpenSound = findSoundAsset("chest_open.wav");;
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);

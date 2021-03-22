@@ -1,0 +1,19 @@
+{
+
+	id: 100;
+	type: "ENTITY_HORSE";
+	position: 75.000000 -57.000000 -2.000000;
+	scale: 5.000000 5.000000 5.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "horse";
+	colliderScale: 0.800000 0.800000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	colliderScale2: 1.000000 1.000000;
+	colliderOffset2: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+}
+

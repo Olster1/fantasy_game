@@ -271,6 +271,7 @@ RenderProgram circleProgram;
 RenderProgram model3dTo2dImageProgram;
 RenderProgram fontProgram;
 RenderProgram circleTransitionProgram;
+RenderProgram pixelArtProgram;
 
 
 FileContents loadShader(char *fileName) {
@@ -1274,7 +1275,9 @@ static RenderItem *pushRenderItem(VaoHandle *handles, RenderGroup *group, Vertex
     RenderItem *info = EasyRender_getRenderItem(group, &query);
 
     #if DEVELOPER_MODE
-    easyPlatform_copyMemory(info->name, name, sizeof(char)*arrayCount(info->name));
+    if(name) {
+        easyPlatform_copyMemory(info->name, name, sizeof(char)*arrayCount(info->name));
+    }
     #endif
     assert(info);
     info->bufferId = group->currentBufferId;
@@ -1506,28 +1509,28 @@ Matrix4 projectionMatrixFOV(float FOV_degrees, float aspectRatio) { //where aspe
 }
 
 
-Matrix4 OrthoMatrixToScreen_(int width, int height, float offsetX, float offsetY) {
+Matrix4 OrthoMatrixToScreen_(float width, float height, float offsetX, float offsetY) {
     float a = 2.0f / (float)width; 
     float b = 2.0f / (float)height;
     
     float nearClip = NEAR_CLIP_PLANE;
     float farClip = FAR_CLIP_PLANE;
-    
+
     Matrix4 result = {{
             a,  0,  0,  0,
             0,  b,  0,  0,
-            0,  0,  (2)/(farClip - nearClip), 0, //definitley the projection coordinate. 
+            0,  0,  (2.0f)/(farClip - nearClip), 0, //definitley the projection coordinate. 
             offsetX, offsetY, -((farClip + nearClip)/(farClip - nearClip)),  1
         }};
     
     return result;
 }
 
-Matrix4 OrthoMatrixToScreen(int width, int height) {
+Matrix4 OrthoMatrixToScreen(float width, float height) {
     return OrthoMatrixToScreen_(width, height, 0, 0);
 }
 
-Matrix4 OrthoMatrixToScreen_BottomLeft(int width, int height) {
+Matrix4 OrthoMatrixToScreen_BottomLeft(float width, float height) {
     return OrthoMatrixToScreen_(width, height, -1, -1);
 }
 
@@ -1669,6 +1672,10 @@ void enableRenderer(int width, int height, Arena *arena) {
     fontProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_font_shader, false);
     renderCheckError();
 
+
+    pixelArtProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_pixel_shader, false);
+    renderCheckError();
+   
     circleTransitionProgram = createProgramFromFile(vertex_fullscreen_quad_shader, frag_circle_transition_shader, false);
     renderCheckError();
 
@@ -1991,6 +1998,8 @@ static void renderDrawSprite(RenderGroup *group, Texture *sprite, V4 colorTint) 
     DEBUG_TIME_BLOCK()
     //TODO: @speed this is probably pretty expensive to do for every sprite?
     float sortZ = Mat4Mult(group->viewTransform, group->modelTransform).val[14];
+    // float v = Mat4Mult(group->projectionTransform, Mat4Mult(group->viewTransform, group->modelTransform)).val[14];
+    // assert(v > NEAR_CLIP_PLANE);
     pushRenderItem(&globalQuadVaoHandle, group, globalQuadPositionData, arrayCount(globalQuadPositionData), globalQuadIndicesData, arrayCount(globalQuadIndicesData), group->currentShader, sprite->name, SHAPE_TEXTURE, sprite, group->modelTransform, group->viewTransform, group->projectionTransform, colorTint, sortZ, 0, 0);
 }
 

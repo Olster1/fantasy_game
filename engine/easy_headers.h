@@ -94,7 +94,7 @@ static char* globalExeBasePath;
 #include "easy_tweaks.h"
 #include "easy_particle_effects.h"
 #include "easy_string_compile.h"
-// #include "easy_skeleton.h"
+#include "easy_skeleton.h"
 
 #include "easy_transition.h"
 

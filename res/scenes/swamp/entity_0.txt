@@ -2,14 +2,17 @@
 
 	id: 0;
 	type: "ENTITY_WIZARD";
-	position: 56.969566 -62.137405 -2.000000;
-	scale: 4.000000 6.000000 1.000000;
+	position: 4.379171 -53.651520 -2.000000;
+	scale: 2.000000 3.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	layer: 0.000000;
 	subtype: 0;
 	colliderScale: 0.200000 0.250000;
+	colliderOffset: 0.000000 0.000000 0.000000;
 	colliderScale2: 1.000000 1.000000;
+	colliderOffset2: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
 

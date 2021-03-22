@@ -65,18 +65,22 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 	        }
 			
 			if(e->collider) {
-				addVar(&fileContents, &e->collider->dim2f, "colliderScale", VAR_V2);	
+				addVar(&fileContents, &e->collider->dim2f, "colliderScale", VAR_V2);
+                addVar(&fileContents, &e->collider->offset, "colliderOffset", VAR_V3);	
 			}	        
 
 
 	        if(e->collider1) {
-	        	addVar(&fileContents, &e->collider1->dim2f, "colliderScale2", VAR_V2);	
+	        	addVar(&fileContents, &e->collider1->dim2f, "colliderScale2", VAR_V2);
+                addVar(&fileContents, &e->collider1->offset, "colliderOffset2", VAR_V3);	
 	        }	
 
 	        if(e->audioFile) {
 	        	addVar(&fileContents, e->audioFile, "audioFileName", VAR_CHAR_STAR);	
 	        } 
 
+
+            addVar(&fileContents, &e->renderFirstPass, "renderFirstPass", VAR_INT);    
 
 
             addVar(&fileContents, MyDialog_DialogTypeStrings[(int)e->dialogType], "dialogType", VAR_CHAR_STAR);
@@ -165,6 +169,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 	//Check that this level exists
 	if(platformDoesDirectoryExist(fullSceneFolderPath)) {
 
+        int maxId = 0;
 		char *fileType[] = {"txt"};
         FileNameOfType files = getDirectoryFilesOfType(fullSceneFolderPath, fileType, arrayCount(fileType));
         int splatCount = files.count;
@@ -192,6 +197,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		V2 colliderScale = v2(1, 1);
         		V2 colliderScale2 = v2(1, 1);
 
+                V3 colliderOffset = v3(0, 0, 0);
+                V3 colliderOffset2 = v3(0, 0, 0);
+
         		Texture *splatTexture = 0;
 
         		SubEntityType subtype = ENTITY_SUB_TYPE_NONE;
@@ -200,6 +208,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
 
                 EasyModel *model = 0;
+
+                bool renderFirstPass = false;
 
         		// s32 teleporterIds[256];
         		// Entity *teleportEnts[256];
@@ -245,6 +255,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     						if(stringsMatchNullN("subtype", token.at, token.size)) {
     				    		subtype = (SubEntityType)getIntFromDataObjects(&data, &tokenizer);
     						}
+
+
+                            if(stringsMatchNullN("renderFirstPass", token.at, token.size)) {
+                                renderFirstPass = getIntFromDataObjects(&data, &tokenizer);
+                            }
+
+
+                            
                     		// if(stringsMatchNullN("teleporterId", token.at, token.size)) {
                     		// 	assert(idCount < arrayCount(teleporterIds));
                       //   		teleporterIds[idCount++] = getIntFromDataObjects(&data, &tokenizer);
@@ -262,6 +280,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     							colliderSet2 = true;
     				    		colliderScale2 = buildV2FromDataObjects(&data, &tokenizer);
     						}
+                            if(stringsMatchNullN("colliderOffset", token.at, token.size)) {
+                                colliderOffset = buildV3FromDataObjects(&data, &tokenizer);
+                            }
+                            if(stringsMatchNullN("colliderOffset2", token.at, token.size)) {
+                                colliderOffset2 = buildV3FromDataObjects(&data, &tokenizer);
+                            }
+
+
                     		if(stringsMatchNullN("type", token.at, token.size)) {
                     			char *typeString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
 
@@ -375,6 +401,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     case ENTITY_SWORD: {
                         newEntity = initSword(gameState, manager, position);
                     } break;
+                    case ENTITY_CHEST: {
+                        newEntity = initChest(gameState, manager, position);
+                    } break;
+                    case ENTITY_HORSE: {
+                        newEntity = initHorse(gameState, manager, position);
+                    } break;
                     case ENTITY_BLOCK_TO_PUSH: {
                         newEntity = initPushRock(gameState, manager, position);
                     } break;
@@ -411,8 +443,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     			//NOTE(ollie): Set the id
     			if(foundId) {
         			newEntity->T.id = id;
-        			if(id > GLOBAL_transformID_static) {
-        				GLOBAL_transformID_static = id;
+        			if(id > maxId) {
+        				maxId = id;
         			}
     			}
     			foundId = false;
@@ -421,15 +453,17 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
     			if(newEntity->collider) {
     				newEntity->collider->dim2f = colliderScale;	
+                    newEntity->collider->offset = colliderOffset;
     			}
 
 
     			if(newEntity->collider1) {
     				newEntity->collider1->dim2f = colliderScale2;	
+                    newEntity->collider1->offset = colliderOffset2;
     			}
 
     			newEntity->layer = layer;
-
+                newEntity->renderFirstPass = renderFirstPass;
                 
                 newEntity->dialogType = dialogType;
                 
@@ -494,6 +528,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         // 	assert(e->type == ENTITY_TELEPORTER);
         // 	teleportEnts[i]->teleporterPartner = e;
         // }
+        GLOBAL_transformID_static = maxId + 1;
     }
 	
+
 }	

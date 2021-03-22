@@ -10,6 +10,8 @@
 	subtype: 0;
 	spriteName: "tree (1)";
 	colliderScale: 0.250000 0.150000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
 

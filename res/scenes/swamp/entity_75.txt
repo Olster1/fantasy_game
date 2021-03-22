@@ -9,7 +9,10 @@
 	layer: 1.000000;
 	subtype: 0;
 	colliderScale: 0.250000 0.150000;
+	colliderOffset: 0.000000 0.000000 0.000000;
 	colliderScale2: 1.000000 1.000000;
+	colliderOffset2: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
 

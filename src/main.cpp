@@ -27,6 +27,80 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false;
 #include "editor.h"
 #include "enemy_ai.c"
 
+static Texture *getInvetoryTexture(EntityType type) {
+    Texture *t = 0;
+    switch(type) {
+        case ENTITY_HEALTH_POTION_1: {
+            t = findTextureAsset("blue_jar.png");
+            // assert(false);
+        } break;
+        case ENTITY_STAMINA_POTION_1: {
+            t = findTextureAsset("potionyelow.png");
+            // assert(false);
+        } break;
+        case ENTITY_SWORD: {
+            t = findTextureAsset("inventory_sword.png");
+        } break;
+        case ENTITY_SHEILD: {
+            t = findTextureAsset("inventory_shield.png");
+        } break;
+        default: {
+
+        }
+    }
+    return t;
+}
+
+//For when you collect your item
+static char *getInventoryCollectString_mustFree(EntityType type, int count) {
+    char *result = "Empty";
+    switch(type) {
+        case ENTITY_HEALTH_POTION_1: {
+            result = easyString_copyToHeap(easy_createString_printf(&globalPerFrameArena, "You found %d health potions. It looks like it might be good to replenish health.", count));
+            // assert(false);
+        } break;
+        case ENTITY_STAMINA_POTION_1: {
+            result = easyString_copyToHeap(easy_createString_printf(&globalPerFrameArena, "You found %d potions. It looks like it might be good to replenish stamina.", count));
+            // assert(false);
+        } break;
+        case ENTITY_SWORD: {
+            result = "Sharp sword";
+        } break;
+        case ENTITY_SHEILD: {
+            result = "Protective shield";
+        } break;
+        default: {
+
+        }
+    }
+    return result;
+}
+
+
+static char *getInventoryString(EntityType type) {
+    char *result = "Empty";
+    switch(type) {
+        case ENTITY_HEALTH_POTION_1: {
+            result = "Restore 3 health points with this bubbly potion.";
+            // assert(false);
+        } break;
+        case ENTITY_STAMINA_POTION_1: {
+            result = "Restore 3 stamina points with this yellow mixture.";
+            // assert(false);
+        } break;
+        case ENTITY_SWORD: {
+            result = "Sharp sword";
+        } break;
+        case ENTITY_SHEILD: {
+            result = "Protective shield";
+        } break;
+        default: {
+
+        }
+    }
+    return result;
+}
+
 #include "entity.c"
 #include "saveload.c"
 
@@ -43,14 +117,12 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false;
 
 
 static void drawTriggerCollider_DEBUG(Entity *e, EasyCollider *collider) {
-        V3 prevScale = e->T.scale;
+        EasyTransform prevT = e->T;
 
         e->T.scale.x *= collider->dim2f.x;
         e->T.scale.y *= collider->dim2f.y;
 
         Quaternion Q = e->T.Q;
-
-        V3 prevPos = e->T.pos;
 
         e->T.pos.x += collider->offset.x;
         e->T.pos.y += collider->offset.y; 
@@ -74,29 +146,10 @@ static void drawTriggerCollider_DEBUG(Entity *e, EasyCollider *collider) {
         setModelTransform(globalRenderGroup, T);
         renderDrawQuad(globalRenderGroup, color);    
         
-        e->T.scale = prevScale;
-        e->T.pos = prevPos;
+        e->T = prevT;
 }
 
-static Texture *getInvetoryTexture(EntityType type) {
-    Texture *t = 0;
-    switch(type) {
-        case ENTITY_HEALTH_POTION_1: {
-            t = findTextureAsset("blue_jar.png");
-            // assert(false);
-        } break;
-        case ENTITY_SWORD: {
-            t = findTextureAsset("inventory_sword.png");
-        } break;
-        case ENTITY_SHEILD: {
-            t = findTextureAsset("inventory_shield.png");
-        } break;
-        default: {
 
-        }
-    }
-    return t;
-}
 
 static V3 roundToGridBoard(V3 in) {
     float xMod = (in.x < 0) ? -1 : 1;
@@ -130,6 +183,8 @@ int main(int argc, char *args[]) {
         int gif_width = resolution.x, gif_height = resolution.y, centisecondsPerFrame = 10, bitDepth = 16;
         MsfGifState gifState = {};
         /////
+
+        
 
         FrameBuffer mainFrameBuffer;
         FrameBuffer toneMappedBuffer;
@@ -165,7 +220,7 @@ int main(int argc, char *args[]) {
         ///
         
         EasyCamera camera;
-        easy3d_initCamera(&camera, v3(0, 0, -10));
+        easy3d_initCamera(&camera, v3(0, 0, -40));
 
         camera.orientation = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
@@ -179,53 +234,74 @@ int main(int argc, char *args[]) {
         
         GameState *gameState = initGameState((resolution.y / resolution.x));
 
+        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+
+        
+        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+
         easyAnimation_initAnimation(&gameState->firePitAnimation, "firepit_idle");
-        loadAndAddImagesStripToAssets(&gameState->firePitAnimation, "img/fantasy_sprites/firePlace.png", 64);
+        loadAndAddImagesStripToAssets(&gameState->firePitAnimation, "img/fantasy_sprites/firePlace.png", 64, false);
 
         easyAnimation_initAnimation(&gameState->torchAnimation, "torch_idle");
-        loadAndAddImagesStripToAssets(&gameState->torchAnimation, "img/fantasy_sprites/torch.png", 64);
+        loadAndAddImagesStripToAssets(&gameState->torchAnimation, "img/fantasy_sprites/torch.png", 64, false);
 
         {
             //WIZARD ANIMATIONS
-            easyAnimation_initAnimation(&gameState->wizardRun, "wizardRun");
-            // loadAndAddImagesStripToAssets(&gameState->wizardRun, "img/fantasy_sprites/wizard/Run.png", 231);
-            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
-            easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+            easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
+            // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+            // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
 
             easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
             easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
             // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
+            easyAnimation_initAnimation(&gameState->wizardIdleForward, "wizardIdleForward");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleForward, "img/fantasy_sprites/man_idle.png", 41, false, 1, 2);
+
+            easyAnimation_initAnimation(&gameState->wizardIdleBottom, "wizardIdleBottom");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleBottom, "img/fantasy_sprites/man_idle1.png", 41, false, 1, 0);
+
+            easyAnimation_initAnimation(&gameState->wizardIdleLeft, "wizardIdleLeft");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleLeft, "img/fantasy_sprites/man_idle2.png", 41, false, 1, 3);
+
+            easyAnimation_initAnimation(&gameState->wizardIdleRight, "wizardIdleRight");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleRight, "img/fantasy_sprites/man_idle3.png", 41, false, 1, 1);
+
 
             easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
-            easyAnimation_pushFrame(&gameState->wizardBottom, "player_down.png");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardBottom, "img/fantasy_sprites/man1.png", 41, false, 4, 12);
+
+
+            // easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
+            // easyAnimation_pushFrame(&gameState->wizardBottom, "player_down.png");
 
             easyAnimation_initAnimation(&gameState->wizardLeft, "wizardLeft");
-            easyAnimation_pushFrame(&gameState->wizardLeft, "player_left.png");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardLeft, "img/fantasy_sprites/man2.png", 41, false, 4, 8);
 
             easyAnimation_initAnimation(&gameState->wizardRight, "wizardRight");
-            easyAnimation_pushFrame(&gameState->wizardRight, "player_right.png");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardRight, "img/fantasy_sprites/man3.png", 41, false, 4, 0);
 
             ////////////////////////////////////////////////////////////////////////////
 
             easyAnimation_initAnimation(&gameState->wizardAttack, "wizardAttack");
-            loadAndAddImagesStripToAssets(&gameState->wizardAttack, "img/fantasy_sprites/wizard/Attack1.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardAttack, "img/fantasy_sprites/wizard/Attack1.png", 231, false);
 
             easyAnimation_initAnimation(&gameState->wizardAttack2, "wizardAttack2");
-            loadAndAddImagesStripToAssets(&gameState->wizardAttack2, "img/fantasy_sprites/wizard/Attack2.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardAttack2, "img/fantasy_sprites/wizard/Attack2.png", 231, false);
 
             easyAnimation_initAnimation(&gameState->wizardDeath, "wizardDeath");
-            loadAndAddImagesStripToAssets(&gameState->wizardDeath, "img/fantasy_sprites/wizard/Death.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardDeath, "img/fantasy_sprites/wizard/Death.png", 231, false);
 
             easyAnimation_initAnimation(&gameState->wizardHit, "wizardHit");
-            loadAndAddImagesStripToAssets(&gameState->wizardHit, "img/fantasy_sprites/wizard/Hit.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardHit, "img/fantasy_sprites/wizard/Hit.png", 231, false);
 
 
             easyAnimation_initAnimation(&gameState->wizardJump, "wizardJump");
-            loadAndAddImagesStripToAssets(&gameState->wizardJump, "img/fantasy_sprites/wizard/Jump.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardJump, "img/fantasy_sprites/wizard/Jump.png", 231, false);
 
             easyAnimation_initAnimation(&gameState->wizardFall, "wizardFall");
-            loadAndAddImagesStripToAssets(&gameState->wizardFall, "img/fantasy_sprites/wizard/Fall.png", 231);
+            loadAndAddImagesStripToAssets(&gameState->wizardFall, "img/fantasy_sprites/wizard/Fall.png", 231, false);
 
         }
 
@@ -238,22 +314,25 @@ int main(int argc, char *args[]) {
 
         {
             easyAnimation_initAnimation(&gameState->skeletonAttack, "skeltonAttack");
-            loadAndAddImagesStripToAssets(&gameState->skeletonAttack, "img/fantasy_sprites/skeleton/SAttack.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeletonAttack, "img/fantasy_sprites/skeleton/SAttack.png", 150, false);
 
             easyAnimation_initAnimation(&gameState->skeletonDeath, "skeltonDeath");
-            loadAndAddImagesStripToAssets(&gameState->skeletonDeath, "img/fantasy_sprites/skeleton/SDeath.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeletonDeath, "img/fantasy_sprites/skeleton/SDeath.png", 150, false);
 
             easyAnimation_initAnimation(&gameState->skeltonIdle, "skeltonIdle");
-            loadAndAddImagesStripToAssets(&gameState->skeltonIdle, "img/fantasy_sprites/skeleton/SIdle.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeltonIdle, "img/fantasy_sprites/skeleton/SIdle.png", 150, false);
 
             easyAnimation_initAnimation(&gameState->skeltonShield, "skeltonShield");
-            loadAndAddImagesStripToAssets(&gameState->skeltonShield, "img/fantasy_sprites/skeleton/SShield.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeltonShield, "img/fantasy_sprites/skeleton/SShield.png", 150, false);
 
             easyAnimation_initAnimation(&gameState->skeltonHit, "skeltonHit");
-            loadAndAddImagesStripToAssets(&gameState->skeltonHit, "img/fantasy_sprites/skeleton/SHit.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeltonHit, "img/fantasy_sprites/skeleton/SHit.png", 150, false);
 
             easyAnimation_initAnimation(&gameState->skeltonWalk, "skeltonWalk");
-            loadAndAddImagesStripToAssets(&gameState->skeltonWalk, "img/fantasy_sprites/skeleton/SWalk.png", 150);
+            loadAndAddImagesStripToAssets(&gameState->skeltonWalk, "img/fantasy_sprites/skeleton/SWalk.png", 150, false);
+
+
+
 
         }
 
@@ -309,7 +388,7 @@ int main(int argc, char *args[]) {
                 addElementInfinteAlloc_notPointer(&gameState->splatTextures, tex);
                 
                 
-                easyConsole_addToStream(DEBUG_globalEasyConsole, shortName);
+                // easyConsole_addToStream(DEBUG_globalEasyConsole, shortName);
             }
             free(fullName);
             // free(shortName);
@@ -351,6 +430,8 @@ int main(int argc, char *args[]) {
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
                 gameScene_loadScene(gameState, manager, "swamp");
+                easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
+                easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -374,12 +455,9 @@ int main(int argc, char *args[]) {
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
 
-        EasyTransform treeT;
-        easyTransform_initTransform_withScale(&treeT, v3(0, 0, 0), v3(0.1, 0.15, 0.1), EASY_TRANSFORM_STATIC_ID);
-
-        treeT.Q = eulerAnglesToQuaternion(-0.5f*PI32, -0.5f*PI32, 0.5f*PI32);
-
         EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
+
+        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
 
         EasyTransform outlineTransform;
         easyTransform_initTransform_withScale(&outlineTransform, v3(0, 0, 0), v3(1, 1, 1), EASY_TRANSFORM_TRANSIENT_ID); 
@@ -388,8 +466,10 @@ int main(int argc, char *args[]) {
 
         Texture *fadeBlackTexture = findTextureAsset("fade_black.png");
 
-        EasyFont_Font *gameFont = easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
+        EasyFont_Font *gameFont = globalDebugFont;//easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
 
+        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+        float cameraFollow_yOffset = 30;
         while(appInfo->running) {
 
             if(refreshTweakFile(tweakerFileName, tweaker)) {
@@ -404,6 +484,7 @@ int main(int argc, char *args[]) {
                 gameState->werewolf_knockback_distance = (float)getFloatFromTweakData(tweaker, "werewolf_knockback_distance");
                 gameState->player_knockback_distance = (float)getFloatFromTweakData(tweaker, "player_knockback_distance");
 
+                cameraFollow_yOffset = (float)getFloatFromTweakData(tweaker, "cameraFollow_yOffset");
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -445,10 +526,10 @@ int main(int argc, char *args[]) {
                 }
 
                 {//update y position
-                    float distance = absVal(worldP.y - 10 - camera.hidden_pos.y);
+                    float distance = absVal(worldP.y - cameraFollow_yOffset - camera.hidden_pos.y);
 
                     if(distance > gameState->cameraSnapDistance) {
-                        float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - 10);
+                        float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - cameraFollow_yOffset);
                         camera.hidden_pos.y = newPosY;
                     }
                 }
@@ -462,8 +543,8 @@ int main(int argc, char *args[]) {
             
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
-            Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
-            Matrix4 perspectiveMatrix_inventory = projectionMatrixFOV(60.0f, resolution.x/resolution.y);
+            float zoom = 50.0f*(camera.zoom / 90.0f);
+            Matrix4 perspectiveMatrix = OrthoMatrixToScreen(zoom, zoom*(resolution.y/resolution.x));//projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_1) && !gameState->isEditorOpen) {
                 gameState->gameModeType = GAME_MODE_PAUSE_MENU;
@@ -667,7 +748,7 @@ int main(int argc, char *args[]) {
 
                         //Draw the DEBUG collider info 
                         if(e->collider && DEBUG_DRAW_COLLISION_BOUNDS) {   
-                            V3 prevScale = e->T.scale;
+                            EasyTransform prevT = e->T;
 
                             e->T.scale.x *= e->collider->dim2f.x;
                             e->T.scale.y *= e->collider->dim2f.y;
@@ -676,8 +757,6 @@ int main(int argc, char *args[]) {
                             e->T.pos.y += e->collider->offset.y; 
 
                             Quaternion Q = e->T.Q;
-
-                            float prevZ = e->T.pos.z;
 
                             e->T.pos.z = 0;
                             e->T.Q = identityQuaternion();
@@ -700,8 +779,7 @@ int main(int argc, char *args[]) {
                             renderDrawQuad(globalRenderGroup, color);    
                             
                             
-                            e->T.scale = prevScale;
-                            e->T.pos.z = prevZ;
+                            e->T = prevT;
                         }
 
                         if(e->collider1 && DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) {   
@@ -914,8 +992,20 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-            
+            {
+                for(int i = 0; i < manager->entities.count; ++i) {
+                    Entity *e = (Entity *)getElement(&manager->entities, i);
+                    if(e && e->renderFirstPass) {
+                        Matrix4 T = easyTransform_getTransform(&e->T);
+                        setModelTransform(globalRenderGroup, T);
+                        if(e->sprite && DEBUG_DRAW_SCENERY_TEXTURES) { renderSetShader(globalRenderGroup, &pixelArtProgram); renderDrawSprite(globalRenderGroup, e->sprite, e->colorTint); }
 
+                    }
+                }
+            }
+
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
@@ -1276,6 +1366,20 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
+                        case EDITOR_CREATE_CHEST: {
+                            if(pressed) {
+                                editorState->entitySelected = initChest(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_HORSE: {
+                            if(pressed) {
+                                editorState->entitySelected = initHorse(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
                         case EDITOR_CREATE_SHEILD: {
                             if(pressed) {
                                 editorState->entitySelected = initSheild(gameState, manager, hitP);
@@ -1566,14 +1670,27 @@ int main(int argc, char *args[]) {
                     easyEditor_pushInt1(appInfo->editor, "MaxHealth: ", &e->maxHealth);
                     easyEditor_pushFloat1(appInfo->editor, "MaxStamina: ", &e->maxStamina);
 
+                    if(easyEditor_pushButton(appInfo->editor, e->renderFirstPass ? "first pass Off" : "first pass Off")) {
+                        e->renderFirstPass = !e->renderFirstPass;
+                        // manager->player->collider1->offset.y = 0;
+                    }
+
 
                     if(e->collider) {
-                        easyEditor_pushFloat2(appInfo->editor, "Collider: ", &e->collider->dim2f.x, &e->collider->dim2f.y);    
+                        easyEditor_pushFloat2(appInfo->editor, "Collider: ", &e->collider->dim2f.x, &e->collider->dim2f.y); 
+                        easyEditor_pushFloat2(appInfo->editor, "Col offset: ", &e->collider->offset.x, &e->collider->offset.y);
+                        // easyConsole_pushFloat(DEBUG_globalEasyConsole, e->collider->offset.x);
                     }
 
                     if(e->collider1) {
-                        easyEditor_pushFloat2(appInfo->editor, "Collider 2: ", &e->collider1->dim2f.x, &e->collider1->dim2f.y);
+                        easyEditor_pushFloat2(appInfo->editor, "Collider 1: ", &e->collider1->dim2f.x, &e->collider1->dim2f.y);
+                        easyEditor_pushFloat2(appInfo->editor, "Collider1 offset: ", &e->collider1->offset.x, &e->collider1->offset.y); 
                     }
+
+                    // if(e->type == ENTITY_CHEST) {
+                    //     easyEditor_alterListIndex(appInfo->editor, (int)e->chestContains); EntityType chestContains = (EntityType)easyEditor_pushList(appInfo->editor, "Chest Contains: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings));
+                    //     easyEditor_pushInt1(appInfo->editor, "Chest ItemCount: ", &e->itemCount);;
+                    // }
 
                     if(e->type == ENTITY_SIGN) {
 
@@ -1589,6 +1706,17 @@ int main(int argc, char *args[]) {
 
                     //wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE)
                     if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity"))) {
+
+                        ////////////////NOTE: Will want to remove when we do undo
+                        char *allScenesFolderName = getAllScenesFolderName();
+                        char *fullSceneFolderPath = concatInArena(getFullSceneFolderPath(gameState->currentSceneName, allScenesFolderName), "/", &globalPerFrameArena);
+                        char *entityFileName = getFullNameForEntityFile(e->T.id, fullSceneFolderPath);
+
+                        if(platformDoesFileExist(entityFileName)) {
+                            platformDeleteFile(entityFileName);    
+                        }
+                        ///////////////////////////////////////////////
+
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                         int *indexToAdd = (int *)arrayInfo.elm;
                         *indexToAdd = editorState->entityIndex;
@@ -1596,6 +1724,7 @@ int main(int argc, char *args[]) {
                             gameState->currentTerrainEntity = 0;
                         }
                         editorState->entitySelected = 0;
+                        
                     }
 
                     if(easyEditor_pushButton(appInfo->editor, "Let Go")) {
@@ -1785,14 +1914,14 @@ int main(int argc, char *args[]) {
                     }
 
                     //Draw the text
-                    V2 size = getBounds(title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
+                    V2 size = getBounds(title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
                      
                     float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
                     
 
                     
 
-                    outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, gameState->fuaxResolution, title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 2, true, 1);
+                    outputTextNoBacking(gameFont, fontx, fonty, 0.1f, gameState->fuaxResolution, title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 2, true, 1);
                     /////////////////////////
 
                     fonty += yT;
@@ -1808,6 +1937,76 @@ int main(int argc, char *args[]) {
             }
 
             /////////////// Draw the text ///////////////////
+
+            if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
+
+               //Make sure game is paused
+               gameState->gameIsPaused = true;
+               //DRAW THE PLAYER HUD
+
+
+              EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+              float fuaxWidth = 1920.0f;
+              float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+              setViewTransform(globalRenderGroup, mat4());
+              setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
+
+              float textBg_height = 0.5f*fuaxHeight;
+
+              float textureY = -0.5f*fuaxHeight + 0.5f*textBg_height;
+
+              //Stamina points backing
+              Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, textBg_height, 0)), v3(0, textureY, 0.4f));
+              setModelTransform(globalRenderGroup, T);
+              renderDrawSprite(globalRenderGroup, fadeBlackTexture, COLOR_WHITE);
+
+
+
+              
+
+              Texture *itemTex = getInvetoryTexture(gameState->itemCollectType);
+
+              float fontx = 0.2f*gameState->fuaxResolution.x;
+
+              // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
+               
+
+              // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+              float fonty = fuaxHeight - 0.3f*textBg_height;
+
+              outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), gameState->inventoryString_mustFree, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
+
+
+              //Draw prompt button to continue
+              T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
+              setModelTransform(globalRenderGroup, T);
+              renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+              ///////
+
+              T = Matrix4_translate(Matrix4_scale(mat4(), v3(300, 300*itemTex->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
+              setModelTransform(globalRenderGroup, T);
+              renderDrawSprite(globalRenderGroup, itemTex, COLOR_WHITE);
+
+              drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+              renderClearDepthBuffer(mainFrameBuffer.bufferId);
+
+              easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+              //Exit back to game
+              if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+                   
+                   gameState->gameModeType = GAME_MODE_PLAY;
+                   gameState->gameIsPaused = false;
+                   gameState->itemCollectType = ENTITY_NULL;
+                   gameState->entityChestToDisplay = 0;
+
+                   easyPlatform_freeMemory(gameState->inventoryString_mustFree);
+                   
+               }
+            }
 
             if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
 
@@ -1845,13 +2044,13 @@ int main(int argc, char *args[]) {
 
                float fontx = 0.2f*gameState->fuaxResolution.x;
 
-               // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 1.5f, gameState->fuaxResolution, 1);
+               // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
                 
 
                // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
                float fonty = fuaxHeight - 0.3f*textBg_height;
 
-               outputTextNoBacking(globalDebugFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
+               outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
 
 
                //Draw prompt button to continue
@@ -1904,6 +2103,8 @@ int main(int argc, char *args[]) {
             
             if(gameState->isLookingAtItems) {
 
+                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
                 gameState->gameIsPaused = true;
                 easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
                 endBuffer = &bloomFrameBuffer;
@@ -1912,8 +2113,8 @@ int main(int argc, char *args[]) {
 
                 setViewTransform(globalRenderGroup, mat4());
 
-                V2 size = getBounds("ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
-                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
+                V2 size = getBounds("ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
+                outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
                 
                 float fuaxWidth = 1920.0f;
                 float fuaxHeight = appInfo->aspectRatio_yOverX*fuaxWidth;
@@ -1927,11 +2128,25 @@ int main(int argc, char *args[]) {
 
                 //DRAW BACKGROUND
                 Texture *t = findTextureAsset("inventory_backing.png");
-                                        
+
                 Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, fuaxHeight, 0)), v3(0, 0, 0.4f));
                 
                 setModelTransform(globalRenderGroup, T);
                 renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+                                        
+                //DRAW PLAYER
+                Texture *playerPoseTexture = findTextureAsset("player_pose.png");
+
+                renderSetShader(globalRenderGroup, &pixelArtProgram);
+
+                float pWidth = 0.3f*fuaxWidth;
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.4f));
+                
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, playerPoseTexture, COLOR_WHITE);
+
+                renderSetShader(globalRenderGroup, &glossProgram);
+                
                 //////////////////////////////////////////////////////////////
                 t = findTextureAsset("inventory_spot.png");
                 Texture *hover_t = findTextureAsset("targeting2.png");
@@ -1941,9 +2156,11 @@ int main(int argc, char *args[]) {
                 float spacing = 180;
                 float circleSize = 150;
 
-                for(int i = 1; i < 13; ++i) {   
+                for(int i = 1; i < arrayCount(gameState->itemSpots) + 1; ++i) {   
 
                     Texture *t_todraw = t;
+
+                     ItemInfo *itemI = &gameState->itemSpots[i - 1];
 
                     if(gameState->indexInItems == (i - 1)) {
                         gameState->inventoryBreathSelector += appInfo->dt;
@@ -1960,6 +2177,12 @@ int main(int argc, char *args[]) {
                         renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
 
 
+                        if(itemI->type != ENTITY_NULL) {
+                            char *s = getInventoryString(itemI->type);
+                            float descripX = 0.5f*gameState->fuaxResolution.x;
+                            outputTextNoBacking(gameFont, descripX, gameState->fuaxResolution.y - 200, 0.1f, gameState->fuaxResolution, s, rect2fMinMax(descripX, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.4f, true, 1);
+                        }
+                        
 
                         t_todraw = findTextureAsset("inventory_spot1.png");
                     }
@@ -1970,6 +2193,13 @@ int main(int argc, char *args[]) {
                     setModelTransform(globalRenderGroup, T);
                     renderDrawSprite(globalRenderGroup, t_todraw, COLOR_WHITE);
 
+                   
+                    if(itemI->type != ENTITY_NULL) {
+                        renderSetShader(globalRenderGroup, &pixelArtProgram);
+                        renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
+                        renderSetShader(globalRenderGroup, mainShader);
+                        
+                    }
                     
 
                     xAt += spacing;
@@ -2011,6 +2241,8 @@ int main(int argc, char *args[]) {
                     }
                 
                 }
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
                 ////////////////////////////////////////////////////////////////////////////
                 
@@ -2107,8 +2339,8 @@ int main(int argc, char *args[]) {
                 setViewTransform(globalRenderGroup, cameraLookAt_straight);
 
 
-                V2 size = getBounds("GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), globalDebugFont, 2, gameState->fuaxResolution, 1);
-                outputTextNoBacking(globalDebugFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
+                V2 size = getBounds("GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
+                outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
  
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
@@ -2169,7 +2401,7 @@ int main(int argc, char *args[]) {
                 setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal0, canVal0, 0)), itemPosition1));
                 renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
 
-                outputTextNoBacking(globalDebugFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
+                outputTextNoBacking(gameFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
                 
                 if(gameState->playerHolding[0] != ENTITY_NULL) {
 
@@ -2182,7 +2414,7 @@ int main(int argc, char *args[]) {
                 setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
                 renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
 
-                outputTextNoBacking(globalDebugFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
+                outputTextNoBacking(gameFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
 
                 if(gameState->playerHolding[1] != ENTITY_NULL) {
                     setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(itemPosition2.x + xOffset, itemPosition2.y + yOffset, 0.1f)));

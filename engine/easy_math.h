@@ -764,6 +764,9 @@ typedef union {
         struct {
             float r, i, j, k;
         };
+        struct {
+            V4 vector4;
+        };
     };
 } Quaternion;
 

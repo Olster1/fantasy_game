@@ -1,0 +1,17 @@
+{
+
+	id: 162;
+	type: "ENTITY_SCENERY";
+	position: 40.000000 -63.000000 0.000000;
+	scale: 1.000000 1.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 1.000000 0.000000 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	model: "tree02.obj";
+}
+

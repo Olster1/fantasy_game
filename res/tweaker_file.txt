@@ -6,3 +6,4 @@ werewolf_attackSpeed: 10;
 werewolf_restSpeed: 2;
 werewolf_knockback_distance: 700000;
 player_knockback_distance: 100000;
+cameraFollow_yOffset: 40;

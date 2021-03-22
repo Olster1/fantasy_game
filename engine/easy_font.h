@@ -567,6 +567,14 @@ Rect2f my_stbtt_print_(EasyFont_Font *font, float x, float y, float zAt, V2 reso
                     //     height = font->fontHeight*size;//q.y1 - q.y0;
                     //     pos = v2(transformToSizeX(glyph->lastXY.x) + 0.5f*width, transformToSizeY(glyph->lastXY.y) - 0.5f*height);
                     // }
+                } else {
+                   EasyFont_Glyph *g = easyFont_findGlyph(font, 'M');
+                   
+                   Rect2f b = rect2fMinDim(x + size*g->xOffset, y + size*g->yOffset, size*g->texture.width, size*g->texture.height);
+                   
+                   x += size*g->texture.width + size*g->xOffset;
+                   
+                   bounds = unionRect2f(bounds, b); 
                 }
                 
             }

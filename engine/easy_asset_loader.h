@@ -24,20 +24,20 @@ int loadAndAddImagesToAssets_(char *folderNameAbsolute) {
 	return result;
 }
 
-#define loadAndAddImagesStripToAssets(animation, fileName, widthPerImage) loadAndAddImagesStripToAssets_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage)
-void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolute, float widthPerImage) {
+#define loadAndAddImagesStripToAssets(animation, fileName, widthPerImage, hasMipMaps) loadAndAddImagesStripToAssets_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage, hasMipMaps)
+void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolute, float widthPerImage, bool hasMipMaps) {
 	DEBUG_TIME_BLOCK()
 
 	bool premultiplyAlpha = true;
-    Texture texOnStack = loadImage(folderNameAbsolute, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
+    Texture texOnStack = loadImage(folderNameAbsolute, TEXTURE_FILTER_LINEAR, hasMipMaps, premultiplyAlpha);
     
     int count = 0;
 
     float xAt = 0;
 
     char *shortName = getFileLastPortionWithoutExtension_arena(folderNameAbsolute, &globalPerFrameArena);
-
-    while(xAt < texOnStack.width) {
+    float widthTruncated = ((int)(texOnStack.width / widthPerImage))*widthPerImage;
+    while(xAt < widthTruncated) {
     	Texture *tex = pushStruct(&globalLongTermArena, Texture);
     	easyPlatform_copyMemory(tex, &texOnStack, sizeof(Texture));
 
@@ -59,6 +59,102 @@ void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolu
 
     	count++;
     }
+
+}
+
+
+#define loadAndAddImagesStripToAssets_count_offset(animation, fileName, widthPerImage, hasMipMaps, count, offset) loadAndAddImagesStripToAssets_count_offset_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage, hasMipMaps, count, offset)
+void loadAndAddImagesStripToAssets_count_offset_(Animation *animation, char *folderNameAbsolute, float widthPerImage, bool hasMipMaps, int totalCount, int offset) {
+	DEBUG_TIME_BLOCK()
+
+	bool premultiplyAlpha = true;
+    Texture texOnStack = loadImage(folderNameAbsolute, TEXTURE_FILTER_LINEAR, hasMipMaps, premultiplyAlpha);
+    
+    int count = 0;
+    float xAt = 0;
+
+    xAt = offset*widthPerImage;
+
+    char *shortName = getFileLastPortionWithoutExtension_arena(folderNameAbsolute, &globalPerFrameArena);
+    float widthTruncated = ((int)(texOnStack.width / widthPerImage))*widthPerImage;
+    while(xAt < widthTruncated && count < totalCount) {
+    	Texture *tex = pushStruct(&globalLongTermArena, Texture);
+    	easyPlatform_copyMemory(tex, &texOnStack, sizeof(Texture));
+
+    	tex->uvCoords.minX = xAt / texOnStack.width;
+
+    	xAt += widthPerImage;
+
+    	tex->uvCoords.maxX = xAt / texOnStack.width;
+
+    	char countAsString[128];
+
+    	sprintf_s(countAsString, arrayCount(countAsString), "_%d", count);
+
+    	char *tempFileName = concatInArena(shortName, countAsString, &globalPerFrameArena);
+
+    	easyAnimation_pushFrame(animation, tempFileName);
+
+    	Asset *result = addAssetTexture(tempFileName, tex);
+
+    	count++;
+    }
+
+}
+
+
+
+
+
+
+#define loadAndAddImagesStripToAssets_xy(animation, fileName, widthPerImage, heightPerImage, missImages) loadAndAddImagesStripToAssets_xy_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage, heightPerImage, missImages)
+void loadAndAddImagesStripToAssets_xy_(Animation *animation, char *folderNameAbsolute, float widthPerImage, float heightPerImage, int missImages) {
+	DEBUG_TIME_BLOCK()
+
+	bool premultiplyAlpha = true;
+    Texture texOnStack = loadImage(folderNameAbsolute, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
+    
+    int count = 0;
+
+    float xAt = 0;
+    float yAt = 0;
+
+    char *shortName = getFileLastPortionWithoutExtension_arena(folderNameAbsolute, &globalPerFrameArena);
+
+    int totalCount = ((int)(texOnStack.height / heightPerImage))*((int)(texOnStack.width / widthPerImage));
+
+    float heightTruncated = ((int)(texOnStack.height / heightPerImage))*heightPerImage;
+    float widthTruncated = ((int)(texOnStack.width / widthPerImage))*widthPerImage;
+
+   	while(yAt < heightTruncated) {
+	    while(xAt < widthTruncated && (count < (totalCount - missImages))) {
+	    	Texture *tex = pushStruct(&globalLongTermArena, Texture);
+	    	easyPlatform_copyMemory(tex, &texOnStack, sizeof(Texture));
+
+	    	tex->uvCoords.minY = yAt / texOnStack.height;
+	    	tex->uvCoords.maxY = (yAt + heightPerImage) / texOnStack.height;
+
+	    	tex->uvCoords.minX = xAt / texOnStack.width;
+
+	    	xAt += widthPerImage;
+
+	    	tex->uvCoords.maxX = xAt / texOnStack.width;
+
+	    	char countAsString[128];
+
+	    	sprintf_s(countAsString, arrayCount(countAsString), "_%d", count);
+
+	    	char *tempFileName = concatInArena(shortName, countAsString, &globalPerFrameArena);
+
+	    	easyAnimation_pushFrame(animation, tempFileName);
+
+	    	Asset *result = addAssetTexture(tempFileName, tex);
+
+	    	count++;
+	    }
+	    yAt += heightPerImage;
+	    xAt = 0;
+	}
 
 }
 

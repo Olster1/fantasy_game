@@ -26,6 +26,13 @@ typedef struct {
 
 	bool isDead;
 
+	///NOTE: CHest information
+	EntityType chestContains;
+	int itemCount;
+	bool chestIsOpen;
+	/////
+
+
 	int subEntityType;
 
 	//NOTE: If no animation, use this sprite
@@ -61,6 +68,10 @@ typedef struct {
 
 	
 	/////
+
+	bool renderFirstPass; //Render before entities like terrain so the doesn't affect the depth buffer ordering 
+
+	PlayingSound *currentSound;
 
 	//Player stamina
 	float stamina;
@@ -157,6 +168,37 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
     return result;
 }
 
+static void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool isDisposable) {
+	ItemInfo *info = 0;
+
+	for(int i = 0; i < state->itemCount && !info; ++i) {
+		if(state->itemSpots[i].type == t) {
+			info = &state->itemSpots[i];
+			break;
+		}
+	}
+
+	// if(!info) {
+	// 	//look for empty spot
+	// 	for(int i = 0; i < state->itemCount && !info; ++i) {
+	// 		if(state->itemSpots[i].count == 0) {
+	// 			info = &state->itemSpots[i];
+	// 			break;
+	// 		}
+	// 	}
+	// }
+
+	if(!info) {
+		//add to end
+		assert(state->itemCount < arrayCount(state->itemSpots));
+		info = state->itemSpots + state->itemCount++;
+	}
+
+	info->count += numToAdd;
+	info->isDisposable = isDisposable;
+	info->type = t; 
+}
+
 
 static inline void createDamageNumbers(EntityManager *manager, float value, V3 position) {
 
@@ -250,16 +292,16 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
 
         		//////////////////Release items /////////////////
         		//Add items skelton leaves behind
-        		for(int i = 0; i < 10; ++i) {
-        			// easyConsole_addToStream(DEBUG_globalEasyConsole, "creating potion");
-	        		ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
-	        		EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
-	        		entityToAdd->type = ENTITY_HEALTH_POTION_1;
-	        		entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
+        		// for(int i = 0; i < 10; ++i) {
+        		// 	// easyConsole_addToStream(DEBUG_globalEasyConsole, "creating potion");
+	        	// 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+	        	// 	EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+	        	// 	entityToAdd->type = ENTITY_HEALTH_POTION_1;
+	        	// 	entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
 
-	        		entityToAdd->dP.y = 0;
-	        		entityToAdd->dP.x = 0;//randomBetween(-5, 5);
-	        	}
+	        	// 	entityToAdd->dP.y = 0;
+	        	// 	entityToAdd->dP.x = 0;//randomBetween(-5, 5);
+	        	// }
         		/////////////////////////////////////////
         	}
         }
@@ -384,6 +426,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->shieldInUse = false;
 	entity->isDeleted = false;
 	entity->tBob = 0;
+	entity->chestIsOpen = false;
 
 	entity->flashHurtTimer = -1.0f;
 
@@ -391,6 +434,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->stamina = entity->maxStamina;
 
 	entity->staminaTimer = -1.0f;
+	entity->renderFirstPass = false;
 
 	entity->maxHealth = findMaxHealth(type);
 	entity->health = entity->maxHealth;
@@ -438,7 +482,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -530,9 +574,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		Animation *animToAdd = 0;
 
-		if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardBottom) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRight) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardLeft) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump)){
+		Animation *idleAnimation = 0;
+		// if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardBottom) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRight) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardLeft) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump))
+		{
 			
 			float walkModifier = 1;
+
+			if(isDown(keyStates->gameButtons, BUTTON_SHIFT)) {
+				walkModifier = 2.5f;
+			}
 
 			if(entity->shieldInUse) {
 				walkModifier = 0.5f;
@@ -541,20 +591,24 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
 				animToAdd = &gameState->wizardLeft;
+				idleAnimation = &gameState->wizardIdleLeft;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 				entity->rb->accumForce.x += gameState->walkPower*walkModifier;
 				animToAdd = &gameState->wizardRight;
+				idleAnimation = &gameState->wizardIdleRight;
 			}
 			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
 				entity->rb->accumForce.y += gameState->walkPower*walkModifier;
-				animToAdd = &gameState->wizardRun;
+				animToAdd = &gameState->wizardForward;
+				idleAnimation = &gameState->wizardIdleForward;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
 				entity->rb->accumForce.y += -gameState->walkPower*walkModifier;
 				animToAdd = &gameState->wizardBottom;
+				idleAnimation = &gameState->wizardIdleBottom;
 			}
 
 
@@ -569,17 +623,17 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		
 
-		if(entity->rb->dP.x < -1 || entity->rb->dP.x > 1 || entity->rb->dP.y < -1 || entity->rb->dP.y > 1) {
-			if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle)) {
-				animToAdd = &gameState->wizardRun;
+		// if(entity->rb->dP.x < -1 || entity->rb->dP.x > 1 || entity->rb->dP.y < -1 || entity->rb->dP.y > 1) {
+		// 	if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle)) {
+		// 		// animToAdd = &gameState->wizardRun;
 				
-			}
-		} else {
-			if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)) {
-				// easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-				// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
-			}
-		}
+		// 	}
+		// } else {
+		// 	if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun)) {
+		// 		// easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
+		// 		// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
+		// 	}
+		// }
 
 		{
 			// float angle = ATan2_0toTau(entity->rb->dP.y, entity->rb->dP.x);
@@ -661,26 +715,33 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(animToAdd) {
 
-			if(animToAdd == &gameState->wizardAttack) {
-				ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
-				EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
-				entityToAdd->type = ENTITY_PLAYER_PROJECTILE;
-				entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
+			// if(animToAdd == &gameState->wizardAttack) {
+			// 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+			// 	EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+			// 	entityToAdd->type = ENTITY_PLAYER_PROJECTILE;
+			// 	entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
 
-				easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
+			// 	easyCamera_startShake(cam, EASY_CAMERA_SHAKE_DEFAULT, 0.5f);
 
-				entityToAdd->dP.y = 0;
-				if(entity->isFlipped) {
-					entityToAdd->dP.x = -5;
-				} else {
-					entityToAdd->dP.x = 5;
-				}
+			// 	entityToAdd->dP.y = 0;
+			// 	if(entity->isFlipped) {
+			// 		entityToAdd->dP.x = -5;
+			// 	} else {
+			// 		entityToAdd->dP.x = 5;
+			// 	}
 				
+			// }
+
+			if(!easyAnimation_getCurrentAnimation(&entity->animationController, animToAdd)) {
+				easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);	
+			}
+			
+			if(idleAnimation) {
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, idleAnimation, EASY_ANIMATION_PERIOD);		
 			}
 
-			easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);
-			// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->wizardIdle, EASY_ANIMATION_PERIOD);	
+			
 		}
 
 		
@@ -699,6 +760,29 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 
+	if(entity->type == ENTITY_HORSE) {
+		if(entity->collider1->collisionCount > 0) {
+
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	if(entity->currentSound) {
+            		easySound_endSound(entity->currentSound);
+            	}	
+            	WavFile *s = easyAudio_findSound("horse.wav");
+            	entity->currentSound = playGameSound(&globalLongTermArena, s, 0, AUDIO_FOREGROUND);
+            	
+            }
+
+            info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+            if(info.found) {
+            	if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) {
+            		// entity->T.parent = &manager->player->T;
+            	}
+            }
+        }
+
+	}
+
 	if(entity->type == ENTITY_SWORD || entity->type == ENTITY_SHEILD) {
 		entity->rotation += dt;
 
@@ -715,21 +799,25 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 	}
 
-		if(entity->type == ENTITY_SIGN) {
 
+		if(entity->type == ENTITY_SIGN || entity->type == ENTITY_CHEST) {
 			if(entity->collider1->collisionCount > 0) {
 
 	            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
 	            if(info.found) {
 
-	            	if(gameState->gameModeType != GAME_MODE_READING_TEXT) {
+	            	bool canInteractWith = gameState->gameModeType != GAME_MODE_READING_TEXT;
+
+	            	if(entity->type == ENTITY_CHEST && entity->chestIsOpen) {
+	            		canInteractWith = false;
+	            	}
+	            	
+	            	if(canInteractWith) {
 	            		entity->tBob += dt;
 
 	            		V3 scale = easyTransform_getWorldScale(&entity->T);
 
 	            		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(scale.y + 0.5f + 0.2f*sin(entity->tBob))));
-
-	            		
 
 	            		gameState->tempTransform.pos = position;
 	            		float width = 2;
@@ -744,27 +832,46 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
 	            		{	
 	            			
+	            			if(entity->type == ENTITY_CHEST) {
+	            				assert(!entity->chestIsOpen);
+	            				entity->chestIsOpen = true;
 
-	            			if(entity->dialogType != ENTITY_DIALOG_NULL) {
-								gameState->gameModeType = GAME_MODE_READING_TEXT;
-								gameState->currentTalkText = findDialogInfo(entity->dialogType);
-								gameState->messageIndex = 0; //start at the begining
 
-								WavFile *sound = 0;
-								if(gameState->currentTalkText.audioArray) {
-									Asset *asset = findAsset(gameState->currentTalkText.audioArray[0]);
-									if(asset) {
-										sound = (WavFile *)asset->file;
+
+	            				int c = (int)randomBetween(1, 4);
+	            				addItemToPlayer(gameState, ENTITY_STAMINA_POTION_1, c, true);
+
+	            				//Assign the information for what the player collected
+	            				gameState->itemCollectType = ENTITY_STAMINA_POTION_1;
+	            				gameState->gameModeType = GAME_MODE_ITEM_COLLECT;
+	            				gameState->entityChestToDisplay = entity;
+	            				gameState->inventoryString_mustFree = getInventoryCollectString_mustFree(gameState->itemCollectType, c);
+	            				//////
+
+	            				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
+	            				playGameSound(&globalLongTermArena, gameState->successSound, 0, AUDIO_FOREGROUND);
+
+	            			} else {
+		            			if(entity->dialogType != ENTITY_DIALOG_NULL) {
+									gameState->gameModeType = GAME_MODE_READING_TEXT;
+									gameState->currentTalkText = findDialogInfo(entity->dialogType);
+									gameState->messageIndex = 0; //start at the begining
+
+									WavFile *sound = 0;
+									if(gameState->currentTalkText.audioArray) {
+										Asset *asset = findAsset(gameState->currentTalkText.audioArray[0]);
+										if(asset) {
+											sound = (WavFile *)asset->file;
+										}
 									}
-								}
-								
+									
 
-								if(sound) {
-									gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
-									gameState->talkingNPC->volume = 3.0f;
-								}
+									if(sound) {
+										gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+										gameState->talkingNPC->volume = 3.0f;
+									}
+		            			}	
 	            			}
-	            			
 	            		}	
 	            	} 
 	            }
@@ -1053,6 +1160,20 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		assert(sprite);
 		
 	}
+
+	if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT && entity->type == ENTITY_WIZARD) {
+		sprite = findTextureAsset("player_item_grab.png");
+	}
+
+	if(entity->type == ENTITY_CHEST) {
+
+		if(gameState->entityChestToDisplay == entity) {
+			sprite = findTextureAsset("chest_gold.png");
+		} else if(entity->chestIsOpen) {
+			sprite = findTextureAsset("chest_open.png");
+		}	
+	}
+
 	if(!sprite && !entity->model && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD && entity->type != ENTITY_SHEILD) {
 		//NOTE: If the program is crashing here, it most likely could find a model or sprite on load time that it was looking for 
 
@@ -1115,7 +1236,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	setModelTransform(globalRenderGroup, T);
 	
-	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES) { renderSetShader(globalRenderGroup, &glossProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass) { renderSetShader(globalRenderGroup, &pixelArtProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
 
 	// if(entity->model) {
 	// 	renderSetShader(globalRenderGroup, &phongProgram);
@@ -1206,6 +1327,22 @@ static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worl
 
 static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, splatTexture, COLOR_WHITE, -1, true);
+	return e;
+}
+
+static Entity *initChest(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_CHEST, 0, findTextureAsset("chest.png"), COLOR_WHITE, -1, true);
+	e->T.scale = v3(1, 1, 1);
+	e->T.pos.z = -1;
+
+	return e;
+}
+
+static Entity *initHorse(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_HORSE, 0, findTextureAsset("horse.png"), COLOR_WHITE, -1, true);
+	e->T.scale = v3(5, 5, 5);
+	e->T.pos.z = -2;
+
 	return e;
 }
 

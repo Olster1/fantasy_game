@@ -9,6 +9,8 @@
 	layer: -1.000000;
 	subtype: 0;
 	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 	model: "Fence.obj";
 }

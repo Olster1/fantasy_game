@@ -9,6 +9,7 @@
 	layer: -1.000000;
 	subtype: 0;
 	spriteName: "white texture";
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
 

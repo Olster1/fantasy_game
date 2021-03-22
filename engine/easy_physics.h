@@ -376,6 +376,9 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	EasyCollisionPolygon a = {};
 	EasyCollisionPolygon b = {};
 
+	EasyTransform Ta = *a_->T;
+	EasyTransform Tb = *b_->T;
+
 	V2 aSize = a_->dim2f;
 	V2 bSize = b_->dim2f;
 
@@ -440,6 +443,9 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 	b_->T->pos.z = 0;
 
 	a_->T->pos.x += a_->offset.x;
+	a_->T->pos.y += a_->offset.y;
+
+	b_->T->pos.x += b_->offset.x;
 	b_->T->pos.y += b_->offset.y;
 
 	b_->T->Q = identityQuaternion();
@@ -465,11 +471,9 @@ static inline EasyCollisionOutput EasyPhysics_SolveRigidBodies(EasyCollider *a_,
 		// printf("collision: %f\n", output.distance);
 	}
 
-	b_->T->Q = qb;
-	a_->T->Q = qa;
+	*a_->T = Ta;
+	*b_->T = Tb;
 
-	a_->T->pos.z = az;
-	b_->T->pos.z = bz;
 
 	return output;
 }
@@ -735,7 +739,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                			{
 
-	                				float expandSize = smallestDistance;
+	                				float expandSize = smallestDistance + 0.2f;
 		                			//Scale rigid body by the scale of the _local_ Transform. I think we just want the local transform? 
 		                			V2 hDim = v2(0.5f*b->dim2f.x*scaleB.x + expandSize, 0.5f*b->dim2f.y*scaleB.y + expandSize);
 

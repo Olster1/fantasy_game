@@ -10,8 +10,11 @@
 	subtype: 0;
 	spriteName: "sign";
 	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
 	colliderScale2: 2.000000 2.000000;
+	colliderOffset2: 0.000000 0.000000 0.000000;
 	audioFileName: "Empty";
+	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_WEREWOLF_SIGN";
 }
 
