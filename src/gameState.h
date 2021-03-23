@@ -94,6 +94,7 @@ typedef struct {
 	Animation wizardBottom;
 	Animation wizardLeft;
 	Animation wizardRight;
+	Animation wizardGetItem;
 
 	Animation wizardIdleForward;
 	Animation wizardIdleBottom;
@@ -115,6 +116,11 @@ typedef struct {
 
 	GameModeType gameModeType;
 
+	//Cached Models
+	EasyModel *potionModel;
+
+	///////////
+
 
 	///// INVENTORY MENU attributes ///////
 
@@ -126,7 +132,8 @@ typedef struct {
 	float inventoryBreathSelector;
 
 	//What items the player has equiped to the x, y keys
-	EntityType playerHolding[2];
+	ItemInfo *playerHolding[2]; //pointing to the itemSpots array
+
 	//The animation timer to make them grow when you equip items
 	float animationItemTimersHUD[2];
 
@@ -155,6 +162,7 @@ typedef struct {
 	WavFile *equipItemSound;
 	WavFile *openMenuSound;
 	WavFile *chestOpenSound;
+	WavFile *bubbleSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -180,7 +188,13 @@ typedef struct {
 	EntityType itemCollectType;
 	void *entityChestToDisplay;
 	char *inventoryString_mustFree;
+
+	particle_system collectParticleSystem;
 	/////////////////////////
+
+	//
+	particle_system playerUseItemParticleSystem;
+	///////
 
 	//Message for the message box
 	int messageIndex;
@@ -205,6 +219,11 @@ typedef struct {
 	EasyTransform tempTransform;
 
 	///////////////////////////
+
+	/// Default transform for models
+	EasyTransform tempTransform_model;
+	float rotationUpdate;
+	///////////
 
 	WavFile *playerAttackSounds[3];
 
@@ -237,8 +256,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 
 	//NOTE: Clear out what the player is holding
-	state->playerHolding[0] = ENTITY_SWORD;
-	state->playerHolding[1] = ENTITY_SHEILD;
+	state->playerHolding[0] = 0;
+	state->playerHolding[1] = 0;
 
 	state->itemAnimationCount = 0;
 
@@ -246,7 +265,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->gameIsPaused = false;
 
 	state->openMenuSound = state->equipItemSound = state->clickSound = findSoundAsset("click2.wav");
-	state->chestOpenSound = findSoundAsset("chest_open.wav");;
+	state->chestOpenSound = findSoundAsset("chest_open.wav");
+
+	state->bubbleSound = findSoundAsset("bubble1.wav");
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -256,6 +277,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->spacePrompt = findTextureAsset("space_prompt.png");
 	//////
 
+	// Default Transform to draw models not assigned to entities
+	easyTransform_initTransform(&state->tempTransform_model, v3(0, 0, 0), EASY_TRANSFORM_TRANSIENT_ID);
+	/////////////////////////
 
 
 	//NOTE: Initialize the ui item pickers to nothing
@@ -308,6 +332,60 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->werewolf_restSpeed = 2;
 	state->werewolf_knockback_distance = 700000;
 	state->player_knockback_distance = 600000;
+
+	//////////////////////////////////////
+	state->rotationUpdate = 0;
+
+	/////////////////// INVENTORY PARTICLE SYSTEM//////////////////////////////
+
+    particle_system_settings ps_set = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 3.0f);
+
+    ps_set.VelBias = rect3f(-1, -1, -2, 1, 1, -8);
+    ps_set.posBias = rect3f(-1, -1, 0, 1, 1, 0);
+
+    // ps_set.angleForce = v2(1, 10);
+
+    ps_set.bitmapScale = 0.1f;
+
+    pushParticleBitmap(&ps_set, findTextureAsset("light_03.png"), "particle1");
+    pushParticleBitmap(&ps_set, findTextureAsset("light_01.png"), "particle2");
+
+    InitParticleSystem(&state->collectParticleSystem, &ps_set, 32);
+
+    setParticleLifeSpan(&state->collectParticleSystem, 3.0f);
+
+    state->collectParticleSystem.Active = true;
+    state->collectParticleSystem.Set.Loop = true;
+
+    prewarmParticleSystem(&state->collectParticleSystem, v3(0, 0, -1));
+
+    ////////////////////////////////////////////////////////////////////////////
+
+	/////////////////// USE ITEM PARTICLE SYSTEM//////////////////////////////
+
+    particle_system_settings ps_set1 = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 0.2f);
+
+    ps_set1.VelBias = rect3f(-1, -1, -2, 1, 1, -8);
+    ps_set.posBias = rect3f(-1, -1, 0, 1, 1, 0);
+
+    ps_set1.bitmapScale = 0.3f;
+
+    pushParticleBitmap(&ps_set1, findTextureAsset("light_03.png"), "particle1");
+    pushParticleBitmap(&ps_set1, findTextureAsset("light_01.png"), "particle2");
+
+    InitParticleSystem(&state->playerUseItemParticleSystem, &ps_set1, 16);
+
+    setParticleLifeSpan(&state->playerUseItemParticleSystem, 0.6f);
+
+    state->playerUseItemParticleSystem.Active = false;
+    state->playerUseItemParticleSystem.Set.Loop = false;
+
+    // prewarmParticleSystem(&state->playerUseItemParticleSystem, v3(0, 0, -1));
+
+    ////////////////////////////////////////////////////////////////////////////
+
+
+    
 
 
 	return state;

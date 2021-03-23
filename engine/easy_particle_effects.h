@@ -65,7 +65,7 @@ struct particle_system_settings {
 };
 
 #define CEL_GRID_SIZE 32
-#define DEFAULT_MAX_PARTICLE_COUNT 32
+#define DEFAULT_MAX_PARTICLE_COUNT 128
 
 struct particle_system {
     particle_cel ParticleGrid[CEL_GRID_SIZE][CEL_GRID_SIZE];
@@ -101,19 +101,19 @@ inline void removeParticleBitmap(particle_system_settings *Settings, int index) 
     
 }
 
-internal inline particle_system_settings InitParticlesSettings(ParticleSystemType type) {
+internal inline particle_system_settings InitParticlesSettings(ParticleSystemType type, float maxLifeSpan) {
     particle_system_settings Set = {};
-    Set.MaxLifeSpan = Set.LifeSpan = 3.0f;
+    Set.MaxLifeSpan = Set.LifeSpan = maxLifeSpan;
     Set.bitmapScale = 0.8f;
     Set.type = type;
     Set.pressureAffected = true;
     return Set;
 }
 
-internal inline void InitParticleSystem(particle_system *System, particle_system_settings *Set, unsigned int MaxParticleCount = DEFAULT_MAX_PARTICLE_COUNT) {
+internal inline void InitParticleSystem(particle_system *System, particle_system_settings *Set, int MaxParticleCount_) {
     memset(System, 0, sizeof(particle_system));
     System->Set = *Set;
-    System->MaxParticleCount = DEFAULT_MAX_PARTICLE_COUNT;
+    System->MaxParticleCount = MaxParticleCount_;
     //System->Active = true;
     //System->Set.Loop = true;
     //This is saying we create two particles per frame 
@@ -132,6 +132,42 @@ inline void Reactivate(particle_system *System) {
 
 inline void setParticleLifeSpan(particle_system *partSys, float value) {
     partSys->creationTimer.period = value / partSys->MaxParticleCount;
+}
+
+inline void easyParticles_setSystemLifeSpan(particle_system *partSys, float value) {
+    partSys->Set.MaxLifeSpan = partSys->Set.LifeSpan = value;
+}
+
+inline void easyParticles_initParticle(particle_system *System, particle *Particle, V4 particleTint, V3 Acceleration) {
+    Particle->Color = particleTint;
+        
+    particle_system_settings *Set = &System->Set;
+
+    Particle->dead = false;
+    //NOTE(oliver): Paricles start with motion 
+    Particle->scale = v3(2, 2, 2);
+    Particle->P = v3(randomBetween(System->Set.posBias.min.x, System->Set.posBias.max.x),
+                     randomBetween(System->Set.posBias.min.y, System->Set.posBias.max.y),
+                     randomBetween(System->Set.posBias.min.z, System->Set.posBias.max.z));
+
+    Particle->dP = v3(randomBetween(System->Set.VelBias.min.x, System->Set.VelBias.max.x),
+                      randomBetween(System->Set.VelBias.min.y, System->Set.VelBias.max.y),
+                      randomBetween(System->Set.VelBias.min.z, System->Set.VelBias.max.z));
+
+    Particle->ddP = Acceleration;
+    Particle->lifeAt = 0;
+
+    Particle->angle = randomBetween(System->Set.angleBias.x, System->Set.angleBias.y);
+    Particle->dA = randomBetween(System->Set.angleForce.x, System->Set.angleForce.y);
+
+    Particle->bitmap = 0;
+    if(Set->BitmapCount > 0) {
+        Particle->bitmap = Set->Bitmaps[Set->BitmapIndex++];
+        
+        if(Set->BitmapIndex >= Set->BitmapCount) {
+            Set->BitmapIndex = 0;
+        }
+    }
 }
 
 internal inline void drawAndUpdateParticleSystem(RenderGroup *group, particle_system *System, V3 Origin, float dt, V3 Acceleration, V4 particleTint, bool render) {
@@ -175,38 +211,13 @@ internal inline void drawAndUpdateParticleSystem(RenderGroup *group, particle_sy
                 {
                     particle_system_settings *Set = &System->Set;
                     particle *Particle = System->Particles + System->NextParticle++;
-                    Particle->Color = particleTint;
-                        
-                    Particle->dead = false;
-                    //NOTE(oliver): Paricles start with motion 
-                    Particle->scale = v3(2, 2, 2);
-                    Particle->P = v3(randomBetween(System->Set.posBias.min.x, System->Set.posBias.max.x),
-                                     randomBetween(System->Set.posBias.min.y, System->Set.posBias.max.y),
-                                     randomBetween(System->Set.posBias.min.z, System->Set.posBias.max.z));
-
-                    Particle->dP = v3(randomBetween(System->Set.VelBias.min.x, System->Set.VelBias.max.x),
-                                      randomBetween(System->Set.VelBias.min.y, System->Set.VelBias.max.y),
-                                      randomBetween(System->Set.VelBias.min.z, System->Set.VelBias.max.z));
-
-                    Particle->ddP = Acceleration;
-                    Particle->lifeAt = 0;
-
-                    Particle->angle = randomBetween(System->Set.angleBias.x, System->Set.angleBias.y);
-                    Particle->dA = randomBetween(System->Set.angleForce.x, System->Set.angleForce.y);
-
-                    Particle->bitmap = 0;
-                    if(Set->BitmapCount > 0) {
-                        Particle->bitmap = Set->Bitmaps[Set->BitmapIndex++];
-                        
-                        if(Set->BitmapIndex >= Set->BitmapCount) {
-                            Set->BitmapIndex = 0;
-                        }
-                    }
+                    
+                    easyParticles_initParticle(System, Particle, particleTint, Acceleration);
 
                     if(System->particleCount < System->NextParticle) {
                         System->particleCount = System->NextParticle;
                     }
-                    Particle->dColor = v4_scale(0.002f, v4(1, 1, 1, 1));
+                    // Particle->dColor = v4_scale(0.002f, v4(1, 1, 1, 1));
                     if(System->NextParticle == System->MaxParticleCount) {
                         System->NextParticle = 0;
                     }
@@ -303,7 +314,13 @@ internal inline void drawAndUpdateParticleSystem(RenderGroup *group, particle_sy
             particle *Particle = System->Particles + ParticleIndex;
 
             if(Particle->dead) {
-                deadCount++;
+                if(System->Set.Loop) {
+                    //We loop here to keep the partcle system going 
+                    easyParticles_initParticle(System, Particle, particleTint, Acceleration);
+                    assert(!Particle->dead);
+                } else {
+                    deadCount++;    
+                }
             } else {
                 V3 P = v3_scale(Inv_GridScale, Particle->P);
                 
@@ -426,7 +443,7 @@ internal inline void drawAndUpdateParticleSystem(RenderGroup *group, particle_sy
 
         if(System->Set.finished && deadCount == System->particleCount) {
             if(System->Set.Loop) {
-                Reactivate(System);
+                // Reactivate(System);
             } else {
                 System->Active = false;
             }

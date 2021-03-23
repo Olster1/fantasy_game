@@ -272,6 +272,10 @@ int main(int argc, char *args[]) {
             easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
             loadAndAddImagesStripToAssets_count_offset(&gameState->wizardBottom, "img/fantasy_sprites/man1.png", 41, false, 4, 12);
 
+            easyAnimation_initAnimation(&gameState->wizardGetItem, "wizardGetItem");
+            loadAndAddImagesStripToAssets(&gameState->wizardGetItem, "img/fantasy_sprites/man_getitem.png", 41, false);
+            
+
 
             // easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
             // easyAnimation_pushFrame(&gameState->wizardBottom, "player_down.png");
@@ -425,7 +429,7 @@ int main(int argc, char *args[]) {
                     modelsLoadedNames[i] = nameOfModel;
                 }
 
-
+        gameState->potionModel = findModelAsset_Safe("vial.obj");
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
@@ -704,6 +708,11 @@ int main(int argc, char *args[]) {
            mouseP_worldRay.origin = camera.pos;
            mouseP_worldRay.direction = v3_minus(mouseP_inWorldP, camera.pos);
 
+           gameState->rotationUpdate += appInfo->dt;
+
+           if(gameState->rotationUpdate > TAU32) {
+                gameState->rotationUpdate -= TAU32;
+           }
 
             /////////////////
 
@@ -879,12 +888,31 @@ int main(int argc, char *args[]) {
                 
             }
 
+            //Render the 3d objects the player got from the chest
+            if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
+
+                gameState->tempTransform_model.pos = v3_plus(easyTransform_getWorldPos(&manager->player->T), v3(0, 0, -2.5f));
+                float scale = 3.0f;
+                gameState->tempTransform_model.scale = v3(scale, scale, scale);
+                gameState->tempTransform_model.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
+
+                gameState->tempTransform_model.Q = quaternion_mult(gameState->tempTransform_model.Q, eulerAnglesToQuaternion(gameState->rotationUpdate, 0, 0));
+                // 
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform_model));
+                renderSetShader(globalRenderGroup, &phongProgram);
+                renderModel(globalRenderGroup, gameState->potionModel, COLOR_WHITE);
+            }
+            ///////////////////////////////////
+
             //Render Player holding inventory item
             {
                 for(int i = 0; i < arrayCount(gameState->playerHolding); ++i) {
-                    EntityType type = gameState->playerHolding[i];
+                    ItemInfo *info = gameState->playerHolding[i];
 
-                    if(type != ENTITY_NULL) {
+                    if(info && info->type != ENTITY_NULL) {
+                        
+                        EntityType type = info->type;
 
                         Entity *p = manager->player;
                         EasyTransform T = p->T;
@@ -979,7 +1007,7 @@ int main(int argc, char *args[]) {
                         if(model) {
                             setModelTransform(globalRenderGroup, Tm);
                             renderSetShader(globalRenderGroup, &phongProgram);
-                            renderModel(globalRenderGroup, model, COLOR_WHITE);
+                            // renderModel(globalRenderGroup, model, COLOR_WHITE);
                         }
                     }
 
@@ -1018,6 +1046,16 @@ int main(int argc, char *args[]) {
                     }
                 }
                 
+            }
+
+            //Draw any particle systems
+            {   
+
+                    //DRAW THE PARTICLE SYSTEM
+                    renderSetShader(globalRenderGroup, &textureProgram);
+                    V3 worldP = v3_plus(easyTransform_getWorldPos(&manager->player->T), v3(0, 0, -1.5f));
+                    drawAndUpdateParticleSystem(globalRenderGroup, &gameState->playerUseItemParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GREEN, true);
+                    ///////////////////////////////////////////
             }
 
 
@@ -1944,6 +1982,13 @@ int main(int argc, char *args[]) {
                gameState->gameIsPaused = true;
                //DRAW THE PLAYER HUD
 
+               //DRAW THE PARTICLE SYSTEM
+               renderSetShader(globalRenderGroup, &textureProgram);
+
+               Entity *collectChest = (Entity *)gameState->entityChestToDisplay; 
+               V3 worldP = easyTransform_getWorldPos(&collectChest->T);
+               drawAndUpdateParticleSystem(globalRenderGroup, &gameState->collectParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GOLD, true);
+               ///////////////////////////////////////////
 
               EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
@@ -2002,6 +2047,9 @@ int main(int argc, char *args[]) {
                    gameState->gameIsPaused = false;
                    gameState->itemCollectType = ENTITY_NULL;
                    gameState->entityChestToDisplay = 0;
+
+                   easyAnimation_emptyAnimationContoller(&manager->player->animationController, &gameState->animationFreeList);
+                   easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
 
                    easyPlatform_freeMemory(gameState->inventoryString_mustFree);
                    
@@ -2185,10 +2233,35 @@ int main(int argc, char *args[]) {
                         
 
                         t_todraw = findTextureAsset("inventory_spot1.png");
+
+                        //UPDATE PLAYER EQUIPING ITEM
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
+                            
+                            //NOTE: Equip item sound
+                            playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                            gameState->playerHolding[0] = &gameState->itemSpots[i - 1];
+
+                            gameState->animationItemTimersHUD[0] = 0.0f;
+
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
+                            //NOTE: Equip item sound
+                            playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                            gameState->playerHolding[1] = &gameState->itemSpots[i - 1];
+
+                            gameState->animationItemTimersHUD[1] = 0.0f;
+
+                        }
+                        //////////////////////
                     }
 
 
-                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.4f));
+                    float x = 0.1f*fuaxWidth + xAt;
+                    float y = -0.15f*fuaxHeight + yAt;
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.4f));
                     
                     setModelTransform(globalRenderGroup, T);
                     renderDrawSprite(globalRenderGroup, t_todraw, COLOR_WHITE);
@@ -2198,6 +2271,13 @@ int main(int argc, char *args[]) {
                         renderSetShader(globalRenderGroup, &pixelArtProgram);
                         renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
                         renderSetShader(globalRenderGroup, mainShader);
+
+                        if(itemI->isDisposable) {
+                            float offset = 50;
+                            char *str = easy_createString_printf(&globalPerFrameArena, "%d", itemI->count);
+                            outputTextNoBacking(gameFont, x + 0.5f*fuaxWidth + offset, 0.5f*fuaxHeight - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+                        }
+                        
                         
                     }
                     
@@ -2403,12 +2483,20 @@ int main(int argc, char *args[]) {
 
                 outputTextNoBacking(gameFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
                 
-                if(gameState->playerHolding[0] != ENTITY_NULL) {
+                if(gameState->playerHolding[0] && gameState->playerHolding[0]->type != ENTITY_NULL) {
 
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal0, itemScale*canVal0, 0)), v3(itemPosition1.x + xOffset, itemPosition1.y + yOffset, 0.1f)));
+                    float x = itemPosition1.x + xOffset;
+                    float y = itemPosition1.y + yOffset;
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal0, itemScale*canVal0, 0)), v3(x, y, 0.1f)));
 
-                    Texture *t = getInvetoryTexture(gameState->playerHolding[0]);
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[0]->type);
                     renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                    if(gameState->playerHolding[0]->isDisposable) {
+                        float offset = 50;
+                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
+                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
+                    }
                 }
 
                 setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
@@ -2416,11 +2504,21 @@ int main(int argc, char *args[]) {
 
                 outputTextNoBacking(gameFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
 
-                if(gameState->playerHolding[1] != ENTITY_NULL) {
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(itemPosition2.x + xOffset, itemPosition2.y + yOffset, 0.1f)));
+                if(gameState->playerHolding[1] && gameState->playerHolding[1]->type != ENTITY_NULL) {
 
-                    Texture *t = getInvetoryTexture(gameState->playerHolding[1]);
+                    float x = itemPosition2.x + xOffset;
+                    float y = itemPosition2.y + yOffset;
+
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(x, y, 0.1f)));
+
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[1]->type);
                     renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                    if(gameState->playerHolding[0]->isDisposable) {
+                        float offset = 50;
+                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
+                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
+                    }
 
                 }
 

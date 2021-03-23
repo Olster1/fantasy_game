@@ -310,7 +310,12 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
 
 
 
-static inline void entity_useItem(EntityManager *manager, GameState *gameState, Entity *entity, EntityType type, int itemIndex) {
+static inline void entity_useItem(EntityManager *manager, GameState *gameState, Entity *entity, EntityType type, int itemIndex, float dt) {
+
+	assert(gameState->playerHolding[itemIndex]);
+	if(gameState->playerHolding[itemIndex]->isDisposable && gameState->playerHolding[itemIndex]->count == 0) {
+		return;
+	}
 
 	/////////Play sounds to signify use of item
 	int attackSoundIndex = randomBetween(0, 3);
@@ -322,6 +327,7 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 
 	////////////////////
 
+	bool drawParticleSystem = false;
 	switch(type) {
 		case ENTITY_HEALTH_POTION_1: {
 			entity->health++;
@@ -329,8 +335,9 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			if(entity->health > entity->maxHealth) {
 				entity->health = entity->maxHealth;
 			}
-			//EMPTY OUT THE SPOT
-			gameState->playerHolding[itemIndex] = ENTITY_NULL;
+
+			drawParticleSystem = true;
+			
 			
 		} break;
 		case ENTITY_STAMINA_POTION_1: {
@@ -339,8 +346,10 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			if(entity->stamina > entity->maxStamina) {
 				entity->stamina = entity->maxStamina;
 			}
-			//EMPTY OUT THE SPOT
-			gameState->playerHolding[itemIndex] = ENTITY_NULL;
+			
+			drawParticleSystem = true;
+
+			
 			
 		} break;
 		case ENTITY_SWORD: {
@@ -380,6 +389,15 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 		default: {
 
 		}
+	}
+
+	if(drawParticleSystem) {
+		gameState->playerUseItemParticleSystem.Active = true;
+		playGameSound(&globalLongTermArena, gameState->bubbleSound, 0, AUDIO_FOREGROUND);
+	}
+
+	if(gameState->playerHolding[itemIndex]->isDisposable) {
+		gameState->playerHolding[itemIndex]->count--;
 	}
 
 	
@@ -670,9 +688,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			// playGameSound(&globalLongTermArena, gameState->playerAttackSounds[attackSoundIndex], 0, AUDIO_FOREGROUND);
 
-			if(gameState->playerHolding[1] != ENTITY_NULL) {
-				EntityType type = gameState->playerHolding[1];
-				entity_useItem(manager, gameState, entity, type, 1);
+			if(gameState->playerHolding[1]) {
+				ItemInfo *info = gameState->playerHolding[1];
+				entity_useItem(manager, gameState, entity, info->type, 1, dt);
 				
 			} 
 
@@ -681,16 +699,16 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		} else if(wasPressed(keyStates->gameButtons, BUTTON_Z) && !isPaused) {
 			// animToAdd = &gameState->wizardAttack2;
 
-			if(gameState->playerHolding[0] != ENTITY_NULL) {
-				EntityType type = gameState->playerHolding[0];
-				entity_useItem(manager, gameState, entity, type, 0);
+			if(gameState->playerHolding[0]) {
+				ItemInfo *info = gameState->playerHolding[0];
+				entity_useItem(manager, gameState, entity, info->type, 0, dt);
 			} 
 		} 
 
-		if((wasReleased(keyStates->gameButtons, BUTTON_X) && gameState->playerHolding[1] == ENTITY_SHEILD) ||
-		(wasReleased(keyStates->gameButtons, BUTTON_Z) && gameState->playerHolding[0] == ENTITY_SHEILD)) {
-			entity->shieldInUse = false;
-		}
+		// if((wasReleased(keyStates->gameButtons, BUTTON_X) && gameState->playerHolding[1] && gameState->playerHolding[1]->type == ENTITY_SHEILD) ||
+		// (wasReleased(keyStates->gameButtons, BUTTON_Z) && gameState->playerHolding[0] == ENTITY_SHEILD)) {
+		// 	entity->shieldInUse = false;
+		// }
 
 
 		if(wasPressed(keyStates->gameButtons, BUTTON_2)) {
@@ -712,6 +730,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			animToAdd = &gameState->wizardJump;
 		}
 
+		//Add collect item animation
+		if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
+			animToAdd = &gameState->wizardGetItem;
+		}
 
 		if(animToAdd) {
 
@@ -1161,9 +1183,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 
-	if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT && entity->type == ENTITY_WIZARD) {
-		sprite = findTextureAsset("player_item_grab.png");
-	}
 
 	if(entity->type == ENTITY_CHEST) {
 
