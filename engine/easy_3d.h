@@ -146,7 +146,7 @@ static void easy3d_loadMtl(char *fileName, EasyFile_NameType type) {
                     char *materialName = nullTerminateArena(t.at, t.size, &globalPerFrameArena);
                     char *uniqueName = concatInArena(materialFileName, materialName, &globalLongTermArena);
                     mat->name = uniqueName;
-                    addAssetMaterial(uniqueName, mat);
+                    addAssetMaterial(uniqueName, materialFileName, mat);
                 }
                 if(stringsMatchNullN("Ka", token.at, token.size)) {
                     // if(!hadKdMap && !hadKd) {
@@ -287,7 +287,7 @@ static EasyModel *easy3d_loadObj(char *fileName, EasyModel *model, EasyFile_Name
     //NOTE(ollie): add model to catalog, so add it to asset catalog
     //NOTE(ollie): This function takes the last portion, so don't need to do this. 
     // Although this means it won't be unique. 
-    addAssetModel(fileName, model); 
+    addAssetModel(fileName, fileName, model); 
 
     model->bounds = InverseInfinityRect3f();
 
@@ -467,7 +467,7 @@ static void easy3d_loadCompiledObj_version1(char *modelFileName_global, EasyMode
         model->name = easyString_copyToHeap(header->name);
 
         //NOTE(ollie): Add to asset catalog
-        addAssetModel(model->name, model); 
+        addAssetModel(model->name, modelFileName_global, model); 
         ////////////////////////////////////////////////////////////////////
 
         model->meshCount = 0;

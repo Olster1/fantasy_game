@@ -345,10 +345,12 @@ static void EasyProfile_DrawGraph(EasyProfile_ProfilerDrawState *drawState, floa
 							level++;
 						} else {
 
-							drawState->zoomLevel += (1.0f / drawState->zoomLevel)*0.0005f*keyStates->scrollWheelY*max(dt, 1.0f / 30.0f);
+							//NOTE: This was to stop you scrolling in too fast, but decided to get rid of it
+							//(1.0f / drawState->zoomLevel)*
+							drawState->zoomLevel += 0.0005f*keyStates->scrollWheelY*max(dt, 1.0f / 30.0f);
 
 							if(drawState->zoomLevel < 1.0f) { drawState->zoomLevel = 1.0f; }
-							if(drawState->zoomLevel > 1000.0f) { drawState->zoomLevel = 1000.0f; }
+							if(drawState->zoomLevel > 10000.0f) { drawState->zoomLevel = 1000.0f; }
 
 							assert(ts.type == EASY_PROFILER_POP_SAMPLE);
 							assert(level > 0);
@@ -362,7 +364,7 @@ static void EasyProfile_DrawGraph(EasyProfile_ProfilerDrawState *drawState, floa
 							float barHeight = 0.05f*resolution.y;
 
 							//NOTE(ollie): If the bar can actually been seen do we draw it 
-							// if(barWidth > 5) 
+							if(barWidth > 50) 
 							{ //pixels in a fuax resolution projection
 
 								float expandedSize = (graphWidth - defaultGraphWidth);

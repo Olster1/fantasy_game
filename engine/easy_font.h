@@ -192,16 +192,14 @@ static EasyFont_Font *easyFont_loadFontAtlas(char *fileName, Arena *arena) {
     u32 countAt = 1; 
     while(stillLoading) {
     
-        char buffer0[4096] = {};
-        snprintf(buffer0, arrayCount(buffer0), "%s_%d.txt", fileName, countAt);
+        char *buffer0 = easy_createString_printf(&globalPerFrameArena, "%s_%d.txt", fileName, countAt);
 
         if(!platformDoesFileExist(buffer0)) {
             //NOTE(ollie): No more atlas files to load
             stillLoading = false;
         } else {
         
-            char buffer1[4096] = {};
-            snprintf(buffer1, arrayCount(buffer1), "%s_%d.png", fileName, countAt);
+            char *buffer1 = easy_createString_printf(&globalPerFrameArena, "%s_%d.png", fileName, countAt);
             
             bool premultiplyAlpha = false;
             Texture atlasTex = loadImage(buffer1, TEXTURE_FILTER_LINEAR, false, premultiplyAlpha);
@@ -222,7 +220,6 @@ static EasyFont_Font *easyFont_loadFontAtlas(char *fileName, Arena *arena) {
             
             while(parsing) {
                 EasyToken token = lexGetNextToken(&tokenizer);
-                InfiniteAlloc data = {};
                 switch(token.type) {
                     case TOKEN_NULL_TERMINATOR: {
                         parsing = false;
@@ -247,19 +244,19 @@ static EasyFont_Font *easyFont_loadFontAtlas(char *fileName, Arena *arena) {
                     } break;
                     case TOKEN_WORD: {
                         if(stringsMatchNullN("width", token.at, token.size)) {
-                            imgWidth = getIntFromDataObjects(&data, &tokenizer);
+                            imgWidth = getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("height", token.at, token.size)) {
-                            imgHeight = getIntFromDataObjects(&data, &tokenizer);
+                            imgHeight = getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("fontHeight", token.at, token.size)) {
-                            font->fontHeight = getIntFromDataObjects(&data, &tokenizer);
+                            font->fontHeight = getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("hasTexture", token.at, token.size)) {
-                            hasTexture = (bool)getIntFromDataObjects(&data, &tokenizer);
+                            hasTexture = (bool)getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("uvCoords", token.at, token.size)) {
-                            V4 uv = buildV4FromDataObjects(&data, &tokenizer);
+                            V4 uv = buildV4FromDataObjects(&tokenizer);
                             //copy over to make a rect4 instead of a V4
                             uvCoords.E[0] = uv.E[0];
                             uvCoords.E[1] = uv.E[1];
@@ -267,13 +264,13 @@ static EasyFont_Font *easyFont_loadFontAtlas(char *fileName, Arena *arena) {
                             uvCoords.E[3] = uv.E[3];
                         }
                         if(stringsMatchNullN("xoffset", token.at, token.size)) {
-                            xoffset = getIntFromDataObjects(&data, &tokenizer);
+                            xoffset = getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("yoffset", token.at, token.size)) {
-                            yoffset = getIntFromDataObjects(&data, &tokenizer);
+                            yoffset = getIntFromDataObjects(&tokenizer);
                         }
                         if(stringsMatchNullN("codepoint", token.at, token.size)) {
-                            codepoint = getIntFromDataObjects(&data, &tokenizer);
+                            codepoint = getIntFromDataObjects(&tokenizer);
                         }
                     } break;
                     default: {
@@ -281,6 +278,8 @@ static EasyFont_Font *easyFont_loadFontAtlas(char *fileName, Arena *arena) {
                     }
                 }
             }
+
+            releaseInfiniteAlloc(&tokenizer.typesArray);
 
             easyFile_endFileContents(&contentsText);
         }

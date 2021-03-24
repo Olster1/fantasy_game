@@ -12,15 +12,6 @@ typedef struct {
 	long modTime;
 } Tweaker;
 
-int getHashForString(char *name, int modValue) {
-	int hashValue = 0;
-	for(int i = 0; i < strlen(name); ++i) {
-		hashValue += name[i]*17;
-	}
-
-	hashValue %= modValue;
-	return hashValue;
-}
 
 TweakVar *addTweakVar(Tweaker *tweaker, char *name, InfiniteAlloc *data) {
 	//int hashValue = getHashForString(name, arrayCount(tweaker->vars));
@@ -28,7 +19,7 @@ TweakVar *addTweakVar(Tweaker *tweaker, char *name, InfiniteAlloc *data) {
 	TweakVar *var = tweaker->vars + tweaker->varCount++;
 
 	var->name = name;
-	var->data = *data;
+	easyArray_copyInfiniteAlloc(data, &var->data);
 	assert(var->data.memory);
 
 	return var;
@@ -168,22 +159,26 @@ bool refreshTweakFile(char *fileName, Tweaker *tweaker) {
 		bool parsing = true;
 		while(parsing) {
 		    EasyToken token = lexGetNextToken(&tokenizer);
-		    InfiniteAlloc data = {};
+		    
 		    switch(token.type) {
 		        case TOKEN_NULL_TERMINATOR: {
 		            parsing = false;
 		        } break;
 		        case TOKEN_WORD: {
-		        	data = getDataObjects(&tokenizer);
+		        	InfiniteAlloc *data = getDataObjects(&tokenizer);
 
 		        	char *name = nullTerminate(token.at, token.size);
-		        	addTweakVar(tweaker, name, &data);
+		        	addTweakVar(tweaker, name, data);
+
+		        	tokenizer.typesArray.count = 0;
 		        } break;
 		        default: {
 
 		        }
 		    }
 		}
+
+		releaseInfiniteAlloc(&tokenizer.typesArray);
 
 		free(contents.memory);
 	}

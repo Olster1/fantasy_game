@@ -392,7 +392,7 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 	}
 
 	if(drawParticleSystem) {
-		gameState->playerUseItemParticleSystem.Active = true;
+		Reactivate(&gameState->playerUseItemParticleSystem);
 		playGameSound(&globalLongTermArena, gameState->bubbleSound, 0, AUDIO_FOREGROUND);
 	}
 

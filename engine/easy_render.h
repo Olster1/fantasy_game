@@ -875,7 +875,7 @@ typedef struct {
     VaoHandle *bufferHandles;
 } EasyRender_BatchQuery;
 
-#define RENDER_BATCH_HASH_COUNT 4096
+#define RENDER_BATCH_HASH_COUNT (1 << 12) //4096
 
 typedef struct {
     int currentBufferId;
@@ -952,7 +952,7 @@ static inline u64 easyRender_getBatchKey(EasyRender_BatchQuery *i) {
         result += 11*i->zAt;    
     }
 
-    result %= RENDER_BATCH_HASH_COUNT;
+    result = result & (RENDER_BATCH_HASH_COUNT - 1); //bitshift instead of modulo to speed up
     
     return result;
 } 

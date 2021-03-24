@@ -15,8 +15,9 @@ typedef struct
 typedef struct Asset Asset;
 typedef struct Asset {
     char *name;
+    char *fullFilePath; //to load if it hasn't loaded yet 
 
-	void *file;
+	void *file; //can check this if loaded
 
 	Asset *next;
 } Asset;
@@ -26,7 +27,7 @@ typedef struct {
     AssetType type;
 } EasyAssetIdentifier;
 
-#define GLOBAL_ASSET_ARRAY_SIZE 4096
+#define GLOBAL_ASSET_ARRAY_SIZE (1 << 12) //4096
 //NOTE(ol): This gets allocated in the easy_os when starting up the app
 static Asset **assets = 0;
 
@@ -82,7 +83,7 @@ int getAssetHash(char *at, int maxSize) {
         hashKey += (*at)*19;
         at++;
     }
-    hashKey %= maxSize;
+    hashKey = hashKey & (maxSize - 1);
     return hashKey;
 }
 
@@ -97,7 +98,7 @@ Asset *findAsset(char *fileName) {
     
     while(!found && file) {
         assert(file);
-        assert(file->file);
+        // assert(file->file);
         assert(file->name);
         if(cmpStrNull(fileName, file->name)) {
             result = file;
@@ -115,22 +116,38 @@ inline static EasyModel *findModelAsset_Safe(char *fileName) {
     EasyModel *result = 0;
     if(a) {
         result = (EasyModel *)a->file;
+
+        if(!result) {
+            //Load asset 
+        }
     }
     return result;
 
 }
-#define findModelAsset(fileName) (EasyModel *)findAsset(fileName)->file
-#define findMaterialAsset(fileName) (EasyMaterial *)findAsset(fileName)->file
-#define findTextureAsset(fileName) (Texture *)findAsset(fileName)->file
-#define findSoundAsset(fileName) (WavFile *)findAsset(fileName)->file
-#define findEventAsset(fileName) (Event *)findAsset(fileName)->file
-
 
 static Texture *getTextureAsset(Asset *assetPtr) {
     Texture *result = (Texture *)(assetPtr->file);
+
+    if(!result) {
+        bool premultiplyAlpha = true;
+        
+        Texture texOnStack = loadImage(assetPtr->fullFilePath, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
+        Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
+        memcpy(tex, &texOnStack, sizeof(Texture));
+        
+        assetPtr->file = tex;
+        result = (Texture *)(assetPtr->file);
+    }
+
     assert(result);
     return result;
 }
+
+#define findModelAsset(fileName) (EasyModel *)findAsset(fileName)->file
+#define findMaterialAsset(fileName) (EasyMaterial *)findAsset(fileName)->file
+#define findTextureAsset(fileName) getTextureAsset(findAsset(fileName))
+#define findSoundAsset(fileName) (WavFile *)findAsset(fileName)->file
+#define findEventAsset(fileName) (Event *)findAsset(fileName)->file
 
 static WavFile *getSoundAsset(Asset *assetPtr) {
     WavFile *result = (WavFile *)(assetPtr->file);
@@ -144,12 +161,14 @@ static Event *getEventAsset(Asset *assetPtr) {
     return result;
 }
 
-static Asset *addAsset_(char *fileName, void *asset) { 
+static Asset *addAsset_(char *fileName, char *fullFilePath_, void *asset) { 
     DEBUG_TIME_BLOCK()
     char *truncName = getFileLastPortion(fileName);
     int hashKey = getAssetHash(truncName, GLOBAL_ASSET_ARRAY_SIZE);
     assert(fileName != truncName);
     Asset **filePtr = assets + hashKey;
+
+    char *fullFilePath = easyString_copyToHeap(fullFilePath_);
     
     bool found = false; 
     Asset *result = 0;
@@ -159,6 +178,7 @@ static Asset *addAsset_(char *fileName, void *asset) {
             file = (Asset *)easyPlatform_allocateMemory(sizeof(Asset), EASY_PLATFORM_MEMORY_ZERO);
             file->file = asset;
             file->name = truncName;
+            file->fullFilePath = fullFilePath;
             file->next = 0;
             *filePtr = file;
             result = file;
@@ -185,53 +205,62 @@ static void easyAsset_removeAsset(char *fileName) {
         if(cmpStrNull(fileName, (*file)->name)) {
             Asset *asset = *file;
             easyPlatform_freeMemory(asset->name);
+            easyPlatform_freeMemory(asset->fullFilePath);
 
             *file = asset->next;
 
-            easyPlatform_freeMemory(asset);
+            if(asset) {
+                easyPlatform_freeMemory(asset);    
+            }
+            
         } else {
             file = &(*file)->next;
         }
     }
 }
 
-Asset *addAssetTexture(char *fileName, Texture *asset) { // we have these for type checking
-    Asset *result = addAsset_(fileName, asset);
+Asset *addAssetTexture(char *fileName, char *fullFileName, Texture *asset) { // we have these for type checking
+    Asset *result = addAsset_(fileName, fullFileName, asset);
 
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_TEXTURE);
     return result;
 }
 
-Asset *addAssetSound(char *fileName, WavFile *asset) { // we have these for type checking
-    Asset *result = addAsset_(fileName, asset);
+Asset *addAssetSound(char *fileName, char *fullFileName, WavFile *asset) { // we have these for type checking
+    Asset *result = addAsset_(fileName, fullFileName, asset);
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_SOUND);
     return result;
 }
 
-Asset *addAssetEvent(char *fileName, Event *asset) { // we have these for type checking
-    Asset *result = addAsset_(fileName, asset);
+Asset *addAssetEvent(char *fileName, char *fullFileName, Event *asset) { // we have these for type checking
+    Asset *result = addAsset_(fileName, fullFileName, asset);
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_EVENT);
     return result;
 }
 
-Asset *addAssetMaterial(char *fileName, EasyMaterial *asset) { // we have these for type checking
-    Asset *result = addAsset_(fileName, asset);
+Asset *addAssetMaterial(char *fileName, char *fullFileName, EasyMaterial *asset) { // we have these for type checking
+    assert(asset);
+    Asset *result = addAsset_(fileName, fullFileName, asset);
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_MATERIAL);
     return result;
 }
 
-Asset *addAssetModel(char *fileName, EasyModel *asset) { // we have these for type checking
-    Asset *result = addAsset_(fileName, asset);
+Asset *addAssetModel(char *fileName,char *fullFileName,  EasyModel *asset) { // we have these for type checking
+    Asset *result = addAsset_(fileName, fullFileName, asset);
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_MODEL);
     return result;
 }
 
 Asset *loadImageAsset(char *fileName, bool premultiplyAlpha) {
     DEBUG_TIME_BLOCK()
-    Texture texOnStack = loadImage(fileName, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
-    Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
-    memcpy(tex, &texOnStack, sizeof(Texture));
-    Asset *result = addAssetTexture(fileName, tex);
+    
+    // Texture texOnStack = loadImage(fileName, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
+    // Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
+    // memcpy(tex, &texOnStack, sizeof(Texture));
+
+
+    //We don't load on command now, we only load when asset is used
+    Asset *result = addAssetTexture(fileName, fileName, 0);
     assert(result);
     return result;
 }
@@ -240,7 +269,7 @@ Asset *loadSoundAsset(char *fileName, SDL_AudioSpec *audioSpec) {
     DEBUG_TIME_BLOCK()
     WavFile *sound = (WavFile *)calloc(sizeof(WavFile), 1);
     loadWavFile(sound, fileName, audioSpec);
-    Asset *result = addAssetSound(fileName, sound);
+    Asset *result = addAssetSound(fileName, fileName, sound);
     assert(result);
     //free(fileName);
     return result;

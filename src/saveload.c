@@ -220,7 +220,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
         		while(parsing) {
             		EasyToken token = lexGetNextToken(&tokenizer);
-            		InfiniteAlloc data = {};
+            		InfiniteAlloc *data = 0;
             		switch(token.type) {
                 		case TOKEN_NULL_TERMINATOR: {
 
@@ -229,85 +229,81 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 		case TOKEN_WORD: {
                 			// if(stringsMatchNullN("tag", token.at, token.size)) {
                 			// 	if(gameState->currentRoomTagCount < arrayCount(gameState->currentRoomTags)) {
-                			// 			char *tagString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                			// 			char *tagString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
                 			// 			char *newString = easyString_copyToHeap(tagString, strlen(tagString));
 
                 			// 			gameState->currentRoomTags[gameState->currentRoomTagCount++] = newString;
 
                 			//     		////////////////////////////////////////////////////////////////////
-                			//     		releaseInfiniteAlloc(&data);	
+                			//     		releaseInfiniteAlloc(data);	
                 			// 	} else {
                 			// 		easyConsole_addToStream(DEBUG_globalEasyConsole, "Tags full");
                 			// 	}
     		           	    	
                 			// }
                     		if(stringsMatchNullN("position", token.at, token.size)) {
-                        		position = buildV3FromDataObjects(&data, &tokenizer);
+                        		position = buildV3FromDataObjects(&tokenizer);
                     		}
                     		if(stringsMatchNullN("id", token.at, token.size)) {
-                        		id = getIntFromDataObjects(&data, &tokenizer);
+                        		id = getIntFromDataObjects(&tokenizer);
                         		foundId = true;
                     		}
     						if(stringsMatchNullN("layer", token.at, token.size)) {
-    				    		layer = getFloatFromDataObjects(&data, &tokenizer);
+    				    		layer = getFloatFromDataObjects(&tokenizer);
     						}
     						if(stringsMatchNullN("subtype", token.at, token.size)) {
-    				    		subtype = (SubEntityType)getIntFromDataObjects(&data, &tokenizer);
+    				    		subtype = (SubEntityType)getIntFromDataObjects(&tokenizer);
     						}
 
 
                             if(stringsMatchNullN("renderFirstPass", token.at, token.size)) {
-                                renderFirstPass = getIntFromDataObjects(&data, &tokenizer);
+                                renderFirstPass = getIntFromDataObjects(&tokenizer);
                             }
 
 
                             
                     		// if(stringsMatchNullN("teleporterId", token.at, token.size)) {
                     		// 	assert(idCount < arrayCount(teleporterIds));
-                      //   		teleporterIds[idCount++] = getIntFromDataObjects(&data, &tokenizer);
+                      //   		teleporterIds[idCount++] = getIntFromDataObjects(&tokenizer);
                       //   		wasTeleporter = true;
                     		// }
     		                
                     		if(stringsMatchNullN("scale", token.at, token.size)) {
-                        		scale = buildV3FromDataObjects(&data, &tokenizer);
+                        		scale = buildV3FromDataObjects(&tokenizer);
                     		}
             				if(stringsMatchNullN("colliderScale", token.at, token.size)) {
             					colliderSet = true;
-            		    		colliderScale = buildV2FromDataObjects(&data, &tokenizer);
+            		    		colliderScale = buildV2FromDataObjects(&tokenizer);
             				}
     						if(stringsMatchNullN("colliderScale2", token.at, token.size)) {
     							colliderSet2 = true;
-    				    		colliderScale2 = buildV2FromDataObjects(&data, &tokenizer);
+    				    		colliderScale2 = buildV2FromDataObjects(&tokenizer);
     						}
                             if(stringsMatchNullN("colliderOffset", token.at, token.size)) {
-                                colliderOffset = buildV3FromDataObjects(&data, &tokenizer);
+                                colliderOffset = buildV3FromDataObjects(&tokenizer);
                             }
                             if(stringsMatchNullN("colliderOffset2", token.at, token.size)) {
-                                colliderOffset2 = buildV3FromDataObjects(&data, &tokenizer);
+                                colliderOffset2 = buildV3FromDataObjects(&tokenizer);
                             }
 
 
                     		if(stringsMatchNullN("type", token.at, token.size)) {
-                    			char *typeString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                    			char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
                         		entType = (EntityType)findEnumValue(typeString, MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings));
 
-                        		////////////////////////////////////////////////////////////////////
-                        		releaseInfiniteAlloc(&data);
                     		}
 
                             if(stringsMatchNullN("dialogType", token.at, token.size)) {
-                                char *typeString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
                                 dialogType = (DialogInfoType)findEnumValue(typeString, MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings));
 
-                                ////////////////////////////////////////////////////////////////////
-                                releaseInfiniteAlloc(&data);
                             }
 
                             if(stringsMatchNullN("model", token.at, token.size)) {
-                                char *modelString = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                                char *modelString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
                                 model = findModelAsset_Safe(modelString);
 
@@ -317,33 +313,29 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                                     splatTexture = &globalPinkTexture;
                                 }
 
-                                ////////////////////////////////////////////////////////////////////
-                                releaseInfiniteAlloc(&data);
                             }
 
                             
                     		if(stringsMatchNullN("rotation", token.at, token.size)) {
-                        		V4 rot = buildV4FromDataObjects(&data, &tokenizer);
+                        		V4 rot = buildV4FromDataObjects(&tokenizer);
                         		rotation.E[0] = rot.x;
                         		rotation.E[1] = rot.y;
                         		rotation.E[2] = rot.z;
                         		rotation.E[3] = rot.w;
                     		}
                     		if(stringsMatchNullN("color", token.at, token.size)) {
-                        		color = buildV4FromDataObjects(&data, &tokenizer);
+                        		color = buildV4FromDataObjects(&tokenizer);
                     		}
                     		if(stringsMatchNullN("audioFileName", token.at, token.size)) {
-                        		char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+                        		char *name = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
                         		 audioFile = easyString_copyToHeap(name);
 
-                        		////////////////////////////////////////////////////////////////////
-                        		releaseInfiniteAlloc(&data);
                     		}
 
                             
 
             				if(stringsMatchNullN("spriteName", token.at, token.size)) {
-            		    		char *name = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+            		    		char *name = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
             		    		if(easyString_stringsMatch_nullTerminated(name, "white texture") ) {
             		    			splatTexture = &globalWhiteTexture;
             		    		} else {
@@ -351,8 +343,6 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             		    		}
             		    		
 
-            		    		////////////////////////////////////////////////////////////////////
-            		    		releaseInfiniteAlloc(&data);
             				}
                 		} break;
                 		case TOKEN_CLOSE_BRACKET: {
@@ -368,6 +358,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             		}
         		}
 
+                releaseInfiniteAlloc(&tokenizer.typesArray);
 
     			//Make the entity
     			Entity *newEntity = 0;

@@ -143,7 +143,7 @@ typedef struct {
             float floatVal;
         };
         struct {
-            char stringVal[16000];
+            char *stringVal; //copied onto the perframe arena so don't have to worry about cleaning up
         };
         struct {
             unsigned long intVal;
@@ -154,10 +154,12 @@ typedef struct {
     };
 } DataObject;
 
-InfiniteAlloc getDataObjects(EasyTokenizer *tokenizer) {
+InfiniteAlloc *getDataObjects(EasyTokenizer *tokenizer) {
     bool parsing = true;
-    //TODO: arrays
-    InfiniteAlloc types = initInfinteAlloc(DataObject);
+    if(tokenizer->typesArray.sizeOfMember == 0) { //check if it's been initied yets
+       tokenizer->typesArray = initInfinteAlloc(DataObject);    
+    }
+    
     bool isArray = false;
     while(parsing) {
         char *at = tokenizer->src;
@@ -174,14 +176,15 @@ InfiniteAlloc getDataObjects(EasyTokenizer *tokenizer) {
             case TOKEN_STRING: {
                 DataObject data = {};
                 data.type = VAR_CHAR_STAR;
-                nullTerminateBuffer(data.stringVal, token.at, min(token.size, (arrayCount(data.stringVal) - 1)));
+                data.stringVal = easyString_copyToArena_(token.at, &globalPerFrameArena, token.size);
+                assert(data.stringVal[token.size] == '\0'); //null terminate
                 
-                addElementInifinteAlloc_(&types, &data);
+                addElementInifinteAlloc_(&tokenizer->typesArray, &data);
             } break;
             case TOKEN_INTEGER: {
                 DataObject data = {};
                 data.type = VAR_INT;
-                char charBuffer[256] = {};
+               
                 char *endptr;
                 // int negative = 1;
                 // chat *at = token.at;
@@ -189,20 +192,18 @@ InfiniteAlloc getDataObjects(EasyTokenizer *tokenizer) {
                 //     negative = -1;
                 //     at++;
                 // }
-                unsigned long value = strtoul(nullTerminateBuffer(charBuffer, token.at, token.size), &endptr, 10);
+                unsigned long value = strtoul(easyString_copyToArena_(token.at, &globalPerFrameArena, token.size), &endptr, 10);
                 data.intVal = value;
-                addElementInifinteAlloc_(&types, &data);
+                addElementInifinteAlloc_(&tokenizer->typesArray, &data);
             } break;
             case TOKEN_FLOAT: {
-                char charBuffer[256] = {};
-                nullTerminateBuffer(charBuffer, token.at, token.size);
-                float value = atof(charBuffer);
+                float value = atof(easyString_copyToArena_(token.at, &globalPerFrameArena, token.size));
                 
                 DataObject data = {};
                 data.type = VAR_FLOAT;
                 
                 data.floatVal = value;
-                addElementInifinteAlloc_(&types, &data);
+                addElementInifinteAlloc_(&tokenizer->typesArray, &data);
             } break;
             case TOKEN_BOOL: {
                 DataObject data = {};
@@ -214,7 +215,7 @@ InfiniteAlloc getDataObjects(EasyTokenizer *tokenizer) {
                     //
                 }
                 data.boolVal = value;
-                addElementInifinteAlloc_(&types, &data);
+                addElementInifinteAlloc_(&tokenizer->typesArray, &data);
             } break;
             case TOKEN_COLON: {
                 
@@ -232,7 +233,7 @@ InfiniteAlloc getDataObjects(EasyTokenizer *tokenizer) {
         }
     }
     
-    return types;
+    return &tokenizer->typesArray;
 }
 
 static inline float easyText_getIntOrFloat(DataObject obj) {
@@ -246,8 +247,9 @@ static inline float easyText_getIntOrFloat(DataObject obj) {
     return a;
 }
 
-V2 buildV2FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+V2 buildV2FromDataObjects(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
+
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_FLOAT || objs[0].type == VAR_INT);
     assert(objs[1].type == VAR_FLOAT || objs[0].type == VAR_INT);
@@ -257,13 +259,13 @@ V2 buildV2FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
     
     V2 result = v2(a, b);
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
 
     return result;
 }
 
-V3 buildV3FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+V3 buildV3FromDataObjects(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_FLOAT);
     assert(objs[1].type == VAR_FLOAT);
@@ -271,12 +273,12 @@ V3 buildV3FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
     
     V3 result = v3(objs[0].floatVal, objs[1].floatVal, objs[2].floatVal);
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
     return result;
 }
 
-V4 buildV4FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+V4 buildV4FromDataObjects(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_FLOAT);
     assert(objs[1].type == VAR_FLOAT);
@@ -285,56 +287,58 @@ V4 buildV4FromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
     
     V4 result = v4(objs[0].floatVal, objs[1].floatVal, objs[2].floatVal, objs[3].floatVal);
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
     return result;
 }
 
 //NOTE(ollie): Have to release the memory yourself
-char *getStringFromDataObjects_memoryUnsafe(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+char *getStringFromDataObjects_lifeSpanOfFrame(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_CHAR_STAR);
     
     char *result = objs[0].stringVal;
+
+    data->count = 0; //release the memoy
     
     return result;
 }
 
-#define getIntFromDataObjects(data, tokenizer) (int)getIntFromDataObjects_(data, tokenizer)
-#define getULongFromDataObjects(data, tokenizer) getIntFromDataObjects_(data, tokenizer)
-#define getLongFromDataObjects(data, tokenizer) (long)getIntFromDataObjects_(data, tokenizer)
+#define getIntFromDataObjects(tokenizer) (int)getIntFromDataObjects_(tokenizer)
+#define getULongFromDataObjects(tokenizer) getIntFromDataObjects_(tokenizer)
+#define getLongFromDataObjects(tokenizer) (long)getIntFromDataObjects_(tokenizer)
 
-unsigned long getIntFromDataObjects_(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+unsigned long getIntFromDataObjects_(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_INT);
     
     unsigned long result = objs[0].intVal;
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
     
     return result;
 }
 
-bool getBoolFromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+bool getBoolFromDataObjects(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_BOOL);
     
     bool result = objs[0].boolVal;
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
     return result;
 }
 
 
-float getFloatFromDataObjects(InfiniteAlloc *data, EasyTokenizer *tokenizer) {
-    *data = getDataObjects(tokenizer);
+float getFloatFromDataObjects(EasyTokenizer *tokenizer) {
+    InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_FLOAT);
     
     float result = objs[0].floatVal;
 
-    releaseInfiniteAlloc(data);
+    data->count = 0; //release the memoy
     return result;
 }

@@ -55,7 +55,7 @@ void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolu
 
     	easyAnimation_pushFrame(animation, tempFileName);
 
-    	Asset *result = addAssetTexture(tempFileName, tex);
+    	Asset *result = addAssetTexture(tempFileName, folderNameAbsolute, tex);
 
     	count++;
     }
@@ -95,7 +95,7 @@ void loadAndAddImagesStripToAssets_count_offset_(Animation *animation, char *fol
 
     	easyAnimation_pushFrame(animation, tempFileName);
 
-    	Asset *result = addAssetTexture(tempFileName, tex);
+    	Asset *result = addAssetTexture(tempFileName, folderNameAbsolute, tex);
 
     	count++;
     }
@@ -148,7 +148,7 @@ void loadAndAddImagesStripToAssets_xy_(Animation *animation, char *folderNameAbs
 
 	    	easyAnimation_pushFrame(animation, tempFileName);
 
-	    	Asset *result = addAssetTexture(tempFileName, tex);
+	    	Asset *result = addAssetTexture(tempFileName, folderNameAbsolute, tex);
 
 	    	count++;
 	    }

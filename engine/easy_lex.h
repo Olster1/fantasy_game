@@ -150,6 +150,9 @@ typedef struct {
     bool parsing;
     bool eatWhiteSpace;
     bool parseComments;
+
+    //We keep one infinite alloc for types when we are parsing a 'JSON' file with easy_text_io.h because createing one then freeing it each time was costly
+    InfiniteAlloc typesArray; //We init this in the text_io file if we need it
 } EasyTokenizer;
 
 typedef enum {

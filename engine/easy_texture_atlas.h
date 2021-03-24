@@ -295,7 +295,7 @@ static inline EasyAtlas_Dimensions easyAtlas_drawAtlas(char *folderName, Arena *
 	                        
 						    Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
 						    memcpy(tex, &texOnStack, sizeof(Texture));
-						    Asset *result = addAssetTexture(atlasElm->shortName, tex);
+						    Asset *result = addAssetTexture(atlasElm->shortName, atlasElm->longName, tex);
                         }
 					    easyAtlas_partitionBin(&state, bin, &texOnStack, EASY_ATLAS_PADDING);
 					} else {
@@ -380,11 +380,9 @@ static inline EasyAtlas_Dimensions easyAtlas_drawAtlas(char *folderName, Arena *
 }
 
 static inline void easyAtlas_loadTextureAtlas(char *fileName, RenderTextureFilter filter) {
-	char buffer0[512] = {};
-	sprintf(buffer0, "%s.txt", fileName);
+	char *buffer0 = easy_createString_printf(&globalPerFrameArena, "%s.txt", fileName);
     
-	char buffer1[512] = {};
-	sprintf(buffer1, "%s.png", fileName);
+	char *buffer1 = easy_createString_printf(&globalPerFrameArena, "%s.png", fileName);
 	
 	bool premultiplyAlpha = false;
 	Texture atlasTex = loadImage(buffer1, filter, true, premultiplyAlpha);
@@ -401,7 +399,6 @@ static inline void easyAtlas_loadTextureAtlas(char *fileName, RenderTextureFilte
 	
 	while(parsing) {
 	    EasyToken token = lexGetNextToken(&tokenizer);
-	    InfiniteAlloc data = {};
 	    switch(token.type) {
 	        case TOKEN_NULL_TERMINATOR: {
 	            parsing = false;
@@ -418,26 +415,24 @@ static inline void easyAtlas_loadTextureAtlas(char *fileName, RenderTextureFilte
 	        	tex->aspectRatio_h_over_w = easyRender_getTextureAspectRatio_HOverW(tex);
 	        	tex->name = imageName; 
                 
-	        	Asset *result = addAssetTexture(imageName, tex);
+	        	Asset *result = addAssetTexture(imageName, buffer1, tex);
 	        	assert(result);
 	        } break;
 	        case TOKEN_WORD: {
 	            if(stringsMatchNullN("name", token.at, token.size)) {
-	                char *string = getStringFromDataObjects_memoryUnsafe(&data, &tokenizer);
+	                char *string = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
                     int strSize = strlen(string); 
                     nullTerminateBuffer(imageName, string, min(arrayCount(imageName) - 1, strSize));
 
-                    //NOTE(ollie): release the memory
-                    releaseInfiniteAlloc(&data);
 	            }
 	            if(stringsMatchNullN("width", token.at, token.size)) {
-	                imgWidth = getIntFromDataObjects(&data, &tokenizer);
+	                imgWidth = getIntFromDataObjects(&tokenizer);
 	            }
 	            if(stringsMatchNullN("height", token.at, token.size)) {
-	                imgHeight = getIntFromDataObjects(&data, &tokenizer);
+	                imgHeight = getIntFromDataObjects(&tokenizer);
 	            }
 	            if(stringsMatchNullN("uvCoords", token.at, token.size)) {
-	                V4 uv = buildV4FromDataObjects(&data, &tokenizer);
+	                V4 uv = buildV4FromDataObjects(&tokenizer);
 	                //copy over to make a rect4 instead of a V4
 	                uvCoords.E[0] = uv.E[0];
 	                uvCoords.E[1] = uv.E[1];
@@ -450,6 +445,8 @@ static inline void easyAtlas_loadTextureAtlas(char *fileName, RenderTextureFilte
 	        }
 	    }
 	}
+
+	releaseInfiniteAlloc(&tokenizer.typesArray);
 }	
 
 #define easyAtlas_createTextureAtlas(folderName, ouputFolderName, memoryArena, filter, padding, atlasX, atlasY) easyAtlas_createTextureAtlas_withDownsize(folderName, ouputFolderName, memoryArena, filter, padding, 1, atlasX, atlasY)

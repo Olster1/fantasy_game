@@ -22,8 +22,9 @@ static char *easyString_copyToBuffer(char *at, char *buffer, u32 bufferLen) {
     return buffer;
 }
 
-char *easyString_copyToArena(char *a, Arena *arena) {
-    s32 newStrLen = easyString_getSizeInBytes_utf8(a) + 1;
+#define easyString_copyToArena(a, arena) easyString_copyToArena_(a, area, easyString_getSizeInBytes_utf8(a))
+char *easyString_copyToArena_(char *a, Arena *arena, int newStrLen_) {
+    int newStrLen = newStrLen_ + 1; //for null terminator
     
     char *newString = (char *)pushArray(arena, newStrLen, char);
 

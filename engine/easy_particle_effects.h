@@ -127,7 +127,9 @@ inline void Reactivate(particle_system *System) {
         System->particleCount = 0;    
     }
     
+    System->creationTimer.value_ = 0;
     System->Active = true;
+    System->Set.finished = false;
 }
 
 inline void setParticleLifeSpan(particle_system *partSys, float value) {

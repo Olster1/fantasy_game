@@ -42,7 +42,7 @@ typedef struct ValidIndex {
 #define INCREMENT_COUNT 64
 typedef struct {
     size_t sizeofType;
-    Pool *poolHash[1096]; //should this be a hash table;
+    Pool *poolHash[1 << 10]; // must be power of two 
     Pool *latestPool; 
     u32 poolIdAt;
     
@@ -117,6 +117,17 @@ void *addElementInifinteAllocWithCount_(InfiniteAlloc *arena, void *data, int co
     return memAt;
 }
 
+
+inline void easyArray_copyInfiniteAlloc(InfiniteAlloc *from, InfiniteAlloc *to) {
+    DEBUG_TIME_BLOCK() 
+    to->memory = malloc(from->totalCount*from->sizeOfMember);
+
+    memcpy(to->memory, from->memory, from->count*from->sizeOfMember);
+
+    to->count = from->count;
+    to->totalCount = from->totalCount;
+    to->sizeOfMember = from->sizeOfMember;
+}
 
 
 void releaseInfiniteAlloc(InfiniteAlloc *arena) {
@@ -250,7 +261,8 @@ int addElement_(Array_Dynamic *array, void *elmData, size_t sizeofData) {
 Pool *getPool(Array_Dynamic *array, int poolIndex) {
     DEBUG_TIME_BLOCK()
     //hash table would avoid looking at all the arrays
-    Pool *result = array->poolHash[poolIndex % arrayCount(array->poolHash)];
+    //SLOW: Replace modulus
+    Pool *result = array->poolHash[poolIndex & (arrayCount(array->poolHash) - 1)];
     while(result) {
         if(result->id == poolIndex) {
             break;
