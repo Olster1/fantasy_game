@@ -39,7 +39,7 @@ typedef struct ValidIndex {
     ValidIndex *prev;
 } ValidIndex;
 
-#define INCREMENT_COUNT 64
+#define INCREMENT_COUNT 16 //must be below 64 since it uses a u64 flag to check validity
 typedef struct {
     size_t sizeofType;
     Pool *poolHash[1 << 10]; // must be power of two 
@@ -60,13 +60,15 @@ typedef struct {
     int count;
     int totalCount;
     
+    int expandCount;
     int sizeOfMember;
 } InfiniteAlloc;
 
-void expandMemoryArray_(InfiniteAlloc *arena, int count) {
+#define EASY_ARRAY_DEFAULT_EXPAND_COUNT 1028
+void expandMemoryArray_(InfiniteAlloc *arena, int count, int expandCount) {
     DEBUG_TIME_BLOCK()
     if((arena->count + count) >= arena->totalCount) {
-        int newCount = arena->totalCount + count + 1028;
+        int newCount = arena->totalCount + count + expandCount;
         void *newMem = calloc(newCount*arena->sizeOfMember, 1);
         assert(newMem);
         
@@ -79,13 +81,14 @@ void expandMemoryArray_(InfiniteAlloc *arena, int count) {
     }
 }
 
-#define expandMemoryArray(arena) expandMemoryArray_(arena, 1)
+#define expandMemoryArray(arena) expandMemoryArray_(arena, 1, EASY_ARRAY_DEFAULT_EXPAND_COUNT)
 
 #define initInfinteAlloc(member) initInfinteAlloc_(sizeof(member)) 
 InfiniteAlloc initInfinteAlloc_(int sizeOfMember) {
     DEBUG_TIME_BLOCK()
     InfiniteAlloc result = {};
     result.sizeOfMember = sizeOfMember;
+    result.expandCount = EASY_ARRAY_DEFAULT_EXPAND_COUNT;
     
     return result;
 }
@@ -105,8 +108,8 @@ void *getElementFromAlloc_(InfiniteAlloc *arena, int index)  {
 void *addElementInifinteAllocWithCount_(InfiniteAlloc *arena, void *data, int count) {
     DEBUG_TIME_BLOCK()
     assert(arena->sizeOfMember > 0);
-    expandMemoryArray_(arena, count);
-    assert((arena->count + count) < arena->totalCount);
+    expandMemoryArray_(arena, count, arena->expandCount);
+    assert((arena->count + count) <= arena->totalCount);
     u8 *memAt = (u8 *)arena->memory + (arena->sizeOfMember*arena->count);
     arena->count += count;
     if(data) {

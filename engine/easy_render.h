@@ -875,7 +875,7 @@ typedef struct {
     VaoHandle *bufferHandles;
 } EasyRender_BatchQuery;
 
-#define RENDER_BATCH_HASH_COUNT (1 << 12) //4096
+#define RENDER_BATCH_HASH_COUNT 4096
 
 typedef struct {
     int currentBufferId;
@@ -931,10 +931,10 @@ static inline void easyRender_updateSkyQuad(RenderGroup *g, float zoom, float as
     g->cameraToWorldTransform = viewToWorld;
 }
 
-static inline u64 easyRender_getBatchKey(EasyRender_BatchQuery *i) {
+static inline u32 easyRender_getBatchKey(EasyRender_BatchQuery *i) {
     DEBUG_TIME_BLOCK()
 
-    u64 result = 0;
+    u32 result = 0;
     result += 19*(intptr_t)i->textureHandle;
     result += 23*(intptr_t)i->bufferHandles;
     result += 29*(intptr_t)i->program;
@@ -983,7 +983,7 @@ static inline bool easyRender_canItemBeBatched(RenderItem *i, EasyRender_BatchQu
 
 static inline RenderItem *EasyRender_getRenderItem(RenderGroup *g, EasyRender_BatchQuery *i) {
     DEBUG_TIME_BLOCK()
-    u64 key = easyRender_getBatchKey(i);
+    u32 key = easyRender_getBatchKey(i);
     EasyRenderBatch *batch = g->batches[key];
 
     bool looking = true;

@@ -653,7 +653,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	    ////////////////////////////////////////////////////////////////////
 
-	        rb->dP = v3_minus(rb->dP, v3_scale(0.25f*rb->dragFactor, rb->dP)); 
+	        rb->dP = v3_minus(rb->dP, v3_scale(rb->dragFactor, rb->dP)); 
 
 	        //Decay the forces so it averages out over different frame rates
 			rb->accumForceOnce = NULL_VECTOR3;
@@ -667,6 +667,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	        }
 	    }
 	}
+
 
 
     for (int i = 0; i < colliders->count; ++i)
@@ -691,12 +692,10 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
         ////////////////////////////////////////////////////////////////////
 
-            float smallestDistance = 0.1f;
-            
-            Array_Dynamic hitEnts;
-            initArray(&hitEnts, EasyPhysics_HitBundle);
-
-            // EasyPhysics_HitBundle bundle = {};
+            float smallestDistance = 0.3f;
+	
+			int hitEntCount = 0;            	
+            EasyPhysics_HitBundle hitEnts[32];
 
         ///////////////////////*********** Test for collisions **************////////////////////
 
@@ -708,7 +707,8 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                
 
-	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer) && !(a->isTrigger && b->isTrigger)) {
+	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer) && !(a->isTrigger && b->isTrigger)) 
+	                {
 	                	bool hit = false;
 
 	                	/*
@@ -726,7 +726,8 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                	V3 scaleA = easyTransform_getWorldScale(a->T);
 	                	V3 scaleB = easyTransform_getWorldScale(b->T);
 
-	                	if(!a->isTrigger && !b->isTrigger) {
+	                	if(!a->isTrigger && !b->isTrigger) 
+	                	{
 	                		/*
 								Non trigger collisions
 	                		*/
@@ -785,23 +786,19 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 		                		    
 
 		                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
-										ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&hitEnts);
-										EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)arrayInfo.elm;
-
-										// char str[256];
-										// sprintf(str, "%f %f", out.normal.x, out.normal.y);
-										// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
-		                		        
-		                		        bundle->hitEnt = b;
-		                		        bundle->outputInfo = out;
+		                		    	if(hitEntCount < arrayCount(hitEnts)) {
+											EasyPhysics_HitBundle *bundle = &hitEnts[hitEntCount++];
+			                		        bundle->hitEnt = b;
+			                		        bundle->outputInfo = out;
+		                		    	}
 		                		    }	
 	                			}
 	                		    
 	                		}
 	                	} else {
-	                	/*
-	                		If there is a trigger involved, just do overlap collision detection
-	                	*/
+	       //          	/*
+	       //          		If there is a trigger involved, just do overlap collision detection
+	       //          	*/
 
 	                		assert(!(a->isTrigger && b->isTrigger));
 	                		
@@ -861,16 +858,16 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                	if(hit) {
 
 	                		
-	                		//add collision info
+	                		// add collision info
 	                		EasyCollider_addCollisionInfo(a, b->T->id);
 	                		EasyCollider_addCollisionInfo(b, a->T->id);
 
-	                		// if((a->layer == EASY_COLLISION_LAYER_ITEMS || a->layer == EASY_COLLISION_LAYER_PLAYER) && (b->layer == EASY_COLLISION_LAYER_ITEMS || b->layer == EASY_COLLISION_LAYER_PLAYER)) {
-	                		// 	char string[256];
-	                		// 	sprintf(string, "%d %d", a->collisionCount, b->collisionCount);
-	                		// 	easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+	                		if((a->layer == EASY_COLLISION_LAYER_ITEMS || a->layer == EASY_COLLISION_LAYER_PLAYER) && (b->layer == EASY_COLLISION_LAYER_ITEMS || b->layer == EASY_COLLISION_LAYER_PLAYER)) {
+	                			char string[256];
+	                			sprintf(string, "%d %d", a->collisionCount, b->collisionCount);
+	                			easyConsole_addToStream(DEBUG_globalEasyConsole, string);
 	                			
-	                		// }
+	                		}
 	                	}
 	                }
 	            }
@@ -878,9 +875,9 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
             V2 deltaPos = v2_minus(a->T->pos.xy, lastPos.xy);
 
-            for (int i = 0; i < hitEnts.count; ++i)
+            for (int i = 0; i < hitEntCount; ++i)
             {
-                EasyPhysics_HitBundle *bundle = (EasyPhysics_HitBundle *)getElement(&hitEnts, i);
+                EasyPhysics_HitBundle *bundle = &hitEnts[i];
         		if(bundle->hitEnt) {
         			//CHeck if grounded
         			V2 up = v2(0, 1);

@@ -1,5 +1,5 @@
-#define loadAndAddImagesToAssets(folderName) loadAndAddImagesToAssets_(concatInArena(globalExeBasePath, folderName, &globalPerFrameArena))
-int loadAndAddImagesToAssets_(char *folderNameAbsolute) {
+#define loadAndAddImagesToAssets(folderName, loadImmediate) loadAndAddImagesToAssets_(concatInArena(globalExeBasePath, folderName, &globalPerFrameArena), loadImmediate)
+int loadAndAddImagesToAssets_(char *folderNameAbsolute, bool loadImmediate) {
 	DEBUG_TIME_BLOCK()
 	char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
 	FileNameOfType fileNames = getDirectoryFilesOfType(folderNameAbsolute, imgFileTypes, arrayCount(imgFileTypes));
@@ -13,7 +13,7 @@ int loadAndAddImagesToAssets_(char *folderNameAbsolute) {
 	        assert(!asset);
 	        if(!asset) {
 	        	bool premultiplyAlpha = true;
-	            asset = loadImageAsset(fullName, premultiplyAlpha);
+	            asset = loadImageAsset(fullName, premultiplyAlpha, loadImmediate);
 	        }
 	        asset = findAsset(shortName);
 	        assert(shortName);

@@ -27,7 +27,7 @@ typedef struct {
     AssetType type;
 } EasyAssetIdentifier;
 
-#define GLOBAL_ASSET_ARRAY_SIZE (1 << 12) //4096
+#define GLOBAL_ASSET_ARRAY_SIZE 4096
 //NOTE(ol): This gets allocated in the easy_os when starting up the app
 static Asset **assets = 0;
 
@@ -129,6 +129,7 @@ static Texture *getTextureAsset(Asset *assetPtr) {
     Texture *result = (Texture *)(assetPtr->file);
 
     if(!result) {
+        // assert(false);
         bool premultiplyAlpha = true;
         
         Texture texOnStack = loadImage(assetPtr->fullFilePath, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
@@ -251,16 +252,19 @@ Asset *addAssetModel(char *fileName,char *fullFileName,  EasyModel *asset) { // 
     return result;
 }
 
-Asset *loadImageAsset(char *fileName, bool premultiplyAlpha) {
+Asset *loadImageAsset(char *fileName, bool premultiplyAlpha, bool loadImmediate) {
     DEBUG_TIME_BLOCK()
     
-    // Texture texOnStack = loadImage(fileName, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
-    // Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
-    // memcpy(tex, &texOnStack, sizeof(Texture));
+    Texture *tex = 0;
+    if(loadImmediate) {
+        Texture texOnStack = loadImage(fileName, TEXTURE_FILTER_LINEAR, true, premultiplyAlpha);
+        tex = (Texture *)calloc(sizeof(Texture), 1);
+        memcpy(tex, &texOnStack, sizeof(Texture));
+    }
+    
 
-
-    //We don't load on command now, we only load when asset is used
-    Asset *result = addAssetTexture(fileName, fileName, 0);
+    //We can choose to load images immediately or wait till asked for
+    Asset *result = addAssetTexture(fileName, fileName, tex);
     assert(result);
     return result;
 }

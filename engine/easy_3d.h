@@ -159,7 +159,7 @@ static void easy3d_loadMtl(char *fileName, EasyFile_NameType type) {
                         hadKd = true;
                         assert(mat);
                         mat->defaultDiffuse.xyz = easy3d_makeVector3(&tokenizer);
-                        mat->defaultAmbient.xyz = v3(0, 0, 0);
+                        mat->defaultAmbient.xyz = v3_scale(0.5f, mat->defaultDiffuse.xyz);//v3(0, 0, 0);
                     }
                 }
                 if(stringsMatchNullN("Ks", token.at, token.size)) {

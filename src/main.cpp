@@ -52,15 +52,15 @@ static Texture *getInvetoryTexture(EntityType type) {
 }
 
 //For when you collect your item
-static char *getInventoryCollectString_mustFree(EntityType type, int count) {
+static char *getInventoryCollectString(EntityType type, int count) {
     char *result = "Empty";
     switch(type) {
         case ENTITY_HEALTH_POTION_1: {
-            result = easyString_copyToHeap(easy_createString_printf(&globalPerFrameArena, "You found %d health potions. It looks like it might be good to replenish health.", count));
+            result = easy_createString_printf(&globalPerFrameArena, "You found %d health potions. It looks like it might be good to replenish health.", count);
             // assert(false);
         } break;
         case ENTITY_STAMINA_POTION_1: {
-            result = easyString_copyToHeap(easy_createString_printf(&globalPerFrameArena, "You found %d potions. It looks like it might be good to replenish stamina.", count));
+            result = easy_createString_printf(&globalPerFrameArena, "You found %d potions. It looks like it might be good to replenish stamina.", count);
             // assert(false);
         } break;
         case ENTITY_SWORD: {
@@ -206,9 +206,9 @@ int main(int argc, char *args[]) {
         
         }
 
-        loadAndAddImagesToAssets("img/engine_icons/");
-        loadAndAddImagesToAssets("img/temp_images/");
-        loadAndAddImagesToAssets("img/inventory/");
+        loadAndAddImagesToAssets("img/engine_icons/", false);
+        loadAndAddImagesToAssets("img/temp_images/", false);
+        loadAndAddImagesToAssets("img/inventory/", true);
 
 
         //Setup the gravity if it's on or not. GAMEPLAY: Could be an interesting gameplay feature: magentic rooms
@@ -429,11 +429,11 @@ int main(int argc, char *args[]) {
                     modelsLoadedNames[i] = nameOfModel;
                 }
 
-        gameState->potionModel = findModelAsset_Safe("vial.obj");
+        gameState->potionModel = findModelAsset_Safe("potion.obj");
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "swamp");
+                gameScene_loadScene(gameState, manager, "town");
                 easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
                 easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
         #else
@@ -473,7 +473,7 @@ int main(int argc, char *args[]) {
         EasyFont_Font *gameFont = globalDebugFont;//easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
 
         easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
-        float cameraFollow_yOffset = 30;
+        float cameraFollow_yOffset = 20;
         while(appInfo->running) {
 
             if(refreshTweakFile(tweakerFileName, tweaker)) {
@@ -714,7 +714,7 @@ int main(int argc, char *args[]) {
                 gameState->rotationUpdate -= TAU32;
            }
 
-            /////////////////
+           //  /////////////////
 
              Entity *insideEntity = 0;
             //DEBUG
@@ -816,7 +816,7 @@ int main(int argc, char *args[]) {
 
                 
             }
-            //////////////////////////////////////////
+           //  //////////////////////////////////////////
            //Draw the square to where the mouse is pointing
            {
                V3 hitP;
@@ -846,7 +846,7 @@ int main(int argc, char *args[]) {
 
 
 
-            //DRAW THE TERRATIN FIRST
+           //  //DRAW THE TERRATIN FIRST
             if(gameState->currentTerrainEntity && DEBUG_DRAW_TERRAIN) {
                 Entity *terrainEntity = (Entity *)(gameState->currentTerrainEntity);
                 setModelTransform(globalRenderGroup, easyTransform_getTransform(&terrainEntity->T));
@@ -1016,7 +1016,7 @@ int main(int argc, char *args[]) {
             
 
 
-            ////
+           //  ////
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
@@ -1037,7 +1037,7 @@ int main(int argc, char *args[]) {
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused, EasyCamera_getZAxis(&camera));        
+                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState);        
                 
                     if(e->isDead) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -1300,7 +1300,7 @@ int main(int argc, char *args[]) {
                 editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
 
                 int splatIndexOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN) {
+                if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN) {
                     splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
                 }   
@@ -1428,6 +1428,13 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SIGN: {
                             if(pressed) {
                                 editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
+                                editorState->entityIndex = manager->lastEntityIndex;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_HOUSE: {
+                            if(pressed) {
+                                editorState->entitySelected = initHouse(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
 
                             }
@@ -1668,6 +1675,12 @@ int main(int argc, char *args[]) {
                     easyEditor_pushFloat3(appInfo->editor, "Position: ", &e->T.pos.x, &e->T.pos.y, &e->T.pos.z);
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
+                    if(e->sprite && easyEditor_pushButton(appInfo->editor, "Snap Aspect Ratio")) {
+                        e->T.scale.y = e->sprite->aspectRatio_h_over_w*e->T.scale.x;
+                    }
+
+
+
                     ////////////////////////////////////////////////////////////////////
                     //NOTE(ollie): Rotation with euler angles
                         
@@ -1880,7 +1893,7 @@ int main(int argc, char *args[]) {
             }
 
 
-            ////////////////////////////////////////////////////////////////////
+           //  ////////////////////////////////////////////////////////////////////
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
@@ -1892,7 +1905,7 @@ int main(int argc, char *args[]) {
 
             FrameBuffer *endBuffer = &mainFrameBuffer;
 
-            ////////////////// Draw the Pause menu //////////////////////
+           //  ////////////////// Draw the Pause menu //////////////////////
             if(gameState->gameModeType == GAME_MODE_PAUSE_MENU) {
                 //Make sure game is paused
                 gameState->gameIsPaused = true;
@@ -1974,7 +1987,7 @@ int main(int argc, char *args[]) {
                 fonty += yT;       
             }
 
-            /////////////// Draw the text ///////////////////
+           //  /////////////// Draw the text ///////////////////
 
             if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
 
@@ -2021,7 +2034,7 @@ int main(int argc, char *args[]) {
               // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
               float fonty = fuaxHeight - 0.3f*textBg_height;
 
-              outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), gameState->inventoryString_mustFree, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
+              outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), getInventoryCollectString(gameState->itemCollectType, gameState->itemCollectCount), rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
 
 
               //Draw prompt button to continue
@@ -2051,7 +2064,7 @@ int main(int argc, char *args[]) {
                    easyAnimation_emptyAnimationContoller(&manager->player->animationController, &gameState->animationFreeList);
                    easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
 
-                   easyPlatform_freeMemory(gameState->inventoryString_mustFree);
+                   // easyPlatform_freeMemory(gameState->inventoryString_mustFree);
                    
                }
             }
@@ -2146,7 +2159,7 @@ int main(int argc, char *args[]) {
                 }
 
             }
-            ///////////////////////////
+           //  ///////////////////////////
 
             
             if(gameState->isLookingAtItems) {
@@ -2188,7 +2201,7 @@ int main(int argc, char *args[]) {
                 renderSetShader(globalRenderGroup, &pixelArtProgram);
 
                 float pWidth = 0.3f*fuaxWidth;
-                T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.4f));
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.3f));
                 
                 setModelTransform(globalRenderGroup, T);
                 renderDrawSprite(globalRenderGroup, playerPoseTexture, COLOR_WHITE);
@@ -2269,6 +2282,8 @@ int main(int argc, char *args[]) {
                    
                     if(itemI->type != ENTITY_NULL) {
                         renderSetShader(globalRenderGroup, &pixelArtProgram);
+                         T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.2f));
+                         setModelTransform(globalRenderGroup, T);
                         renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
                         renderSetShader(globalRenderGroup, mainShader);
 
@@ -2325,89 +2340,7 @@ int main(int argc, char *args[]) {
                 easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
                 ////////////////////////////////////////////////////////////////////////////
-                
-                
 
-                //// Code from Drawing the inventory as a circle //////////////////////// 
-
-                // Matrix4 T_ = Matrix4_scale(mat4(), v3(2, 2, 0));
-                // Matrix4 T_1 = Matrix4_scale(mat4(), v3(0.8f, 0.8f, 0));
-
-                
-                // float angle = PI32/2.0f;
-                // float angleUpdate = 2*PI32 / arrayCount(manager->player->itemSpots);
-                // float radius = gameState->lookingAt_animTimer.current*3.5f;
-                // for(int i = 0; i < arrayCount(manager->player->itemSpots); ++i) {
-
-                //     V2 pos = v2(radius*cos(angle), radius*sin(angle));
-
-                //     gameState->animationItemTimers[i].current = lerp(gameState->animationItemTimers[i].current, 8*clamp01(appInfo->dt), gameState->animationItemTimers[i].target);                    
-
-                //     float growthSize = gameState->animationItemTimers[i].current;
-
-                //     if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                //         Texture *t = getInvetoryTexture(manager->player->itemSpots[i]);
-                        
-                //         Matrix4 T = Matrix4_translate(Matrix4_scale(T_1, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.4f));
-                        
-                //         setModelTransform(globalRenderGroup, T);
-                //         renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-                //     }
-
-
-                //     Matrix4 T = Matrix4_translate(Matrix4_scale(T_, v3(growthSize, growthSize, 0)), v3(pos.x, pos.y, 0.5f));
-                //     setModelTransform(globalRenderGroup, T);
-                //     renderDrawSprite(globalRenderGroup, t_square, lightBrownColor);
-
-
-                //     if(i == gameState->indexInItems) {
-                //         Matrix4 T = Matrix4_translate(T_, v3(pos.x, pos.y, 0.6f));
-                //         setModelTransform(globalRenderGroup, T);
-                //         // renderDrawSprite(globalRenderGroup, particleImage, COLOR_GOLD);
-
-                //         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
-                //             if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                //                 //NOTE: Equip item sound
-                //                 playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
-
-                //                 EntityType tempType = gameState->playerHolding[0];
-
-                //                 gameState->playerHolding[0] = manager->player->itemSpots[i];
-
-
-                //                 manager->player->itemSpots[i] = tempType;
-
-                //                 gameState->animationItemTimersHUD[0] = 0.0f;
-
-                //                 //NOTE: This was animating the transfer of the item to the HUD spot, but didn't seen necessary atm?
-                //                 // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
-                //                 // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(v2_scale(0.5f, gameState->fuaxResolution), itemPosition1.xy, gameState->playerHolding[0]);
-
-                //                 // assert(gameState->itemAnimationCount < arrayCount(gameState->item_animations)); 
-                //                 // gameState->item_animations[gameState->itemAnimationCount++] = items_initItemAnimation(itemPosition1.xy, v2_scale(0.5f, gameState->fuaxResolution), player->itemSpots[i]);
-                //             }
-                //         }
-
-                //         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
-                //             if(manager->player->itemSpots[i] != ENTITY_NULL) {
-                //                 //NOTE: Equip item sound
-                //                 playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
-
-                //                 EntityType tempType = gameState->playerHolding[1];
-
-                //                 gameState->playerHolding[1] = manager->player->itemSpots[i];
-
-
-                //                 manager->player->itemSpots[i] = tempType;
-
-                //                 gameState->animationItemTimersHUD[1] = 0.0f;
-
-                //             }
-                //         }
-                    // }
-
-                    // angle += angleUpdate; 
-                // }
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
@@ -2526,7 +2459,8 @@ int main(int argc, char *args[]) {
             }
             ///////
             
-            //NOTE(ollie): Update the console
+            //@MEMORY
+           //  //NOTE(ollie): Update the console
             if(easyConsole_update(&appInfo->console, &consoleKeyStates, appInfo->dt, (resolution.y / resolution.x))) {
                 EasyToken token = easyConsole_getNextToken(&appInfo->console);
                 

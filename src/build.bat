@@ -16,4 +16,4 @@ set commonLinkLibs=..\bin\SDL2.lib ..\bin\SDL2main.lib Winmm.lib opengl32.lib sh
 
 cl %commonCompilerFlags% /DDEVELOPER_MODE=1 /DDESKTOP=1 /DNOMINMAX /Fe../bin/fantasy.exe /I../engine /I ../SDL2 /I../libs /I../libs/gl3w /IE:/include ../src/main.cpp ../libs/gl3w/GL/gl3w.cpp /link %commonLinkLibs% /SUBSYSTEM:WINDOWS ../bin/myres.res
 
-popd
+popd 

@@ -407,6 +407,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     case ENTITY_SIGN: {
                         newEntity = initSign(gameState, manager, position, splatTexture);
                     } break;
+                    case ENTITY_HOUSE: {
+                        newEntity = initHouse(gameState, manager, position, splatTexture);
+                    } break;
                     case ENTITY_WEREWOLF: {
                         newEntity = initWerewolf(gameState, manager, position);
                     } break;

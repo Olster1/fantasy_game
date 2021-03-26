@@ -119,9 +119,12 @@ static bool EasyTransition_updateTransitions(EasyTransitionState *transState, V2
 
         if(timeInfo.finished) {
             if(trans->direction) {
-                assert(trans->data);
-                trans->callback(trans->data);
-
+                if(trans->callback) {
+                    assert(trans->data);
+                    trans->callback(trans->data);
+    
+                }
+                
                 trans->direction = false;
                 turnTimerOn(&trans->timer);
             } else {

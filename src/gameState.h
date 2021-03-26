@@ -17,6 +17,7 @@ FUNC(ENTITY_STAMINA_POTION_1)\
 FUNC(ENTITY_BLOCK_TO_PUSH)\
 FUNC(ENTITY_HORSE)\
 FUNC(ENTITY_CHEST)\
+FUNC(ENTITY_HOUSE)\
 
 
 typedef enum {
@@ -71,6 +72,18 @@ static ItemAnimationInfo items_initItemAnimation(V2 startP, V2 endP, EntityType 
 	result.type = type;
 	return result;
 }
+	
+
+typedef struct {
+	int x;
+	int y;
+
+
+} WorldTile;
+
+typedef struct {
+	// WorldTile tiles[];
+} TileSheet;
 
 typedef struct {
 	Matrix4 orthoFuaxMatrix;
@@ -163,6 +176,7 @@ typedef struct {
 	WavFile *openMenuSound;
 	WavFile *chestOpenSound;
 	WavFile *bubbleSound;
+	WavFile *doorSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -187,7 +201,7 @@ typedef struct {
 	////For when collecting item in the Gamestate = GAME_MODE_ITEM_COLLECT
 	EntityType itemCollectType;
 	void *entityChestToDisplay;
-	char *inventoryString_mustFree;
+	int itemCollectCount;
 
 	particle_system collectParticleSystem;
 	/////////////////////////
@@ -233,6 +247,8 @@ typedef struct {
 
 	EasyTerrainDataPacket terrainPacket;
 
+	TileSheet tileSheet;
+
 	WavFile *successSound;
 	bool gameIsPaused;
 
@@ -268,6 +284,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->chestOpenSound = findSoundAsset("chest_open.wav");
 
 	state->bubbleSound = findSoundAsset("bubble1.wav");
+
+	state->doorSound = findSoundAsset("door_close.wav");
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -407,7 +425,11 @@ static Texture *gameState_findSplatTexture(GameState *gameState, char *textureNa
 	if(!found) {
 
 		easyConsole_addToStream(DEBUG_globalEasyConsole, easy_createString_printf(&globalPerFrameArena, "Couldn't find texture: %s", textureName));
-		found = &globalPinkTexture;
+		found = pushStruct(&globalLongTermArena, Texture);
+		*found = globalPinkTexture;
+
+		//save the texture name so it doesn't get overwritten when we save the level 
+		found->name = textureName;
 	}
 
 	return found;

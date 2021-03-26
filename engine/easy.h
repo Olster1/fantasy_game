@@ -155,6 +155,7 @@ Arena createArena(size_t size) {
     pushSize(&result, size);
     assert(result.pieces);
     assert(result.pieces->memory);
+    result.pieces->currentSize = 0;
     return result;
 }
 

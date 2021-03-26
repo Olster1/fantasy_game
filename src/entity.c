@@ -168,6 +168,29 @@ static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manag
     return result;
 }
 
+static void renderKeyPromptHover(GameState *gameState, Texture *keyTexture, Entity *entity, float dt, bool useScaleY) {
+	entity->tBob += dt;
+
+	V3 scale = easyTransform_getWorldScale(&entity->T);
+
+	float sy = 0.11f;
+	if(useScaleY) {
+		sy = scale.y + 0.5f;
+	}
+
+	V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(sy + 0.1f*sin(entity->tBob))));
+
+	gameState->tempTransform.pos = position;
+	float width = 2;
+	float height = keyTexture->aspectRatio_h_over_w*width;
+
+	gameState->tempTransform.scale.xy = v2(width, height);
+
+	setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+	renderDrawSprite(globalRenderGroup, keyTexture, COLOR_WHITE);
+
+}
+
 static void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool isDisposable) {
 	ItemInfo *info = 0;
 
@@ -404,6 +427,12 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 }
 
 
+static void unpauseGame(void *data) {
+	GameState *gameState = (GameState *)data;
+
+	gameState->gameIsPaused = false;
+}
+
 
 Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim, V2 physicsDim, GameState *gameState, EntityType type, float inverse_weight, Texture *sprite, V4 colorTint, float layer, bool canCollide) {
 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entities);
@@ -500,7 +529,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -563,7 +592,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState) {
 
 
 	if(!isPaused) {
@@ -822,6 +851,30 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 
+	if(entity->type == ENTITY_HOUSE) {
+		if(entity->collider1->collisionCount > 0) {
+
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+            if(info.found) {
+
+            	bool canInteractWith = gameState->gameModeType != GAME_MODE_READING_TEXT && !EasyTransition_InTransition(transitionState);
+
+            	if(canInteractWith) {
+            		// renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, false);
+            		
+            		if(isDown(keyStates->gameButtons, BUTTON_UP)) {
+            			//GO inside the house
+            			playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
+            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, unpauseGame, gameState, EASY_TRANSITION_FADE);//EASY_TRANSITION_CIRCLE_N64);
+            			gameState->gameIsPaused = true;	
+            		}
+        			
+            	}
+            }
+        }
+	}
+
+
 		if(entity->type == ENTITY_SIGN || entity->type == ENTITY_CHEST) {
 			if(entity->collider1->collisionCount > 0) {
 
@@ -835,20 +888,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            	}
 	            	
 	            	if(canInteractWith) {
-	            		entity->tBob += dt;
-
-	            		V3 scale = easyTransform_getWorldScale(&entity->T);
-
-	            		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(scale.y + 0.5f + 0.2f*sin(entity->tBob))));
-
-	            		gameState->tempTransform.pos = position;
-	            		float width = 2;
-	            		float height = gameState->spacePrompt->aspectRatio_h_over_w*width;
-
-	            		gameState->tempTransform.scale.xy = v2(width, height);
-
-	            		setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
-	            		renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+	            		renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, true);
 	            		
 	            		
 	            		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
@@ -867,7 +907,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            				gameState->itemCollectType = ENTITY_STAMINA_POTION_1;
 	            				gameState->gameModeType = GAME_MODE_ITEM_COLLECT;
 	            				gameState->entityChestToDisplay = entity;
-	            				gameState->inventoryString_mustFree = getInventoryCollectString_mustFree(gameState->itemCollectType, c);
+	            				gameState->itemCollectCount = c;
 	            				//////
 
 	            				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
@@ -1349,10 +1389,35 @@ static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP,
 	return e;
 }
 
+static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_HOUSE, 0, splatTexture, COLOR_WHITE, -1, true);
+	float w = 6.0f;
+	e->T.scale = v3(w,  e->sprite->aspectRatio_h_over_w*w, 1);
+	e->T.pos.z = -1.5f;
+
+	e->collider->offset.y = -0.5f*w;
+	e->collider->dim2f.y = 0.5f;
+	e->collider->dim2f.x = 1.1f;
+
+
+	e->collider1->offset.y = -w - 0.5f;
+	e->collider1->dim2f = v2(0.3f, 0.1f);
+	
+
+	return e;
+}
+
 static Entity *initChest(GameState *gameState, EntityManager *manager, V3 worldP) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_CHEST, 0, findTextureAsset("chest.png"), COLOR_WHITE, -1, true);
-	e->T.scale = v3(1, 1, 1);
+	float w = 2;
+	e->T.scale = v3(w, e->sprite->aspectRatio_h_over_w*w, 1);
 	e->T.pos.z = -1;
+
+	e->collider->offset.y = 0.4f;
+	e->collider->dim2f.x = 1.5f;
+
+	e->collider1->offset.y = -2.0f;
+	e->collider1->dim2f = v2(1.0f, 0.5f);
 
 	return e;
 }

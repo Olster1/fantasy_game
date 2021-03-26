@@ -120,6 +120,8 @@ OSAppInfo *easyOS_createApp(char *windowName, V2 *screenDim, bool fullscreen) {
 	globalScratchArena = createArena(Kilobytes(100));
 	////////////////////////////////////////////////////////////////////
 
+	perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
+	
 	OSAppInfo *result = pushStruct(&globalLongTermArena, OSAppInfo);
 	
 	result->valid = true;
@@ -337,7 +339,9 @@ void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
     
     result->transitionState = EasyTransition_initTransitionState(0);
 
+#if EASY_PROFILER_ON
     result->profilerState = EasyProfiler_initProfilerDrawState(); 
+#endif
     ////////////////////////////////////////////////////////////////////
 
     result->running = true;
@@ -357,12 +361,14 @@ void easyOS_beginFrame(V2 resolution, OSAppInfo *appInfo) {
 	DEBUG_TIME_BLOCK()
 	glViewport(0, 0, resolution.x, resolution.y);
 
-	perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
-
 	if(appInfo->firstFrame) {
 		appInfo->lastTime = EasyTime_GetTimeCount();
 		appInfo->firstFrame = false;
+		releaseMemoryMark(&perFrameArenaMark);
 	}
+
+	perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
+
 }
 
 float easyOS_getScreenRatio(V2 screenDim, V2 resolution) {
@@ -427,12 +433,13 @@ static inline void easyOS_endFrame(V2 resolution, V2 screenDim, unsigned int com
 	drawRenderGroup(globalRenderGroup, RENDER_DRAW_DEFAULT);
 	
 	///////////////////////********** Drawing the Profiler Graph ***************////////////////////
+#if EASY_PROFILER_ON
 	renderClearDepthBuffer(compositedFrameBufferId);
 	
 	EasyProfile_DrawGraph(appInfo->profilerState, (resolution.y / resolution.x), &appInfo->keyStates, appInfo->dt, resolution);
 	
 	drawRenderGroup(globalRenderGroup, RENDER_DRAW_SORT);
-	
+#endif
 	////////////////////////////////////////////////////////////////////////////
 	
 	easyOS_updateHotKeys(&appInfo->keyStates);
@@ -529,8 +536,8 @@ static inline void easyOS_endFrame(V2 resolution, V2 screenDim, unsigned int com
     appInfo->lastTime = now;
 
     {
-    DEBUG_TIME_BLOCK_NAMED("release Memory Mark")
-    releaseMemoryMark(&perFrameArenaMark);
+	    DEBUG_TIME_BLOCK_NAMED("release Memory Mark")
+	    releaseMemoryMark(&perFrameArenaMark);
 	}
 }
 

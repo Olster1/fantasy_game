@@ -2,7 +2,7 @@
 
 	id: 381;
 	type: "ENTITY_CHEST";
-	position: 6.000000 -49.000000 -1.000000;
+	position: 6.000000 -48.000000 -1.000000;
 	scale: 2.000000 2.500000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
@@ -12,7 +12,7 @@
 	colliderScale: 2.000000 1.600000;
 	colliderOffset: 0.000000 -0.200000 0.000000;
 	colliderScale2: 1.500000 1.600000;
-	colliderOffset2: 0.000000 -0.400000 0.000000;
+	colliderOffset2: 0.000000 -0.800000 0.000000;
 	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 }
