@@ -230,7 +230,7 @@ typedef struct {
     // V3 diffuse;
     // V3 specular;
 
-    EasyTransform *T; //for drawing model & direction of light, could also effect rdius??
+    EasyTransform *T; //for drawing model & direction of light, could also effect radius??
 
     EasyLightType type;
     float brightness;
@@ -244,6 +244,12 @@ typedef struct {
         };
     };
 } EasyLight;
+
+typedef struct {
+    V3 pos;
+    float brightness;
+    V3 color;
+} EasyLight_2d;
 
 ////////////////////////////////////////////////////////////////////
 
@@ -272,6 +278,7 @@ RenderProgram model3dTo2dImageProgram;
 RenderProgram fontProgram;
 RenderProgram circleTransitionProgram;
 RenderProgram pixelArtProgram;
+RenderProgram pixelArtProgramPlain;
 
 
 FileContents loadShader(char *fileName) {
@@ -905,6 +912,11 @@ typedef struct {
 
     V3 eyePos;
 
+    //for weather. Specific to this project used by pixelArtProgram
+    V4 timeOfDayColor;
+    //
+
+
     Rect2f viewport;
 
     bool cullingEnabled;
@@ -912,6 +924,10 @@ typedef struct {
     EasyLight *lights[EASY_MAX_LIGHT_COUNT];
     EasySkyBox *skybox;
     int lightCount;
+
+    //NOTE: For 2d pixelart lights
+    EasyLight_2d lights2d[EASY_MAX_LIGHT_COUNT];
+    int light2dCountForFrame; //clear each frame
 
     //NOTE: This is for the sky quad
     float fov;
@@ -922,7 +938,20 @@ typedef struct {
     bool initied;
     
 } RenderGroup;
+    
 
+static inline bool easyRender_push2dLight(RenderGroup *g, V3 pos, V3 color, float brightness) {
+    if(g->light2dCountForFrame < arrayCount(g->lights2d)) {
+        EasyLight_2d *l =  g->lights2d + g->light2dCountForFrame++;
+        l->pos = pos;
+        l->color = color;
+        l->brightness = brightness;
+    } else {
+        return false;
+    }
+
+    return true;
+}
 
 
 static inline void easyRender_updateSkyQuad(RenderGroup *g, float zoom, float aspectRatio, Matrix4 viewToWorld) {
@@ -1067,6 +1096,8 @@ void initRenderGroup(RenderGroup *group, float bufferWidth, float bufferHeight) 
 
     group->scissorsEnabled = false;
     group->scissorsTests = initInfinteAlloc(Rect2f);
+
+    group->timeOfDayColor = v4(1, 1, 1, 1);
 
     easyMemory_zeroSize(&group->batches, sizeof(EasyRenderBatch *)*RENDER_BATCH_HASH_COUNT);
 
@@ -1673,9 +1704,13 @@ void enableRenderer(int width, int height, Arena *arena) {
     renderCheckError();
 
 
-    pixelArtProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_pixel_shader, false);
+    pixelArtProgram = createProgramFromFile(vertex_pixelArt_shader, frag_pixel_shader, false);
     renderCheckError();
-   
+
+
+    pixelArtProgramPlain = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_pixel_plain_shader, false);
+    renderCheckError();
+
     circleTransitionProgram = createProgramFromFile(vertex_fullscreen_quad_shader, frag_circle_transition_shader, false);
     renderCheckError();
 
@@ -2653,7 +2688,33 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
             renderCheckError();    
         }
         
-        easy_BindTexture("tex", 3, textureId, program);
+        //bind time of day in uniform
+        if(program == &pixelArtProgram) {
+            glUniform4f(glGetUniformLocation(program->glProgram, "timeOfDayColor"), group->timeOfDayColor.x, group->timeOfDayColor.y, group->timeOfDayColor.z, group->timeOfDayColor.w);
+            renderCheckError(); 
+
+            //Load lights in as uniform
+            for(int i = 0; i < group->light2dCountForFrame; ++i) {
+                EasyLight_2d *l = &group->lights2d[i];
+
+                char uniformStr[512];
+                sprintf(uniformStr,  "lights[%d].pos", i);
+                glUniform3f(glGetUniformLocation(program->glProgram, uniformStr), l->pos.x, l->pos.y, l->pos.z);
+
+                V3 c = v3_scale(l->brightness, l->color);
+
+                sprintf(uniformStr,  "lights[%d].color", i);
+                glUniform3f(glGetUniformLocation(program->glProgram, uniformStr), c.x, c.y, c.z);
+            }
+
+            glUniform1i(glGetUniformLocation(program->glProgram, "lightCount"), group->light2dCountForFrame);
+
+            
+
+
+        }
+
+        easy_BindTexture("tex", 3, textureId, program); //only one texture per draw call
         glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "projection"), 1, GL_FALSE, projectionTransform->E_);
         renderCheckError();
 

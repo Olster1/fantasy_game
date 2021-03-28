@@ -69,6 +69,10 @@ typedef struct {
 	
 	/////
 
+	float lightIntensity;
+	V3 lightColor;
+
+
 	bool renderFirstPass; //Render before entities like terrain so the doesn't affect the depth buffer ordering 
 
 	PlayingSound *currentSound;
@@ -475,6 +479,9 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->tBob = 0;
 	entity->chestIsOpen = false;
 
+	entity->lightIntensity = 2.0f;
+	entity->lightColor = v3(1, 0.5f, 0);
+
 	entity->flashHurtTimer = -1.0f;
 
 	entity->maxStamina = findMaxStamina(type);
@@ -851,6 +858,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 
+	if(entity->type == ENTITY_LAMP_POST) {
+		float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
+		easyRender_push2dLight(globalRenderGroup, v3_plus(easyTransform_getWorldPos(&entity->T), v3(0, 0, -1.5f)), entity->lightColor, entity->lightIntensity*perlinFactor);
+	}
+
 	if(entity->type == ENTITY_HOUSE) {
 		if(entity->collider1->collisionCount > 0) {
 
@@ -865,7 +877,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             		if(isDown(keyStates->gameButtons, BUTTON_UP)) {
             			//GO inside the house
             			playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
-            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, unpauseGame, gameState, EASY_TRANSITION_FADE);//EASY_TRANSITION_CIRCLE_N64);
+            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, unpauseGame, gameState, EASY_TRANSITION_CIRCLE_N64);
             			gameState->gameIsPaused = true;	
             		}
         			
@@ -1273,22 +1285,22 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	//NOTE: We keep track of whether the entity is flipped since we only flip once we move fast a velocity threshold,
 	//		otherwise entities default back to unflipped  
-	if(entity->rb) {
-		if(entity->rb->dP.x < -0.1) {
-			entity->isFlipped = true;
-		} else if(entity->rb->dP.x > 0.1) {
-			entity->isFlipped = false;
-		}
-	}
+	// if(entity->rb) {
+	// 	if(entity->rb->dP.x < -0.1) {
+	// 		entity->isFlipped = true;
+	// 	} else if(entity->rb->dP.x > 0.1) {
+	// 		entity->isFlipped = false;
+	// 	}
+	// }
 
 
 	////////////////////
 	//NOTE: Flip sprite
 	if(entity->isFlipped) {
-		//NOTE: flipSprite
-		// T.E_[0] *= -1;
-		// T.E_[1] *= -1;
-		// T.E_[2] *= -1;
+		// NOTE: flipSprite
+		T.E_[0] *= -1;
+		T.E_[1] *= -1;
+		T.E_[2] *= -1;
 	}
 
 	/////////////////////
@@ -1392,8 +1404,9 @@ static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP,
 static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_HOUSE, 0, splatTexture, COLOR_WHITE, -1, true);
 	float w = 6.0f;
-	e->T.scale = v3(w,  e->sprite->aspectRatio_h_over_w*w, 1);
-	e->T.pos.z = -1.5f;
+	float h = e->sprite->aspectRatio_h_over_w*w;
+	e->T.scale = v3(w,  h, 1);
+	e->T.pos.z = -0.5f*h;
 
 	e->collider->offset.y = -0.5f*w;
 	e->collider->dim2f.y = 0.5f;
@@ -1403,6 +1416,24 @@ static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP
 	e->collider1->offset.y = -w - 0.5f;
 	e->collider1->dim2f = v2(0.3f, 0.1f);
 	
+
+	return e;
+}
+
+static Entity *initLampPost(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_LAMP_POST, 0, splatTexture, COLOR_WHITE, -1, true);
+	
+	float w = 3.0f;
+	float h = e->sprite->aspectRatio_h_over_w*w;
+	e->T.scale = v3(w, h, 1);
+	e->T.pos.z = -0.5f*h;
+
+	e->collider->offset.x = -1.0f;
+	e->collider->offset.y = -1.5f;
+	
+	e->collider->dim2f.x = 0.5f;
+	e->collider->dim2f.y = 0.3f;
+
 
 	return e;
 }

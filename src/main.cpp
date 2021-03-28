@@ -26,6 +26,9 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false;
 #include "gameScene.c"
 #include "editor.h"
 #include "enemy_ai.c"
+#include "game_weather.c"
+
+
 
 static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
@@ -209,6 +212,7 @@ int main(int argc, char *args[]) {
         loadAndAddImagesToAssets("img/engine_icons/", false);
         loadAndAddImagesToAssets("img/temp_images/", false);
         loadAndAddImagesToAssets("img/inventory/", true);
+        loadAndAddImagesToAssets("img/tilesets/", true);
 
 
         //Setup the gravity if it's on or not. GAMEPLAY: Could be an interesting gameplay feature: magentic rooms
@@ -230,14 +234,12 @@ int main(int argc, char *args[]) {
         sunTransform.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
         
         EasyLight *light = easy_makeLight(&sunTransform, EASY_LIGHT_DIRECTIONAL, 1.0f, v3(1, 1, 1));
-        easy_addLight(globalRenderGroup, light);
+        easy_addLight(globalRenderGroup, light); //ignore first light in rendergroup for pixel art programs? 
         
         GameState *gameState = initGameState((resolution.y / resolution.x));
 
-        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+        GameWeatherState *weatherState = initWeatherState();
 
-        
-        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
 
         easyAnimation_initAnimation(&gameState->firePitAnimation, "firepit_idle");
         loadAndAddImagesStripToAssets(&gameState->firePitAnimation, "img/fantasy_sprites/firePlace.png", 64, false);
@@ -357,6 +359,8 @@ int main(int argc, char *args[]) {
 
 
         V4 lightBrownColor = hexARGBTo01Color(0xFFF5DEB3);
+        V4 settingsYellowColor = hexARGBTo01Color(0xFFFEF2C2);
+
         Texture *t_square = findTextureAsset("inventory_equipped.png");
         Texture *particleImage = findTextureAsset("light_03.png");
 
@@ -498,13 +502,13 @@ int main(int argc, char *args[]) {
                 }
             }
 
-            easyOS_processKeyStates(&appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
+            easyOS_processKeyStates(appInfo, &appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
             easyOS_beginFrame(resolution, appInfo);
             
             beginRenderGroupForFrame(globalRenderGroup);
             
             clearBufferAndBind(appInfo->frameBackBufferId, COLOR_BLACK, FRAMEBUFFER_COLOR, 0);
-            clearBufferAndBind(mainFrameBuffer.bufferId, COLOR_WHITE, mainFrameBuffer.flags, globalRenderGroup);
+            clearBufferAndBind(mainFrameBuffer.bufferId, COLOR_BLACK, mainFrameBuffer.flags, globalRenderGroup);
             
             renderEnableDepthTest(globalRenderGroup);
             renderEnableCulling(globalRenderGroup);
@@ -701,7 +705,30 @@ int main(int argc, char *args[]) {
                 consoleKeyStates = {};
                 consoleKeyStates.gameButtons[BUTTON_ESCAPE] = gameKeyStates.gameButtons[BUTTON_ESCAPE];
             }
+            
+            //Update the time of day
+            {
+                weatherState->timeOfDay += weatherState->timeOfDaySpeed*appInfo->dt;
+                while(weatherState->timeOfDay >= 1.0f) {
+                    weatherState->timeOfDay -= 1.0f;
+                }    
+            }
+            
 
+            //SET DAY TIME COLOR
+
+            V4 dayColor = v4(1, 1, 1, 1);
+            float minColor = 0.4f;
+
+            float timeDiff = 1.0f - (2*absVal(weatherState->timeOfDay - 0.5f)); //expand from -0.5f - 0.5f to between 0 - 1
+
+
+            float time = clamp(0.4f, timeDiff, 1);
+            dayColor = v4_scale(time, dayColor);
+            dayColor.w = 1;
+            globalRenderGroup->timeOfDayColor = dayColor;
+
+            ///////////////////////////////////////////////
            
            V3 mouseP_inWorldP = screenSpaceToWorldSpace(perspectiveMatrix, gameKeyStates.mouseP_left_up, resolution, -camera.pos.z, easy3d_getViewToWorld(&camera));
            EasyRay mouseP_worldRay = {};
@@ -833,6 +860,7 @@ int main(int argc, char *args[]) {
                    hitP = roundToGridBoard(hitP);
 
                    outlineTransform.pos = hitP;
+                   outlineTransform.scale = v3(1, 1, 1);
 
                    // easyConsole_pushFloat(DEBUG_globalEasyConsole, outlineTransform.pos.y);
 
@@ -853,6 +881,47 @@ int main(int argc, char *args[]) {
                 renderDrawTerrain2d(globalRenderGroup, v4(1, 1, 1, 1), &gameState->terrainPacket);
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
+
+            if(DEBUG_DRAW_TERRAIN) {
+                Texture *sprite = 0;
+
+                
+                
+                gameState->tempTransform.Q = identityQuaternion();
+
+                gameState->tempTransform.scale = v3(1, 1, 1);
+
+                renderSetShader(globalRenderGroup, &pixelArtProgram);
+
+                for(int i = 0; i < gameState->tileSheet.tileCount; ++i) {
+                    WorldTile *t = gameState->tileSheet.tiles + i;
+
+                    gameState->tempTransform.pos.x = t->x;
+                    gameState->tempTransform.pos.y = t->y;
+                    gameState->tempTransform.pos.z = 0;
+
+                    if(false) {
+
+                    } else if(t->type == WORLD_TILE_GRASS) {
+                        sprite = findTextureAsset("grass_tile.png");
+                    } else if(t->type == WORLD_TILE_LAVA) {
+                        sprite = findTextureAsset("lava_tile.png");
+                    } else if(t->type == WORLD_TILE_ROCK) {
+                        sprite = findTextureAsset("lava_tile.png");
+                    }
+
+                    setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+                    renderDrawSprite(globalRenderGroup, sprite, COLOR_WHITE);
+
+                }
+                
+                gameState->tempTransform.Q = gameState->angledQ;
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            }
+
+
+
             ////////////////////////////
 
             for(int i = 0; i < manager->entities.count; ++i) {
@@ -1212,6 +1281,7 @@ int main(int argc, char *args[]) {
             }
 
 
+
             //DRAW THE PLAYER HUD
             {
 
@@ -1224,15 +1294,29 @@ int main(int argc, char *args[]) {
                 setViewTransform(globalRenderGroup, mat4());
                 setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight));
 
+                //DRAW THE CLOCK
+                {
+                   Texture *clock = findTextureAsset("sun_moon_clock1.png");
+                   float w = 200;
+
+                   Matrix4 Q = quaternionToMatrix(eulerAnglesToQuaternion(0, 0, -TAU32*weatherState->timeOfDay));
+                   
+
+                   Matrix4 T = Mat4Mult(Matrix4_translate(Matrix4_scale(mat4(), v3(w, clock->aspectRatio_h_over_w*w, 0)), v3(fuaxWidth - 200, 200, 0.4f)), Q);
+                   setModelTransform(globalRenderGroup, T);
+                   renderDrawSprite(globalRenderGroup, clock, COLOR_WHITE);
+
+                }
+
                 Entity *p = manager->player;
 
                 float staminaPercent = p->stamina / p->maxStamina;
 
                 float maxBarPixels = 300;
-                float barHeight = 60;
+                float barHeight = 30;
 
-                float x = 0.1*fuaxWidth;  
-                float y = fuaxHeight - (0.1f*fuaxHeight);
+                float x = 0.5*fuaxWidth - 0.6f*maxBarPixels;  
+                float y = (0.1f*fuaxHeight);
 
                 //Stamina points backing
                 Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
@@ -1244,10 +1328,17 @@ int main(int argc, char *args[]) {
 
                 //Stamina points percent bar
                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
-                
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_GREEN);
 
+                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+                setModelTransform(globalRenderGroup, T);
+                renderDrawSprite(globalRenderGroup, findTextureAsset("manabar.png"), COLOR_WHITE);
+
+                // T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.2f));
+                // setModelTransform(globalRenderGroup, T);
+                // renderDrawSprite(globalRenderGroup, findTextureAsset("baroutline.png"), COLOR_WHITE);
+
+                
+                renderSetShader(globalRenderGroup, &textureProgram);
 
 
                 //////////////////////////// HEALTH BAR //////////////////////////////////////////
@@ -1257,7 +1348,7 @@ int main(int argc, char *args[]) {
 
                 assert(healthPercent <= 1.0f);
 
-                y -= 1.5f*barHeight;
+                x = 0.5*fuaxWidth + 0.6f*maxBarPixels;
 
                 //health points backing
                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(maxBarPixels, barHeight, 0)), v3(x, y, 0.4f));
@@ -1273,10 +1364,16 @@ int main(int argc, char *args[]) {
                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.3f));
 
                 // easyConsole_pushFloat(DEBUG_globalEasyConsole, barWidth);
-                
+                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
                 setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, &globalWhiteTexture, COLOR_RED);
+                renderDrawSprite(globalRenderGroup, findTextureAsset("healthbar.png"), COLOR_WHITE);
 
+                // T = Matrix4_translate(Matrix4_scale(mat4(), v3(barWidth, barHeight, 0)), v3(x - xOffset, y, 0.2f));
+                // setModelTransform(globalRenderGroup, T);
+                // renderDrawSprite(globalRenderGroup, findTextureAsset("baroutline.png"), COLOR_WHITE);
+
+
+                renderSetShader(globalRenderGroup, &textureProgram);
                 ///////////////////////////////////////////////////////////////////////
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
@@ -1300,10 +1397,15 @@ int main(int argc, char *args[]) {
                 editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
 
                 int splatIndexOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN) {
+                if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
                     splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
                 }   
+
+                easyEditor_pushSlider(appInfo->editor, "Time of day: ", &weatherState->timeOfDay, 0, 1);
+                easyEditor_pushSlider(appInfo->editor, "Time of Day Speed: ", &weatherState->timeOfDaySpeed, 0, 1);
+
+                
 
                 EasyModel *modelSelected = 0;
 
@@ -1312,6 +1414,15 @@ int main(int argc, char *args[]) {
 
                     modelSelected = allModelsForEditor.array[modelIndex].model;   
 
+                }   
+
+                WorldTileType tileType;
+                EditorTileOption tilerMode;
+
+
+                if(editorState->createMode ==  EDITOR_CREATE_TILE_MODE) {
+                    editorState->tileType = (WorldTileType)easyEditor_pushList(appInfo->editor, "Tile Type: ", MyTiles_TileTypeStrings, arrayCount(MyTiles_TileTypeStrings));
+                    editorState->tileOption = (EditorTileOption)easyEditor_pushList(appInfo->editor, "Tile Mode: ", MyTiles_editorOptionStrings, arrayCount(MyTiles_editorOptionStrings));
                 }
                 
 
@@ -1341,9 +1452,65 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
                         } break;
+                        case EDITOR_CREATE_TILE_MODE: {
+                            if(editorState->tileOption == EDITOR_TILE_SINGLE) {
+                                if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                    if(!addWorldTile(gameState, hitP.x, hitP.y, editorState->tileType)) {
+                                        easyFlashText_addText(&globalFlashTextManager, "Tile Array Full. Make bigger!");
+                                    }
+                                }
+                            } else if(editorState->tileOption == EDITOR_TILE_DRAG) {
+                                if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                    editorState->topLeftCornerOfTile = hitP.xy;
+                                }
+
+                                if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                    //draw the outline
+                                    V2 diff = v2_minus(hitP.xy, editorState->topLeftCornerOfTile);
+
+
+                                    outlineTransform.pos.xy = v2_plus(editorState->topLeftCornerOfTile, v2_scale(0.5f, diff));
+                                    outlineTransform.scale.xy = diff; 
+
+                                    Matrix4 outlineT = easyTransform_getTransform(&outlineTransform);
+                                    setModelTransform(globalRenderGroup, outlineT);
+                                    renderDrawSprite(globalRenderGroup, outlineSprite, COLOR_WHITE);
+
+                                }
+
+                                bool ranOutOfTileRoom = false;
+                                if(wasReleased(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                    V2 diff = v2_minus(hitP.xy, editorState->topLeftCornerOfTile);
+
+                                    int w = (int)absVal(diff.x);
+                                    int h = (int)absVal(diff.y);
+                                    for(int i = 0; i < h && !ranOutOfTileRoom; ++i) {
+                                        for(int j = 0; j < w && !ranOutOfTileRoom; ++j) {
+                                            ranOutOfTileRoom = !addWorldTile(gameState, j + editorState->topLeftCornerOfTile.x, editorState->topLeftCornerOfTile.y - i, editorState->tileType);
+                                        }    
+                                    }
+
+                                    char str[256];
+                                    sprintf(str, "%d", w*h);
+                                    easyFlashText_addText(&globalFlashTextManager, str);
+                                   
+                                }
+
+                                if(ranOutOfTileRoom) {
+                                     easyFlashText_addText(&globalFlashTextManager, "Tile Array Full. Make bigger!");
+                                }   
+                            }
+                        } break;
                         case EDITOR_CREATE_BLOCK_TO_PUSH: {
                             if(pressed) {
                                 editorState->entitySelected = initPushRock(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                            }
+                        } break;
+                        case EDITOR_CREATE_LAMP_POST: {
+                            if(pressed) {
+                                editorState->entitySelected = initLampPost(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                             }
@@ -1675,6 +1842,10 @@ int main(int argc, char *args[]) {
                     easyEditor_pushFloat3(appInfo->editor, "Position: ", &e->T.pos.x, &e->T.pos.y, &e->T.pos.z);
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
+                    if(e->type == ENTITY_LAMP_POST) {
+                        easyEditor_pushFloat1(appInfo->editor, "Light: ", &e->lightIntensity);
+                    }
+
                     if(e->sprite && easyEditor_pushButton(appInfo->editor, "Snap Aspect Ratio")) {
                         e->T.scale.y = e->sprite->aspectRatio_h_over_w*e->T.scale.x;
                     }
@@ -1780,6 +1951,19 @@ int main(int argc, char *args[]) {
 
                     if(easyEditor_pushButton(appInfo->editor, "Let Go")) {
                         editorState->entitySelected = 0;
+                    }
+
+                    if(easyEditor_pushButton(appInfo->editor, "Flip")) {
+                        e->isFlipped = !e->isFlipped;
+
+                        if(e->isFlipped) {
+                            if(e->collider) {
+                                e->collider->offset.x *= -1;
+                            }
+                            if(e->collider1) {
+                                e->collider1->offset.x *= -1;
+                            }
+                        }
                     }
 
                     if(easyEditor_pushButton(appInfo->editor, "Duplicate")) {
@@ -1897,7 +2081,102 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-            
+            /////////////////////////////////////////////////////
+             //NOTE: Draw what the player is holding
+            {
+
+                Matrix4 T_1 = Matrix4_scale(mat4(), v3(100, 100, 0));
+                Matrix4 item_T = Matrix4_scale(mat4(), v3(40, 40, 0));
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, gameState->orthoFuaxMatrix);
+
+                for(int i = 0; i < gameState->itemAnimationCount; ) {
+
+                    int increment = 1;
+                    ItemAnimationInfo *anim = &gameState->item_animations[i];
+                    assert(anim->tAt >= 0);
+
+                    anim->tAt += appInfo->dt;
+
+                    float canVal = anim->tAt / 0.3f;
+
+                    V2 P = lerpV2(anim->startP, canVal, anim->endP);
+
+                    Texture *t = getInvetoryTexture(anim->type);
+                    Matrix4 T = Matrix4_translate(item_T, v3(P.x, P.y, 0.1f));
+                    
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+
+                    if(canVal >= 1.0f) {
+                        increment = 0;
+                        anim->tAt = -1;
+                        gameState->item_animations[i] = gameState->item_animations[--gameState->itemAnimationCount];
+                    }
+
+                    i += increment;
+                }
+                
+
+                //Update the HUD item spots animations
+                float canVal0 = 1;
+                float canVal1 = 1;
+                if(gameState->animationItemTimersHUD[0] >= 0.0f) { gameState->animationItemTimersHUD[0] += appInfo->dt; canVal0 = gameState->animationItemTimersHUD[0]/0.5f; if(canVal0 >= 1.0f) { gameState->animationItemTimersHUD[0] = -1.0f; } canVal0 = smoothStep00(1, canVal0, 2.5f); }
+                if(gameState->animationItemTimersHUD[1] >= 0.0f) { gameState->animationItemTimersHUD[1] += appInfo->dt; canVal1 = gameState->animationItemTimersHUD[1]/0.5f; if(canVal1 >= 1.0f) { gameState->animationItemTimersHUD[1] = -1.0f; } canVal1 = smoothStep00(1, canVal1, 2.5f); }
+                    
+                float itemScale = 1.4f;
+
+                float xOffset = 8;
+                float yOffset = 8;
+                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal0, canVal0, 0)), itemPosition1));
+                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
+
+                outputTextNoBacking(gameFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
+                
+                if(gameState->playerHolding[0] && gameState->playerHolding[0]->type != ENTITY_NULL) {
+
+                    float x = itemPosition1.x + xOffset;
+                    float y = itemPosition1.y + yOffset;
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal0, itemScale*canVal0, 0)), v3(x, y, 0.1f)));
+
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[0]->type);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                    if(gameState->playerHolding[0]->isDisposable) {
+                        float offset = 50;
+                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
+                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
+                    }
+                }
+
+                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
+                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
+
+                outputTextNoBacking(gameFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
+
+                if(gameState->playerHolding[1] && gameState->playerHolding[1]->type != ENTITY_NULL) {
+
+                    float x = itemPosition2.x + xOffset;
+                    float y = itemPosition2.y + yOffset;
+
+                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(x, y, 0.1f)));
+
+                    Texture *t = getInvetoryTexture(gameState->playerHolding[1]->type);
+                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                    if(gameState->playerHolding[0]->isDisposable) {
+                        float offset = 50;
+                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
+                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
+                    }
+
+                }
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            }
+            ///////
 
             
             //NOTE(ollie): Make sure the transition is on top
@@ -1924,58 +2203,102 @@ int main(int argc, char *args[]) {
                 setViewTransform(globalRenderGroup, mat4());
                 setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
 
-
-                char *pauseMenuItems[] = { "Continue", "Settings", "Exit" };
-
-                float yT = fuaxHeight / (float)(arrayCount(pauseMenuItems) + 1);
-
-                float fonty = yT;
-
-
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
-                    gameState->currentMenuIndex++;
-
-                   if(gameState->currentMenuIndex >= arrayCount(pauseMenuItems)) {
-                       gameState->currentMenuIndex = arrayCount(pauseMenuItems) - 1;
-                   }
+                //Draw backing 
+                {
+                    Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, fuaxHeight, 0)), v3(0, 0, 0.6f));
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawQuad(globalRenderGroup, v4(0, 0, 0, 0.7f));
+    
                 }
+                
 
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
-                    gameState->currentMenuIndex--;
+                if(gameState->pauseMenu_subType == GAME_PAUSE_MENU_MAIN) {
 
-                    if(gameState->currentMenuIndex <= 0) {
-                        gameState->currentMenuIndex = 0;
+                    char *pauseMenuItems[] = { "Continue", "Settings", "Exit" };
+
+                    float yT = fuaxHeight / (float)(arrayCount(pauseMenuItems) + 1);
+
+                    float fonty = yT;
+
+
+                    if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
+                        gameState->currentMenuIndex++;
+
+                       if(gameState->currentMenuIndex >= arrayCount(pauseMenuItems)) {
+                           gameState->currentMenuIndex = arrayCount(pauseMenuItems) - 1;
+                       } else {
+                        playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
+                       }
                     }
-                }
 
-                for(int i = 0; i < arrayCount(pauseMenuItems); ++i) {
-                    char *title = pauseMenuItems[i];
+                    if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
+                        gameState->currentMenuIndex--;
 
-                    V4 color = COLOR_WHITE;
-                    if(gameState->currentMenuIndex == i) {
-                        color = COLOR_GOLD;
-
-                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
-                            if(gameState->currentMenuIndex == 0) {
-                                gameState->gameModeType = GAME_MODE_PLAY;
-                                gameState->gameIsPaused = false;
-
-                            }
+                        if(gameState->currentMenuIndex < 0) {
+                            gameState->currentMenuIndex = 0;
+                        } else {
+                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
                         }
                     }
 
-                    //Draw the text
-                    V2 size = getBounds(title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
-                     
-                    float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
-                    
+                    for(int i = 0; i < arrayCount(pauseMenuItems); ++i) {
+                        char *title = pauseMenuItems[i];
 
-                    
+                        V4 color = COLOR_WHITE;
+                        if(gameState->currentMenuIndex == i) {
+                            color = COLOR_GOLD;
 
-                    outputTextNoBacking(gameFont, fontx, fonty, 0.1f, gameState->fuaxResolution, title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 2, true, 1);
-                    /////////////////////////
+                            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+                                if(gameState->currentMenuIndex == 0) {
+                                    gameState->gameModeType = GAME_MODE_PLAY;
+                                    gameState->gameIsPaused = false;
+                                    gameState->pauseMenu_subType = GAME_PAUSE_MENU_MAIN;
 
-                    fonty += yT;
+                                }
+
+                                if(gameState->currentMenuIndex == 1) { //settings
+                                     gameState->pauseMenu_subType = GAME_PAUSE_MENU_SETTINGS;
+                                }
+
+                                if(gameState->currentMenuIndex == 2) { //exit
+                                    appInfo->running = false;
+                                }
+                            }
+                        }
+
+                        //Draw the text
+                        V2 size = getBounds(title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
+                         
+                        float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+                        
+
+                        
+
+                        outputTextNoBacking(gameFont, fontx, fonty, 0.1f, gameState->fuaxResolution, title, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 2, true, 1);
+                        /////////////////////////
+
+                        fonty += yT;
+                    }
+                } else if(gameState->pauseMenu_subType == GAME_PAUSE_MENU_SETTINGS) {
+                    Texture *controllerSheetT = findTextureAsset("controller_sheet.jpg");
+
+                    ///Color background yellow
+                    Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth,fuaxHeight, 0)), v3(0, 0, 0.5f));
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawQuad(globalRenderGroup, settingsYellowColor);    
+                    ///////////////////////
+
+                    float h = 0.9f*fuaxHeight;
+                    //Draw prompt button to continue
+                    float aspectRatio = 1.0f / controllerSheetT->aspectRatio_h_over_w;
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(h*aspectRatio, h, 0)), v3(0, 0, 0.4f));
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, controllerSheetT, COLOR_WHITE);
+                    ///////
+
+                    if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ESCAPE)) {
+                        gameState->pauseMenu_subType = GAME_PAUSE_MENU_MAIN;
+                    }   
                 }
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
@@ -1983,8 +2306,6 @@ int main(int argc, char *args[]) {
                 renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
                 easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);  
-
-                fonty += yT;       
             }
 
            //  /////////////// Draw the text ///////////////////
@@ -2198,7 +2519,7 @@ int main(int argc, char *args[]) {
                 //DRAW PLAYER
                 Texture *playerPoseTexture = findTextureAsset("player_pose.png");
 
-                renderSetShader(globalRenderGroup, &pixelArtProgram);
+                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
 
                 float pWidth = 0.3f*fuaxWidth;
                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.3f));
@@ -2363,101 +2684,6 @@ int main(int argc, char *args[]) {
                 }
             }
 
-             //NOTE: Draw what the player is holding
-            {
-
-                Matrix4 T_1 = Matrix4_scale(mat4(), v3(100, 100, 0));
-                Matrix4 item_T = Matrix4_scale(mat4(), v3(40, 40, 0));
-
-                setViewTransform(globalRenderGroup, mat4());
-                setProjectionTransform(globalRenderGroup, gameState->orthoFuaxMatrix);
-
-                for(int i = 0; i < gameState->itemAnimationCount; ) {
-
-                    int increment = 1;
-                    ItemAnimationInfo *anim = &gameState->item_animations[i];
-                    assert(anim->tAt >= 0);
-
-                    anim->tAt += appInfo->dt;
-
-                    float canVal = anim->tAt / 0.3f;
-
-                    V2 P = lerpV2(anim->startP, canVal, anim->endP);
-
-                    Texture *t = getInvetoryTexture(anim->type);
-                    Matrix4 T = Matrix4_translate(item_T, v3(P.x, P.y, 0.1f));
-                    
-                    setModelTransform(globalRenderGroup, T);
-                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-
-
-                    if(canVal >= 1.0f) {
-                        increment = 0;
-                        anim->tAt = -1;
-                        gameState->item_animations[i] = gameState->item_animations[--gameState->itemAnimationCount];
-                    }
-
-                    i += increment;
-                }
-                
-
-                //Update the HUD item spots animations
-                float canVal0 = 1;
-                float canVal1 = 1;
-                if(gameState->animationItemTimersHUD[0] >= 0.0f) { gameState->animationItemTimersHUD[0] += appInfo->dt; canVal0 = gameState->animationItemTimersHUD[0]/0.5f; if(canVal0 >= 1.0f) { gameState->animationItemTimersHUD[0] = -1.0f; } canVal0 = smoothStep00(1, canVal0, 2.5f); }
-                if(gameState->animationItemTimersHUD[1] >= 0.0f) { gameState->animationItemTimersHUD[1] += appInfo->dt; canVal1 = gameState->animationItemTimersHUD[1]/0.5f; if(canVal1 >= 1.0f) { gameState->animationItemTimersHUD[1] = -1.0f; } canVal1 = smoothStep00(1, canVal1, 2.5f); }
-                    
-                float itemScale = 1.4f;
-
-                float xOffset = 8;
-                float yOffset = 8;
-                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal0, canVal0, 0)), itemPosition1));
-                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
-
-                outputTextNoBacking(gameFont, itemPosition1.x - 40, gameState->fuaxResolution.y - itemPosition1.y + 40, 0.1f, gameState->fuaxResolution, "Z", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
-                
-                if(gameState->playerHolding[0] && gameState->playerHolding[0]->type != ENTITY_NULL) {
-
-                    float x = itemPosition1.x + xOffset;
-                    float y = itemPosition1.y + yOffset;
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal0, itemScale*canVal0, 0)), v3(x, y, 0.1f)));
-
-                    Texture *t = getInvetoryTexture(gameState->playerHolding[0]->type);
-                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-
-                    if(gameState->playerHolding[0]->isDisposable) {
-                        float offset = 50;
-                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
-                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
-                    }
-                }
-
-                setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(T_1, v3(canVal1, canVal1, 0)), itemPosition2));
-                renderDrawSprite(globalRenderGroup, t_square, COLOR_WHITE);
-
-                outputTextNoBacking(gameFont, itemPosition2.x - 40, gameState->fuaxResolution.y - itemPosition2.y + 40, 0.1f, gameState->fuaxResolution, "X", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1, true, 1);
-
-                if(gameState->playerHolding[1] && gameState->playerHolding[1]->type != ENTITY_NULL) {
-
-                    float x = itemPosition2.x + xOffset;
-                    float y = itemPosition2.y + yOffset;
-
-                    setModelTransform(globalRenderGroup, Matrix4_translate(Matrix4_scale(item_T, v3(itemScale*canVal1, itemScale*canVal1, 0)), v3(x, y, 0.1f)));
-
-                    Texture *t = getInvetoryTexture(gameState->playerHolding[1]->type);
-                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-
-                    if(gameState->playerHolding[0]->isDisposable) {
-                        float offset = 50;
-                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
-                        outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
-                    }
-
-                }
-
-                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-            }
-            ///////
             
             //@MEMORY
            //  //NOTE(ollie): Update the console
@@ -2572,6 +2798,9 @@ int main(int argc, char *args[]) {
             }
 
             //////////////////////////////////////////////////////////////////////////////////////////////
+
+            //clear 2d lights from render group
+            globalRenderGroup->light2dCountForFrame = 0;
 
             easyOS_endFrame(resolution, screenDim, endBuffer->bufferId, appInfo, appInfo->hasBlackBars);
             DEBUG_TIME_BLOCK_FOR_FRAME_END(beginFrame, wasPressed(appInfo->keyStates.gameButtons, BUTTON_F4))

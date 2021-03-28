@@ -160,7 +160,7 @@ inline bool easyConsole_update(EasyConsole *c, AppKeyStates *keyStates, float dt
 	}
 
 	//NOTE: Toggle Focus
-	if(wasPressed(keyStates->gameButtons, BUTTON_ESCAPE)) {
+	if(wasPressed(keyStates->gameButtons, BUTTON_ESCAPE) && c->state != EASY_CONSOLE_CLOSED) {
 		c->isInFocus = !c->isInFocus;
 	}
 

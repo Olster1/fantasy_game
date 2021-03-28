@@ -1,5 +1,6 @@
 typedef enum {
 	EDITOR_CREATE_SELECT_MODE,
+	EDITOR_CREATE_TILE_MODE,
 	EDITOR_CREATE_SCENERY,
 	EDITOR_CREATE_SCENERY_RIGID_BODY,
 	EDITOR_CREATE_ONE_WAY_PLATFORM,
@@ -16,8 +17,19 @@ typedef enum {
 	EDITOR_CREATE_BLOCK_TO_PUSH,
 	EDITOR_CREATE_HORSE,
 	EDITOR_CREATE_CHEST,
-	EDITOR_CREATE_HOUSE
+	EDITOR_CREATE_HOUSE,
+	EDITOR_CREATE_LAMP_POST
 } EditorCreateMode;
+
+#define MY_TILE_EDITOR_OPTION(FUNC) \
+FUNC(EDITOR_TILE_SINGLE)\
+FUNC(EDITOR_TILE_DRAG)\
+
+typedef enum {
+    MY_TILE_EDITOR_OPTION(ENUM)
+} EditorTileOption;
+
+static char *MyTiles_editorOptionStrings[] = { MY_TILE_EDITOR_OPTION(STRING) };
 
 typedef enum {
 	EDITOR_GIZMO_NONE,
@@ -28,7 +40,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "Chest", "House"};
+char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "Chest", "House","Lamp Post"};
 
 typedef struct {
 	void *entitySelected;
@@ -49,6 +61,10 @@ typedef struct {
 
 	Array_Dynamic entitiesDeletedBuffer;
 
+
+	EditorTileOption tileOption;
+	WorldTileType tileType;
+	V2 topLeftCornerOfTile;
 } EditorState;
 
 

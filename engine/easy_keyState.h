@@ -9,6 +9,8 @@ typedef struct {
 
 	char *inputString;
     char *droppedFilePath;
+
+    V2 joystick;
     
 	int scrollWheelY;
 } AppKeyStates;

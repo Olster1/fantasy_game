@@ -33,6 +33,8 @@ typedef struct {
 	char *saveFolderLocation;
 	////////////////////////////////////////////////////////////////////
 
+	EasyGameControllerState *joyStickState;
+
 	float aspectRatio_yOverX;
 
 	//NOTE(ollie): Whether the game is running for the game loop 
@@ -219,6 +221,9 @@ OSAppInfo *easyOS_createApp(char *windowName, V2 *screenDim, bool fullscreen) {
     result->frameBackBufferId = sysInfo.info.uikit.framebuffer;
     result->renderBackBufferId = sysInfo.info.uikit.colorbuffer;
 #endif
+
+
+
     
     return result;
 }
@@ -347,11 +352,17 @@ void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
     result->running = true;
     result->hasBlackBars = true;
 
+    //Load the controller state
+    result->joyStickState = easyControllers_initState(); 
+    //
+
 
 }
 
 void easyOS_endProgram(OSAppInfo *appInfo) {
 	DEBUG_TIME_BLOCK()
+	easyControllers_closeControllers(appInfo->joyStickState);
+
 	SDL_GL_DeleteContext(appInfo->renderContext);
     SDL_DestroyWindow(appInfo->windowHandle);
     SDL_Quit();
@@ -542,7 +553,7 @@ static inline void easyOS_endFrame(V2 resolution, V2 screenDim, unsigned int com
 }
 
 
-static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V2 *screenDim, bool *running, bool stretched) {
+static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *state, V2 resolution, V2 *screenDim, bool *running, bool stretched) {
 	DEBUG_TIME_BLOCK()
 	//Save state of last frame game buttons 
 	bool mouseWasDown = isDown(state->gameButtons, BUTTON_LEFT_MOUSE);
@@ -562,6 +573,7 @@ static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V
 	//ask player for new input
 	SDL_Event event = {};
 	state->scrollWheelY = 0;
+
 	
 	while( SDL_PollEvent( &event ) != 0 ) {
         switch(event.type) {
@@ -779,6 +791,19 @@ static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V
 	sdlProcessGameKey(&state->gameButtons[BUTTON_UP], upArrowIsDown, upArrowWasDown == upArrowIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_SHIFT], shiftIsDown, shiftWasDown == shiftIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_COMMAND], commandIsDown, commandWasDown == commandIsDown);
+
+	if(isDown(state->gameButtons, BUTTON_LEFT)) {
+		state->joystick.x = -1;
+	}
+	if(isDown(state->gameButtons, BUTTON_RIGHT)) {
+		state->joystick.x = 1;
+	}
+	if(isDown(state->gameButtons, BUTTON_DOWN)) {
+		state->joystick.y = -1;
+	}
+	if(isDown(state->gameButtons, BUTTON_UP)) {
+		state->joystick.y = 1;
+	}
 	
 
 	int mouseX, mouseY;
@@ -813,6 +838,10 @@ static inline void easyOS_processKeyStates(AppKeyStates *state, V2 resolution, V
 	
 	bool rightMouseDown = mouseState & SDL_BUTTON_RMASK;
 	sdlProcessGameKey(&state->gameButtons[BUTTON_RIGHT_MOUSE], rightMouseDown, rightMouseDown == mouseWasDownRight);
+
+
+	//Poll the controllers
+	easyControllers_pollControllers(appInfo->joyStickState, state);
 	
 }
 

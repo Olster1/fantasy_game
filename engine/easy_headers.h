@@ -107,6 +107,7 @@ static char* globalExeBasePath;
 #include "easy_editor.h"
 #include "easy_profiler_draw.h"
 
+#include "easy_joystick.h"
 #include "easy_os.h"
 #include "easy_camera.h"
 #include "easy_tile.h"

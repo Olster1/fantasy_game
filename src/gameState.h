@@ -18,6 +18,7 @@ FUNC(ENTITY_BLOCK_TO_PUSH)\
 FUNC(ENTITY_HORSE)\
 FUNC(ENTITY_CHEST)\
 FUNC(ENTITY_HOUSE)\
+FUNC(ENTITY_LAMP_POST)\
 
 
 typedef enum {
@@ -29,6 +30,10 @@ typedef enum {
 	GAME_MODE_ITEM_COLLECT,
 } GameModeType;
 
+typedef enum {
+	GAME_PAUSE_MENU_MAIN,
+	GAME_PAUSE_MENU_SETTINGS
+} PauseMenuSubType;
 
 
 typedef enum {
@@ -72,17 +77,28 @@ static ItemAnimationInfo items_initItemAnimation(V2 startP, V2 endP, EntityType 
 	result.type = type;
 	return result;
 }
-	
+
+
+#define MY_TILE_TYPE(FUNC) \
+FUNC(WORLD_TILE_GRASS)\
+FUNC(WORLD_TILE_LAVA)\
+FUNC(WORLD_TILE_ROCK)\
+
+typedef enum {
+    MY_TILE_TYPE(ENUM)
+} WorldTileType;
+
+static char *MyTiles_TileTypeStrings[] = { MY_TILE_TYPE(STRING) };
 
 typedef struct {
+	WorldTileType type;
 	int x;
 	int y;
-
-
 } WorldTile;
 
 typedef struct {
-	// WorldTile tiles[];
+	int tileCount;
+	WorldTile tiles[10000];
 } TileSheet;
 
 typedef struct {
@@ -168,6 +184,7 @@ typedef struct {
 
 	//PAUSE MENU ////////
 	int currentMenuIndex;
+	PauseMenuSubType pauseMenu_subType;
 
 	//SOUNDS
 
@@ -434,3 +451,34 @@ static Texture *gameState_findSplatTexture(GameState *gameState, char *textureNa
 
 	return found;
 }
+
+
+static inline bool addWorldTile(GameState *gameState, int x, int y, WorldTileType type) {
+	bool didAdd = false;
+
+	WorldTile *foundTile = 0;
+	//look for tile first
+	for(int i = 0; i < gameState->tileSheet.tileCount && !foundTile; ++i) {
+	    WorldTile *t = gameState->tileSheet.tiles + i;
+
+	    if(t->x == x && t->y == y) {
+	    	foundTile = t;
+	    	didAdd = true;
+	    	break;
+	    }
+	}
+
+
+	if(!foundTile && gameState->tileSheet.tileCount < arrayCount(gameState->tileSheet.tiles)) {
+		didAdd = true;
+		foundTile = gameState->tileSheet.tiles + gameState->tileSheet.tileCount++;
+	} 
+
+	if(foundTile) {
+		foundTile->x = x;
+		foundTile->y = y;
+		foundTile->type = type; 
+	}
+
+	return didAdd;
+} 
