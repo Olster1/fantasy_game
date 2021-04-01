@@ -12,7 +12,7 @@ static char *getFullNameForEntityFile(int entityID, char *fullSceneFolderPath) {
 
 }
 
-static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
+static void gameScene_saveScene(GameState *gameState, EntityManager *manager, char *sceneName_) {
 	DEBUG_TIME_BLOCK()
 
 	char *sceneName = sceneName_;
@@ -40,12 +40,13 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 		platformCreateDirectory(fullSceneFolderPath);	
 	}
 	
+    InfiniteAlloc fileContents = initInfinteAlloc(char);
 
 	for(int i = 0; i < manager->entities.count; ++i) {
 	    Entity *e = (Entity *)getElement(&manager->entities, i);
 	    if(e && (e->flags & ENTITY_SHOULD_SAVE)) {
 	        
-	    	InfiniteAlloc fileContents = initInfinteAlloc(char);
+	    	
 
 	        char buffer[32];
 	        sprintf(buffer, "{\n\n");
@@ -75,15 +76,35 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
                 addVar(&fileContents, &e->collider1->offset, "colliderOffset2", VAR_V3);	
 	        }	
 
+            if(e->levelToLoad) {
+                addVar(&fileContents, e->levelToLoad, "levelToLoad", VAR_CHAR_STAR);    
+            }
+
 	        if(e->audioFile) {
 	        	addVar(&fileContents, e->audioFile, "audioFileName", VAR_CHAR_STAR);	
 	        } 
+
+
+            addVar(&fileContents, &e->lightColor, "lightColor", VAR_V3);
+            addVar(&fileContents, (float *)(&e->lightIntensity), "lightIntensity", VAR_FLOAT);
 
 
             addVar(&fileContents, &e->renderFirstPass, "renderFirstPass", VAR_INT);    
 
 
             addVar(&fileContents, MyDialog_DialogTypeStrings[(int)e->dialogType], "dialogType", VAR_CHAR_STAR);
+
+            if(e->triggerType != ENTITY_TRIGGER_NULL) {
+                addVar(&fileContents, MyEntity_TriggerTypeStrings[(int)e->triggerType], "triggerType", VAR_CHAR_STAR);
+            }
+
+            if(e->locationSoundType != ENTITY_SOUND_NULL) {
+                addVar(&fileContents, MyEntity_LocationSoundTypeStrings[(int)e->locationSoundType], "locationSoundType", VAR_CHAR_STAR);
+            }
+
+            addVar(&fileContents, &e->rateOfCreation, "rateOfCreation", VAR_FLOAT);
+            addVar(&fileContents, MyEntity_EntityTypeStrings[(int)e->typeToCreate], "typeToCreate", VAR_CHAR_STAR);
+            
 
             if(e->model) {
                 addVar(&fileContents, e->model->name, "model", VAR_CHAR_STAR);  
@@ -111,12 +132,53 @@ static void gameScene_saveScene(EntityManager *manager, char *sceneName_) {
 
 	        platformEndFile(handle);	
 	        
-	        
-	        ///////////////////////************* Clean up the memory ************////////////////////	
-	        releaseInfiniteAlloc(&fileContents);
+
+            ////// empty array out
+	        fileContents.count = 0;
 
 	    }
 	}
+
+
+    ////////save the tile map
+    char buffer[32];
+    sprintf(buffer, "{\n\n");
+    addElementInifinteAllocWithCount_(&fileContents, buffer, strlen(buffer));
+                    
+    addVar(&fileContents, MyEntity_EntityTypeStrings[(int)ENTITY_TILE_MAP], "type", VAR_CHAR_STAR);
+
+    for(int i = 0; i < gameState->tileSheet.tileCount; ++i) {
+        WorldTile *t = gameState->tileSheet.tiles + i;
+
+        addVar(&fileContents, MyTiles_TileTypeStrings[(int)t->type], "tileType", VAR_CHAR_STAR);
+
+        V2 pos = v2(t->x, t->y);
+        addVar(&fileContents, &pos, "tilePos", VAR_V2);
+
+    }
+
+    sprintf(buffer, "}\n\n");
+    addElementInifinteAllocWithCount_(&fileContents, buffer, strlen(buffer));
+                
+
+    char *fullEntityFileName = concatInArena(fullSceneFolderPath, "tile_map.txt", &globalPerFrameArena);
+
+    ///////////////////////************ Write the file to disk *************////////////////////
+    game_file_handle handle = platformBeginFileWrite(fullEntityFileName);
+    if(!handle.HasErrors) {
+        platformWriteFile(&handle, fileContents.memory, fileContents.count*fileContents.sizeOfMember, 0);
+    } else {
+        easyConsole_addToStream(DEBUG_globalEasyConsole, "Can't save entity file. Handle has Errors.");             
+    }
+
+    platformEndFile(handle);    
+
+
+    ////////////////////////`   
+
+
+    ///////////////////////************* Clean up the memory ************////////////////////   
+    releaseInfiniteAlloc(&fileContents);
 }
 
 static bool gameScene_doesSceneExist(char *sceneName_) {
@@ -148,6 +210,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 	gameState->currentSceneName = sceneName_;
 
     gameState->currentTerrainEntity = 0;
+    gameState->tileSheet.tileCount = 0;
 
 	char *sceneName = sceneName_;
 	if(sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '/' || sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '\\') {
@@ -206,8 +269,20 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
         		char *audioFile = 0;
 
+                V3 lightColor = v3(1, 0.5f, 0);
+                float lightIntensity = 2.0f;
+
+                EntityTriggerType triggerType = ENTITY_TRIGGER_NULL;
+
+                EntityLocationSoundType locationSoundType = ENTITY_SOUND_NULL;
+
 
                 EasyModel *model = 0;
+
+                EntityType entityToCreate;
+                float rateOfCreation;
+
+                char *sceneToLoad = 0;
 
                 bool renderFirstPass = false;
 
@@ -256,6 +331,24 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     				    		subtype = (SubEntityType)getIntFromDataObjects(&tokenizer);
     						}
 
+                            if(stringsMatchNullN("levelToLoad", token.at, token.size)) {
+                                char *loadString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                sceneToLoad = easyString_copyToHeap(loadString);
+                            }
+
+
+                            if(stringsMatchNullN("rateOfCreation", token.at, token.size)) {
+                                rateOfCreation = getFloatFromDataObjects(&tokenizer);
+                            }
+
+                            if(stringsMatchNullN("typeToCreate", token.at, token.size)) {
+                                char *typeToCreate = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+
+                                entityToCreate = (EntityType)findEnumValue(typeToCreate, MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings));
+                            }
+
 
                             if(stringsMatchNullN("renderFirstPass", token.at, token.size)) {
                                 renderFirstPass = getIntFromDataObjects(&tokenizer);
@@ -295,6 +388,22 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                     		}
 
+                            if(stringsMatchNullN("triggerType", token.at, token.size)) {
+                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                triggerType = (EntityTriggerType)findEnumValue(typeString, MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
+
+                            }
+
+                            if(stringsMatchNullN("locationSoundType", token.at, token.size)) {
+                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                locationSoundType = (EntityLocationSoundType)findEnumValue(typeString, MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings));
+
+                            }
+
+                            
+
                             if(stringsMatchNullN("dialogType", token.at, token.size)) {
                                 char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
@@ -332,7 +441,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                     		}
 
-                            
+                            if(stringsMatchNullN("lightColor", token.at, token.size)) {
+                                lightColor = buildV3FromDataObjects(&tokenizer);
+                            }
+
+                            if(stringsMatchNullN("lightIntensity", token.at, token.size)) {
+                                lightIntensity = getFloatFromDataObjects(&tokenizer);
+                            }
+
 
             				if(stringsMatchNullN("spriteName", token.at, token.size)) {
             		    		char *name = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
@@ -358,141 +474,120 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             		}
         		}
 
-                releaseInfiniteAlloc(&tokenizer.typesArray);
+                
 
-    			//Make the entity
-    			Entity *newEntity = 0;
+                if(entType == ENTITY_TILE_MAP) {
+                    parsing = true;
+                    tokenizer = lexBeginParsing((char *)contents.memory, EASY_LEX_OPTION_EAT_WHITE_SPACE);
+                    while(parsing) {
+                        EasyToken token = lexGetNextToken(&tokenizer);
+                        InfiniteAlloc *data = 0;
+                        bool ranOutOfTileRooms = false;
+                        WorldTileType tileType; 
 
-    			switch(entType) {
-    				case ENTITY_SCENERY: {
-    					if(subtype & ENTITY_SUB_TYPE_TORCH) {
-    						newEntity = initTorch(gameState, manager, position);
-    					} else if(subtype & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
-                            newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
-                        } else {
-    						if(colliderSet) {
-    							newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
-    						} else {
-    							newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);	
-    						}	
-    					}
-    					
-    				} break;
-    				case ENTITY_WIZARD: {
-    					newEntity = initWizard(gameState, manager, position);
-    					manager->player = newEntity;
+                        switch(token.type) {
+                            case TOKEN_NULL_TERMINATOR: {
 
-    				} break;
-    				case ENTITY_PLAYER_PROJECTILE: {
-    					assert(false);
-    				} break;
-    				case ENTITY_SKELETON: {
-    					newEntity = initSkeleton(gameState, manager, position);
-    				} break;
-                    case ENTITY_SWORD: {
-                        newEntity = initSword(gameState, manager, position);
-                    } break;
-                    case ENTITY_CHEST: {
-                        newEntity = initChest(gameState, manager, position);
-                    } break;
-                    case ENTITY_HORSE: {
-                        newEntity = initHorse(gameState, manager, position);
-                    } break;
-                    case ENTITY_BLOCK_TO_PUSH: {
-                        newEntity = initPushRock(gameState, manager, position);
-                    } break;
-                    case ENTITY_SHEILD: {
-                        newEntity = initSheild(gameState, manager, position);
-                    } break;
-                    case ENTITY_SIGN: {
-                        newEntity = initSign(gameState, manager, position, splatTexture);
-                    } break;
-                    case ENTITY_LAMP_POST: {
-                        newEntity = initLampPost(gameState, manager, position, splatTexture);
-                    } break;
-                    case ENTITY_HOUSE: {
-                        newEntity = initHouse(gameState, manager, position, splatTexture);
-                    } break;
-                    case ENTITY_WEREWOLF: {
-                        newEntity = initWerewolf(gameState, manager, position);
-                    } break;
-    				case ENTITY_HEALTH_POTION_1: {
-    					assert(false);
-    				} break;
-    				case ENITY_AUDIO_CHECKPOINT: {
-    					newEntity = initAudioCheckPoint(gameState, manager, position);
-    					newEntity->audioFile = audioFile;
-    				} break;
-    				case ENITY_CHECKPOINT: {
-    					newEntity = initCheckPoint(gameState, manager, position);
-    				} break;
-                    case ENTITY_TERRAIN: {
-                        newEntity = initTerrain(gameState, manager, position);
-                    } break;
-    				default: {
+                                parsing = false;
+                            } break;
+                            case TOKEN_WORD: {
+                                if(stringsMatchNullN("tilePos", token.at, token.size) && !ranOutOfTileRooms) {
+                                    V2 p = buildV2FromDataObjects(&tokenizer);
 
-    				}
-    			}
+                                    ranOutOfTileRooms = !addWorldTile(gameState, p.x, p.y, tileType);
+                                    if(ranOutOfTileRooms) { easyFlashText_addText(&globalFlashTextManager, "Tile Array Full. Make bigger!"); }
+                                }
 
+                                if(stringsMatchNullN("tileType", token.at, token.size)) {
+                                    char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+                                    tileType = (WorldTileType)findEnumValue(typeString, MyTiles_TileTypeStrings, arrayCount(MyTiles_TileTypeStrings));
+                                }
+                            } break;
+                            default: {
+                            }
+                        }
+                    }
+                } else {    
 
-    			assert(newEntity);
+        			//Make the entity
+        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile);
 
-    			//NOTE(ollie): Set the id
-    			if(foundId) {
-        			newEntity->T.id = id;
-        			if(id > maxId) {
-        				maxId = id;
+                    newEntity->T.pos = position;
+
+                    releaseInfiniteAlloc(&tokenizer.typesArray);
+
+        			assert(newEntity);
+
+        			//NOTE(ollie): Set the id
+        			if(foundId) {
+            			newEntity->T.id = id;
+            			if(id > maxId) {
+            				maxId = id;
+            			}
         			}
-    			}
-    			foundId = false;
+        			foundId = false;
+
+                    if(sceneToLoad) {
+                        newEntity->levelToLoad = sceneToLoad;
+                    }
+
+        			if(newEntity->collider) {
+        				newEntity->collider->dim2f = colliderScale;	
+                        newEntity->collider->offset = colliderOffset;
+        			}
 
 
+        			if(newEntity->collider1) {
+        				newEntity->collider1->dim2f = colliderScale2;	
+                        newEntity->collider1->offset = colliderOffset2;
+        			}
 
-    			if(newEntity->collider) {
-    				newEntity->collider->dim2f = colliderScale;	
-                    newEntity->collider->offset = colliderOffset;
-    			}
+                    newEntity->rateOfCreation = rateOfCreation;
+                    newEntity->typeToCreate = entityToCreate;
+
+        			newEntity->layer = layer;
+                    newEntity->renderFirstPass = renderFirstPass;
+                    
+                    newEntity->dialogType = dialogType;
+                    
+                    if(newEntity->type == ENTITY_TERRAIN) {
+                        gameState->currentTerrainEntity = newEntity;
+                        newEntity->T.Q = identityQuaternion();
+            		//   
+            		} else {
+                         newEntity->T.Q = rotation;
+                        // newEntity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);//rotation;
+                    }
+                   
+                    newEntity->locationSoundType = locationSoundType;
+                    newEntity->T.scale = scale;
+            		newEntity->colorTint = color;
+
+                    if(model) {
+                        newEntity->model = model;
+                    }
 
 
-    			if(newEntity->collider1) {
-    				newEntity->collider1->dim2f = colliderScale2;	
-                    newEntity->collider1->offset = colliderOffset2;
-    			}
+                    if(audioFile) {
+                        newEntity->audioFile = audioFile;
+                    }
 
-    			newEntity->layer = layer;
-                newEntity->renderFirstPass = renderFirstPass;
-                
-                newEntity->dialogType = dialogType;
-                
-                if(newEntity->type == ENTITY_TERRAIN) {
-                    gameState->currentTerrainEntity = newEntity;
-                    newEntity->T.Q = identityQuaternion();
-        		//   
-        		} else {
-                     newEntity->T.Q = rotation;
-                    // newEntity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);//rotation;
+                    newEntity->lightColor = lightColor;
+                    newEntity->lightIntensity = lightIntensity;
+
                 }
-               
                 
-                newEntity->T.scale = scale;
-        		newEntity->colorTint = color;
-
-                if(model) {
-                    newEntity->model = model;
-                }
-
-
-                if(audioFile) {
-                    newEntity->audioFile = audioFile;
-                }
-
-                
+                /////////////////////////////////
         		//reset the values
         		position = v3(0, 0, 0);
         		rotation = identityQuaternion();
         		scale = v3(1, 1, 1);
         		color = v4(1, 1, 1, 1);
         		entType = ENTITY_NULL;
+
+                lightColor = v3(0, 0, 0);
+                lightIntensity = 0;
+
 
         		colliderSet = false;
         		colliderSet2 = false;

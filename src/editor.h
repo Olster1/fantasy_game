@@ -18,7 +18,10 @@ typedef enum {
 	EDITOR_CREATE_HORSE,
 	EDITOR_CREATE_CHEST,
 	EDITOR_CREATE_HOUSE,
-	EDITOR_CREATE_LAMP_POST
+	EDITOR_CREATE_LAMP_POST,
+	EDITOR_CREATE_EMPTY_TRIGGER,
+	EDITOR_CREATE_SEAGULL,
+	EDITOR_CREATE_ENTITY_CREATOR
 } EditorCreateMode;
 
 #define MY_TILE_EDITOR_OPTION(FUNC) \
@@ -40,7 +43,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "Chest", "House","Lamp Post"};
+char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Scenery", "Scenery with RB", "Platform One Way", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "Chest", "House","Lamp Post", "Empty Trigger", "Seagull", "Entity Creator"};
 
 typedef struct {
 	void *entitySelected;
@@ -55,11 +58,14 @@ typedef struct {
 	//
 
 
-	u32 prevSelectedEntities_count;
-	void *prevSelectedEntities[64];
-
 
 	Array_Dynamic entitiesDeletedBuffer;
+
+
+	//Used so you can click things on top of each other
+	int idsLastSelectedCount;
+	int idsLastSelected[512];
+	//////////////////////////////////
 
 
 	EditorTileOption tileOption;
@@ -94,6 +100,7 @@ static EditorState *initEditorState(Arena *arena) {
 
 	result->entitySelected = 0;
 	result->entityIndex = 0;
+	result->idsLastSelectedCount = 0;
 
 	result->grabOffset = v3(0, 0, 0);
 
@@ -105,3 +112,60 @@ static EditorState *initEditorState(Arena *arena) {
 	return result;
 }
 
+
+static bool editorState_idInList(EditorState *state, int id) {
+	bool result = false;
+	for(int i = 0; i < state->idsLastSelectedCount && !result; i++) {
+		if(state->idsLastSelected[i] == id) {
+			result = true;
+		}
+	}
+
+	return result;
+}
+
+
+static bool editorState_addToEndOfList(EditorState *state, int id) {
+	bool result = false; 
+	if(state->idsLastSelectedCount < arrayCount(state->idsLastSelected)) {
+		state->idsLastSelected[state->idsLastSelectedCount++] = id;
+		result = true;
+	} 
+
+	return result;
+}
+
+static void editorState_moveToEnd(EditorState *state, int id) {
+	bool found = false;
+	int indexAt = 0;
+	for(int i = 0; i < state->idsLastSelectedCount && !found; i++) {
+		if(state->idsLastSelected[i] == id) {
+			indexAt = i;
+			found = true;
+			break;
+		}
+	}
+	
+	assert(found);
+
+	//Now move them down
+	for(int i = indexAt + 1; i < state->idsLastSelectedCount; i++) {
+		state->idsLastSelected[i - 1] = state->idsLastSelected[i];
+	}
+
+	state->idsLastSelected[state->idsLastSelectedCount - 1] = id;
+
+	
+}
+
+static void letGoOfSelectedEntity(EditorState *state) {
+	state->entitySelected = 0;
+	state->idsLastSelectedCount = 0;
+}
+
+typedef struct {
+    int id;
+    void *e;
+    int index;
+    V3 hitP;
+} EditorEntitySelectInfo;

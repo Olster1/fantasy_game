@@ -20,6 +20,9 @@ static bool DEBUG_LOCK_POSITION_TO_GRID = true;
 static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
+static bool DEBUG_USE_ORTHO_MATRIX = false;
+
+static int GLOBAL_WORLD_TILE_SIZE = 8;
 
 #include "npc_dialog.h"
 #include "gameState.h"
@@ -104,6 +107,22 @@ static char *getInventoryString(EntityType type) {
     return result;
 }
 
+typedef struct {
+    Array_Dynamic entities;
+
+    Array_Dynamic entitiesToAddForFrame;
+    Array_Dynamic entitiesToDeleteForFrame;
+
+    Array_Dynamic damageNumbers;
+
+    int lastEntityIndex;
+
+    void *player;
+} EntityManager;    
+
+
+bool gameScene_doesSceneExist(char *sceneName);
+void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_);
 #include "entity.c"
 #include "saveload.c"
 
@@ -215,6 +234,28 @@ int main(int argc, char *args[]) {
         loadAndAddImagesToAssets("img/tilesets/", true);
 
 
+        {
+            // char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
+            // char *folderName = concatInArena(globalExeBasePath, "img/tilesets/", &globalPerFrameArena);
+            // FileNameOfType splatFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
+            // int splatCount = splatFileNames.count;
+            // for(int i = 0; i < splatFileNames.count; ++i) {
+            //     char *fullName = splatFileNames.names[i];
+            //     char *shortName = getFileLastPortion(fullName);
+            //     if(shortName[0] != '.') { //don't load hidden file 
+            //         addElementInfinteAlloc_notPointer(&gameState->splatList_tiles, shortName);
+
+            //         Texture texOnStack = loadImage(fullName, TEXTURE_FILTER_LINEAR, true, true);
+            //         Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
+            //         memcpy(tex, &texOnStack, sizeof(Texture));
+            //         addElementInfinteAlloc_notPointer(&gameState->splatTextures_tiles, tex);
+            //     }
+            //     free(fullName);
+            // }
+        }
+
+
+
         //Setup the gravity if it's on or not. GAMEPLAY: Could be an interesting gameplay feature: magentic rooms
         if(DEBUG_GRAVITY) {
             global_easyPhysics_gravityModifier = 1;
@@ -241,11 +282,25 @@ int main(int argc, char *args[]) {
         GameWeatherState *weatherState = initWeatherState();
 
 
+        easyAnimation_initAnimation(&gameState->seagullAnimation, "seagullAnimation");
+        loadAndAddImagesStripToAssets(&gameState->seagullAnimation, "img/fantasy_sprites/seagull_animation.png", 32, false);
+
         easyAnimation_initAnimation(&gameState->firePitAnimation, "firepit_idle");
         loadAndAddImagesStripToAssets(&gameState->firePitAnimation, "img/fantasy_sprites/firePlace.png", 64, false);
 
         easyAnimation_initAnimation(&gameState->torchAnimation, "torch_idle");
         loadAndAddImagesStripToAssets(&gameState->torchAnimation, "img/fantasy_sprites/torch.png", 64, false);
+
+        ///////////// Tile Animations ////////////////////
+        easyAnimation_initAnimation(&gameState->seaTileAnimation, "seaTileAnimation");
+        easyAnimation_pushFrame(&gameState->seaTileAnimation, "water.png");
+        easyAnimation_pushFrame(&gameState->seaTileAnimation, "water2.png");
+        easyAnimation_pushFrame(&gameState->seaTileAnimation, "water3.png");
+
+        easyAnimation_initAnimation(&gameState->sandWaterTileAnimation, "sandWaterTileAnimation");
+        easyAnimation_pushFrame(&gameState->sandWaterTileAnimation, "sand-water.png");
+        easyAnimation_pushFrame(&gameState->sandWaterTileAnimation, "sand-water2.png");
+        
 
         {
             //WIZARD ANIMATIONS
@@ -253,6 +308,21 @@ int main(int argc, char *args[]) {
             loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
             // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
             // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
+
+            easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
+
+
+            easyAnimation_initAnimation(&gameState->wizardSwimLeft, "wizardSwimLeft");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimLeft, "img/fantasy_sprites/swim.png", 41, false, 1, 3);
+            easyAnimation_initAnimation(&gameState->wizardSwimRight, "wizardSwimRight");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimRight, "img/fantasy_sprites/swim1.png", 41, false, 1, 1);
+            easyAnimation_initAnimation(&gameState->wizardSwimUp, "wizardSwimUp");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimUp, "img/fantasy_sprites/swim2.png", 41, false, 1, 2);
+            easyAnimation_initAnimation(&gameState->wizardSwimDown, "wizardSwimDown");
+            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimDown, "img/fantasy_sprites/swim3.png", 41, false, 1, 0);
+
+
 
             easyAnimation_initAnimation(&gameState->wizardIdle, "wizardIdle");
             easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
@@ -435,11 +505,12 @@ int main(int argc, char *args[]) {
 
         gameState->potionModel = findModelAsset_Safe("potion.obj");
 
+
+
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
                 gameScene_loadScene(gameState, manager, "town");
-                easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
-                easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+                
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -463,7 +534,7 @@ int main(int argc, char *args[]) {
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
 
-        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
+        // EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
 
         easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
 
@@ -523,7 +594,7 @@ int main(int argc, char *args[]) {
     
             //FOLLOW PLAYER  
             if(!canCameraMove) {
-                V3 worldP = easyTransform_getWorldPos(&manager->player->T);
+                V3 worldP = easyTransform_getWorldPos(&((Entity *)(manager->player))->T);
                 {//update x position
                     float distance = absVal(worldP.x - camera.hidden_pos.x);
 
@@ -552,7 +623,11 @@ int main(int argc, char *args[]) {
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
             float zoom = 50.0f*(camera.zoom / 90.0f);
-            Matrix4 perspectiveMatrix = OrthoMatrixToScreen(zoom, zoom*(resolution.y/resolution.x));//projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
+            Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
+
+            if(DEBUG_USE_ORTHO_MATRIX) {
+                perspectiveMatrix = OrthoMatrixToScreen(zoom, zoom*(resolution.y/resolution.x));//
+            }
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_1) && !gameState->isEditorOpen) {
                 gameState->gameModeType = GAME_MODE_PAUSE_MENU;
@@ -747,8 +822,12 @@ int main(int argc, char *args[]) {
             //DEBUG
             // if(true)
             {
-                
 
+                
+                int idCount = 0;
+                EditorEntitySelectInfo selectInfos[128];
+
+                bool found = false;
                 //Check if user grabs the entity to edit
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -765,17 +844,37 @@ int main(int argc, char *args[]) {
                             Rect3f bounds = rect3fCenterDimV3(v3(0, 0, 0), scale);
 
                             EasyPhysics_RayCastAABB3f_Info castInfo = EasyPhysics_CastRayAgainstAABB3f(rotationT, position, v3(1, 1, 1), bounds, mouseP_worldRay.direction, mouseP_worldRay.origin);
-                            if(castInfo.didHit && e->type != ENTITY_TERRAIN) {
+                            if(castInfo.didHit && e->type != ENTITY_TERRAIN && !found) {
                                 insideEntity = e;
 
                                 if(!appInfo->editor->isHovering && wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && editorState->createMode == EDITOR_CREATE_SELECT_MODE) {
-                                    editorState->entitySelected = e;
-                                    editorState->entityIndex = i;
+                                    if(!editorState_idInList(editorState, e->T.id)) {
 
-                                    editorState->grabOffset = v3_scale(-1, castInfo.hitP);
-                                    editorState->grabOffset.z = 0;
-                                    // easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->grabOffset);
+                                        editorState->entitySelected = e;
+                                        editorState->entityIndex = i;
 
+
+
+                                        editorState->grabOffset = v3_scale(-1, castInfo.hitP);
+                                        editorState->grabOffset.z = 0;
+
+                                        if(!editorState_addToEndOfList(editorState, e->T.id)) { easyFlashText_addText(&globalFlashTextManager, "Ran out of room in editor selected list"); }
+
+                                        found = true;
+                                        idCount = 0;
+                                        // easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->grabOffset);
+                                    } else {
+                                        assert(!found);
+                                        //Keep looking for one with haven't selected recently. BUt add to list just in case
+                                        assert(idCount < arrayCount(selectInfos));
+
+                                        EditorEntitySelectInfo *info = selectInfos + idCount++;
+
+                                        info->e = e;
+                                        info->hitP = castInfo.hitP;
+                                        info->id = e->T.id;
+                                        info->index = i;
+                                    }
                                 }    
                             }
 
@@ -834,11 +933,52 @@ int main(int argc, char *args[]) {
                     
                 }
 
+                if(idCount > 0) {
+                    //We've selected all entities before, so find the _least_recent_ id on the list, which is at index zero
+                    assert(editorState->idsLastSelectedCount > 0);
+
+                    int newId = 0;
+
+                    /////Find the right id
+
+                    int lowestIndex = INT_MAX;
+
+                    //The id has to be in selectInfos, so loop through all ids in select info and find the lowest one on the list 
+                     EditorEntitySelectInfo *info = 0;
+                    for(int i = 0; i < idCount; ++i) {
+                        EditorEntitySelectInfo *a = selectInfos + i;
+
+                        bool found = false;
+                        for(int j = 0; j < editorState->idsLastSelectedCount && !found; j++) {
+                            if(editorState->idsLastSelected[j] == a->id && j < lowestIndex) { //check if it is the lowest index so far
+                                lowestIndex = j;
+                                newId = a->id;
+                                info = a;
+                                found = true;
+                            }
+                        }
+                    }
+
+                    assert(info);
+
+                    ///////////////////////////////////
+
+                    editorState_moveToEnd(editorState, newId);
+                    
+
+                    //Grab new entity
+                    editorState->entitySelected = info->e;
+                    editorState->entityIndex = info->index;
+
+                    editorState->grabOffset = v3_scale(-1, info->hitP);
+                    editorState->grabOffset.z = 0;
+                }
+
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
                 renderClearDepthBuffer(mainFrameBuffer.bufferId);
 
                 // if(wasReleased(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
-                //     editorState->entitySelected = 0;
+                //     letGoOfSelectedEntity(editorState);
                 // }
 
                 
@@ -872,6 +1012,21 @@ int main(int argc, char *args[]) {
                }
            }
 
+           ////////////////////////////
+
+           float t_24hr = getTimeOfDay(weatherState);
+           //Collect all the lights before rendering terrain
+           for(int i = 0; i < manager->entities.count; ++i) {
+               Entity *e = (Entity *)getElement(&manager->entities, i);
+               if(e) {
+                   if(e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) {
+                       float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
+                       easyRender_push2dLight(globalRenderGroup, v3_plus(easyTransform_getWorldPos(&e->T), v3(0, 0, -1.5f)), e->lightColor, e->lightIntensity*perlinFactor);
+                   }    
+               }
+               
+           }
+           ////////////////////////
 
 
            //  //DRAW THE TERRATIN FIRST
@@ -882,6 +1037,8 @@ int main(int argc, char *args[]) {
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
 
+
+
             if(DEBUG_DRAW_TERRAIN) {
                 Texture *sprite = 0;
 
@@ -889,7 +1046,7 @@ int main(int argc, char *args[]) {
                 
                 gameState->tempTransform.Q = identityQuaternion();
 
-                gameState->tempTransform.scale = v3(1, 1, 1);
+                gameState->tempTransform.scale = v3(GLOBAL_WORLD_TILE_SIZE, GLOBAL_WORLD_TILE_SIZE, 1);
 
                 renderSetShader(globalRenderGroup, &pixelArtProgram);
 
@@ -908,6 +1065,58 @@ int main(int argc, char *args[]) {
                         sprite = findTextureAsset("lava_tile.png");
                     } else if(t->type == WORLD_TILE_ROCK) {
                         sprite = findTextureAsset("lava_tile.png");
+                    } else if(t->type == WORLD_TILE_COBBLE) {
+                        sprite = findTextureAsset("cobble.png");
+                    } else if(t->type == WORLD_TILE_PATH) {
+                        sprite = findTextureAsset("grass_road.png");
+                    } else if(t->type == WORLD_TILE_PATH1) {
+                        sprite = findTextureAsset("grass_road_horzintoal.png");
+                    } else if(t->type == WORLD_TILE_PATH2) {
+                        sprite = findTextureAsset("grass_road_corner.png");
+                    } else if(t->type == WORLD_TILE_PATH3) {
+                        sprite = findTextureAsset("grass_road_corner-top.png");
+                    } else if(t->type == WORLD_TILE_PATH4) {
+                        sprite = findTextureAsset("grass_road_corner-right.png");
+                    } else if(t->type == WORLD_TILE_PATH5) {
+                        sprite = findTextureAsset("grass_road_corner-left.png");
+                    } else if(t->type == WORLD_TILE_BEACH) {
+                        sprite = findTextureAsset("sand.png");
+                    } else if(t->type == WORLD_TILE_SEA || t->type == WORLD_TILE_SEA1) {
+                        if(easyAnimation_isControllerEmpty(&t->animationController)) {
+                            easyAnimation_addAnimationToController(&t->animationController, &gameState->animationFreeList, &gameState->seaTileAnimation, 0.1f);    
+                        }
+
+                        char *animationFileName = easyAnimation_updateAnimation(&t->animationController, &gameState->animationFreeList, appInfo->dt);
+                        sprite = findTextureAsset(animationFileName);   
+                        
+                    } else if(t->type == WORLD_TILE_BEACH_GRASS) {
+                        sprite = findTextureAsset("sand-grass.png");
+                    } else if(t->type == WORLD_TILE_SAND_WATER) {
+
+                        if(easyAnimation_isControllerEmpty(&t->animationController)) {
+                            easyAnimation_addAnimationToController(&t->animationController, &gameState->animationFreeList, &gameState->sandWaterTileAnimation, 0.8f);    
+                        }
+
+                        char *animationFileName = easyAnimation_updateAnimation(&t->animationController, &gameState->animationFreeList, appInfo->dt);
+                        sprite = findTextureAsset(animationFileName);   
+                    } else if(t->type == WORLD_TILE_SAND_WATER1) {
+                        sprite = findTextureAsset("sand-water2.png");
+                    } else if(t->type == WORLD_TILE_PIER_MIDDLE) {
+                     sprite = findTextureAsset("pier_middle_middle.png");   
+                    } else if(t->type == WORLD_TILE_PIER_SAND) {
+                        sprite = findTextureAsset("pier_middle_middle-end-sand.png");
+                    } else if(t->type == WORLD_TILE_PIER_SIDE_LEFT) {
+                        sprite = findTextureAsset("piermiddle.png");
+                     } else if(t->type == WORLD_TILE_PIER_SIDE_RIGHT) {
+                        sprite = findTextureAsset("piermiddle-right.png");
+                    } else if(t->type == WORLD_TILE_PIER_SAND_CORNER_LEFT) {
+                        sprite = findTextureAsset("pier-top-left-sand.png");
+                    } else if(t->type == WORLD_TILE_PIER_SAND_CORNER_RIGHT) {
+                        sprite = findTextureAsset("pier-top-right-sand.png");
+                    } else if(t->type == WORLD_TILE_PIER_SEA_CORNER_RIGHT) {
+                        sprite = findTextureAsset("piercorner.png");
+                    } else if(t->type == WORLD_TILE_PIER_SEA_CORNER_LEFT) {
+                        sprite = findTextureAsset("piermiddle_right_corner.png");
                     }
 
                     setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
@@ -920,8 +1129,7 @@ int main(int argc, char *args[]) {
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
 
-
-
+   
             ////////////////////////////
 
             for(int i = 0; i < manager->entities.count; ++i) {
@@ -960,7 +1168,7 @@ int main(int argc, char *args[]) {
             //Render the 3d objects the player got from the chest
             if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
 
-                gameState->tempTransform_model.pos = v3_plus(easyTransform_getWorldPos(&manager->player->T), v3(0, 0, -2.5f));
+                gameState->tempTransform_model.pos = v3_plus(easyTransform_getWorldPos(&((Entity *)(manager->player))->T), v3(0, 0, -2.5f));
                 float scale = 3.0f;
                 gameState->tempTransform_model.scale = v3(scale, scale, scale);
                 gameState->tempTransform_model.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -983,7 +1191,7 @@ int main(int argc, char *args[]) {
                         
                         EntityType type = info->type;
 
-                        Entity *p = manager->player;
+                        Entity *p = ((Entity *)(manager->player));
                         EasyTransform T = p->T;
 
                         V3 rotation = v3(0, 0, 0);
@@ -1101,12 +1309,34 @@ int main(int argc, char *args[]) {
                 }
             }
 
+
+            /////////////// SHADOW UNDER PLAYER //////////////////////////
+            #if 0
+            if(DEBUG_DRAW_SCENERY_TEXTURES) {
+                Texture *shadowSprite = findTextureAsset("shadow.png");
+                
+                EasyTransform trans = ((Entity *)manager->player)->T;
+                trans.Q = identityQuaternion();
+                float w = 1.5f;
+
+                trans.scale = v3(w, w*shadowSprite->aspectRatio_h_over_w, 1);
+                trans.pos.z = -0.1f;
+                trans.pos.y -= 0.6f;
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&trans));
+
+                renderDrawSprite(globalRenderGroup, shadowSprite, COLOR_WHITE);
+
+            }
+            #endif
+            ///////////////////////////////////////////////////////////////
+
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
                 if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, manager->player, gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState);        
+                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState);        
                 
                     if(e->isDead) {
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -1122,7 +1352,7 @@ int main(int argc, char *args[]) {
 
                     //DRAW THE PARTICLE SYSTEM
                     renderSetShader(globalRenderGroup, &textureProgram);
-                    V3 worldP = v3_plus(easyTransform_getWorldPos(&manager->player->T), v3(0, 0, -1.5f));
+                    V3 worldP = v3_plus(easyTransform_getWorldPos(&((Entity *)(manager->player))->T), v3(0, 0, -1.5f));
                     drawAndUpdateParticleSystem(globalRenderGroup, &gameState->playerUseItemParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GREEN, true);
                     ///////////////////////////////////////////
             }
@@ -1203,47 +1433,56 @@ int main(int argc, char *args[]) {
                     EntityToAdd *e = (EntityToAdd *)getElement(&manager->entitiesToAddForFrame, i);
                     if(e) {
 
-                        float layer = -0.5f;    
-                        float lifeSpan = 3.0f;
-
-                        float inverse_weight = 1.0f / 10.0f;
-
-                        V2 size = v2(1, 1);
-                        Texture *t = 0;
-                        float reboundFactor = 1.0f;
+                        Entity *e1 = 0;
                         if(e->type == ENTITY_HEALTH_POTION_1) {
-                            t = findTextureAsset("blue_jar.png");
-                            assert(t);
-                            lifeSpan = -1.0f;
-                            inverse_weight = 1.0f / 20.0f; 
-                            size = v2(0.4f, 0.4f);
-                            reboundFactor = 0.98f;
-
-                            easyConsole_addToStream(DEBUG_globalEasyConsole, "Creating potion");
-                        }
-
-
-
-                        Entity *e1 = initEntity(manager, &gameState->firePitAnimation, e->position, size, v2(0.9f, 0.9f), gameState, e->type, inverse_weight, t, COLOR_WHITE, layer, true);
-                        e1->rb->dP = e->dP;
 
                         
+                            float layer = -0.5f;    
+                            float lifeSpan = 3.0f;
 
-                        //NOTE: This isn't a thing anymore
-                        if(e->subType == ENTITY_SUB_TYPE_SWORD) {
-                            //sword life span
-                            lifeSpan = 0.3f;
-                        } 
+                            float inverse_weight = 1.0f / 10.0f;
+
+                            V2 size = v2(1, 1);
+                            Texture *t = 0;
+                            float reboundFactor = 1.0f;
+                            if(e->type == ENTITY_HEALTH_POTION_1) {
+                                t = findTextureAsset("blue_jar.png");
+                                assert(t);
+                                lifeSpan = -1.0f;
+                                inverse_weight = 1.0f / 20.0f; 
+                                size = v2(0.4f, 0.4f);
+                                reboundFactor = 0.98f;
+
+                                easyConsole_addToStream(DEBUG_globalEasyConsole, "Creating potion");
+                            }
+
+
+
+                            e1 = initEntity(manager, &gameState->firePitAnimation, e->position, size, v2(0.9f, 0.9f), gameState, e->type, inverse_weight, t, COLOR_WHITE, layer, true);
+                            e1->rb->dP = e->dP;
+
                             
-                        e1->maxLifeSpan = lifeSpan;
-                        e1->lifeSpanLeft = lifeSpan;
-                        e1->rb->reboundFactor = reboundFactor;
-                        // easyConsole_pushFloat(DEBUG_globalEasyConsole, lifeSpan);
+
+                            //NOTE: This isn't a thing anymore
+                            if(e->subType == ENTITY_SUB_TYPE_SWORD) {
+                                //sword life span
+                                lifeSpan = 0.3f;
+                            } 
+                                
+                            e1->maxLifeSpan = lifeSpan;
+                            e1->lifeSpanLeft = lifeSpan;
+                            e1->rb->reboundFactor = reboundFactor;
+                            // easyConsole_pushFloat(DEBUG_globalEasyConsole, lifeSpan);
 
 
-                        e1->subEntityType = e->subType;
+                            e1->subEntityType = e->subType;
 
-                        e1->T.parent = e->parentT;
+                            
+                        } else {
+                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType , false, ENTITY_TRIGGER_NULL, 0);
+                        }
+
+                       e1->T.parent = e->parentT;
                     }
                 }
             }
@@ -1292,23 +1531,34 @@ int main(int argc, char *args[]) {
                 float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
 
                 setViewTransform(globalRenderGroup, mat4());
-                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight));
+                Matrix4 projection = OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight);
+                setProjectionTransform(globalRenderGroup, projection);
 
                 //DRAW THE CLOCK
                 {
+
                    Texture *clock = findTextureAsset("sun_moon_clock1.png");
-                   float w = 200;
+                   
+                   float x = fuaxWidth - 200;
+                   float y = 200;
+
+                   float w = 400;
+                   float h = clock->aspectRatio_h_over_w*w;
+
+                   Rect2f r = rect2fMinDim(x - 0.5f*w, y, x + 0.5f*w, 0.5f*h);
+                   easyRender_pushScissors(globalRenderGroup, r, 1, mat4(), projection, resolution);
+
 
                    Matrix4 Q = quaternionToMatrix(eulerAnglesToQuaternion(0, 0, -TAU32*weatherState->timeOfDay));
                    
 
-                   Matrix4 T = Mat4Mult(Matrix4_translate(Matrix4_scale(mat4(), v3(w, clock->aspectRatio_h_over_w*w, 0)), v3(fuaxWidth - 200, 200, 0.4f)), Q);
+                   Matrix4 T = Mat4Mult(Matrix4_translate(Matrix4_scale(mat4(), v3(w, h, 0)), v3(x, y, 0.4f)), Q);
                    setModelTransform(globalRenderGroup, T);
                    renderDrawSprite(globalRenderGroup, clock, COLOR_WHITE);
-
+                   easyRender_disableScissors(globalRenderGroup);
                 }
 
-                Entity *p = manager->player;
+                Entity *p = ((Entity *)(manager->player));
 
                 float staminaPercent = p->stamina / p->maxStamina;
 
@@ -1402,6 +1652,22 @@ int main(int argc, char *args[]) {
 
                 }   
 
+                int splatIndexOn_tiles = 0;
+                if(editorState->createMode == EDITOR_CREATE_TILE_MODE) {
+                    // splatIndexOn_tiles = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList_tiles.memory, gameState->splatList_tiles.count); 
+
+                }   
+
+                EntityTriggerType triggerType;
+                
+
+                if(editorState->createMode == EDITOR_CREATE_EMPTY_TRIGGER) {
+                    
+                    triggerType = (EntityTriggerType)easyEditor_pushList(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
+
+                    
+                }
+
                 easyEditor_pushSlider(appInfo->editor, "Time of day: ", &weatherState->timeOfDay, 0, 1);
                 easyEditor_pushSlider(appInfo->editor, "Time of Day Speed: ", &weatherState->timeOfDaySpeed, 0, 1);
 
@@ -1430,6 +1696,8 @@ int main(int argc, char *args[]) {
 
                 Texture *splatTexture = ((Texture **)(gameState->splatTextures.memory))[splatIndexOn];
 
+                // Texture *splatTexture_tile = ((Texture **)(gameState->splatTextures_tiles.memory))[splatIndexOn_tiles];
+                bool justCreatedEntity = false;
                 if(!appInfo->editor->isHovering) {
 
                     EasyPlane floor = {};
@@ -1451,6 +1719,14 @@ int main(int argc, char *args[]) {
                     switch(editorState->createMode) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
+                        } break;
+                        case EDITOR_CREATE_EMPTY_TRIGGER: {
+                            if(pressed) {
+                                editorState->entitySelected = initEmptyTrigger(gameState, manager, hitP, triggerType);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                                justCreatedEntity = true;
+                            }
                         } break;
                         case EDITOR_CREATE_TILE_MODE: {
                             if(editorState->tileOption == EDITOR_TILE_SINGLE) {
@@ -1478,14 +1754,16 @@ int main(int argc, char *args[]) {
 
                                 }
 
+
+
                                 bool ranOutOfTileRoom = false;
                                 if(wasReleased(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
                                     V2 diff = v2_minus(hitP.xy, editorState->topLeftCornerOfTile);
 
                                     int w = (int)absVal(diff.x);
                                     int h = (int)absVal(diff.y);
-                                    for(int i = 0; i < h && !ranOutOfTileRoom; ++i) {
-                                        for(int j = 0; j < w && !ranOutOfTileRoom; ++j) {
+                                    for(int i = 0; i < h && !ranOutOfTileRoom; i++) {
+                                        for(int j = 0; j < w && !ranOutOfTileRoom; j++) {
                                             ranOutOfTileRoom = !addWorldTile(gameState, j + editorState->topLeftCornerOfTile.x, editorState->topLeftCornerOfTile.y - i, editorState->tileType);
                                         }    
                                     }
@@ -1506,6 +1784,7 @@ int main(int argc, char *args[]) {
                                 editorState->entitySelected = initPushRock(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
+                                justCreatedEntity = true;
                             }
                         } break;
                         case EDITOR_CREATE_LAMP_POST: {
@@ -1513,6 +1792,7 @@ int main(int argc, char *args[]) {
                                 editorState->entitySelected = initLampPost(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
+                                justCreatedEntity = true;
                             }
                         } break;
                         case EDITOR_CREATE_3D_MODEL: {
@@ -1520,6 +1800,7 @@ int main(int argc, char *args[]) {
                                 editorState->entitySelected = init3dModel(gameState, manager, hitP, modelSelected);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
+                                justCreatedEntity = true;
                             }
                         } break;
                         case EDITOR_CREATE_TERRAIN: {
@@ -1528,12 +1809,14 @@ int main(int argc, char *args[]) {
                                 gameState->currentTerrainEntity = editorState->entitySelected; 
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
+                                justCreatedEntity = true;
                             }
                         } break;
                         case EDITOR_CREATE_SCENERY: {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
                             }
 
                         } break;
@@ -1541,12 +1824,14 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 initOneWayPlatform(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
                             }
                         } break;
                         case EDITOR_CREATE_SCENERY_RIGID_BODY: {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;   
@@ -1554,6 +1839,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, &gameState->skeltonIdle, hitP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1561,6 +1847,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initWerewolf(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1568,6 +1855,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initSword(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1575,6 +1863,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initChest(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1582,6 +1871,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initHorse(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1589,6 +1879,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initSheild(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1596,6 +1887,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1603,6 +1895,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initHouse(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1610,6 +1903,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1617,6 +1911,23 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, &gameState->torchAnimation, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_ENTITY_CREATOR: {
+                            if(pressed) {
+                                editorState->entitySelected = initEntityCreator(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
+
+                            }
+                        } break;
+                        case EDITOR_CREATE_SEAGULL: {
+                            if(pressed) {
+                                editorState->entitySelected = initSeagull(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1624,6 +1935,7 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                justCreatedEntity = true;
 
                             }
                         } break;
@@ -1643,6 +1955,10 @@ int main(int argc, char *args[]) {
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS) ? "Bounds Off" : "Bounds On")) {
                     DEBUG_DRAW_COLLISION_BOUNDS = !DEBUG_DRAW_COLLISION_BOUNDS;
                     // manager->player->collider1->offset.y = 0;
+                }
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_USE_ORTHO_MATRIX) ? "Ortho Off" : "Ortho On")) {
+                    DEBUG_USE_ORTHO_MATRIX = !DEBUG_USE_ORTHO_MATRIX;
                 }
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
@@ -1667,7 +1983,7 @@ int main(int argc, char *args[]) {
                 }
 
                 if(easyEditor_pushButton(appInfo->editor, "Zero Pos Player")) {
-                    manager->player->T.pos.xy = v2(0, 0);
+                    ((Entity *)(manager->player))->T.pos.xy = v2(0, 0);
                 }
 
                 if(easyEditor_pushButton(appInfo->editor, "Undo")) {
@@ -1842,14 +2158,38 @@ int main(int argc, char *args[]) {
                     easyEditor_pushFloat3(appInfo->editor, "Position: ", &e->T.pos.x, &e->T.pos.y, &e->T.pos.z);
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
+                    if(e->type == ENTITY_ENTITY_CREATOR) {
+                        e->typeToCreate = (EntityType)easyEditor_pushList_(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
+                        easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
+                    }
+                    
+
                     if(e->type == ENTITY_LAMP_POST) {
-                        easyEditor_pushFloat1(appInfo->editor, "Light: ", &e->lightIntensity);
+                        V4 lColor = {};
+                        lColor.xyz = e->lightColor;
+                        lColor.w = 1;
+                        easyEditor_pushFloat1(appInfo->editor, "LightPower: ", &e->lightIntensity);
+                        easyEditor_pushColor(appInfo->editor, "Light Color: ", &lColor);
+
+                        e->lightColor = lColor.xyz;
                     }
 
                     if(e->sprite && easyEditor_pushButton(appInfo->editor, "Snap Aspect Ratio")) {
                         e->T.scale.y = e->sprite->aspectRatio_h_over_w*e->T.scale.x;
                     }
 
+
+                    if(e->type == ENTITY_TRIGGER) {
+                         easyEditor_alterListIndex(appInfo->editor, (int)e->triggerType); e->triggerType = (EntityTriggerType)easyEditor_pushList(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
+                        
+                        easyEditor_alterListIndex(appInfo->editor, (int)e->locationSoundType); e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings));
+                   
+                        easyEditor_preloadName(appInfo->editor, e->levelToLoad); e->levelToLoad = easyEditor_pushTextBox(appInfo->editor, "Scene to load:", e->levelToLoad);
+                   }
+
+                   if(e->type == ENTITY_HOUSE) {
+                       e->levelToLoad = easyEditor_pushTextBox_(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
+                   }
 
 
                     ////////////////////////////////////////////////////////////////////
@@ -1945,12 +2285,12 @@ int main(int argc, char *args[]) {
                         if(editorState->entitySelected == gameState->currentTerrainEntity) {
                             gameState->currentTerrainEntity = 0;
                         }
-                        editorState->entitySelected = 0;
+                        letGoOfSelectedEntity(editorState);
                         
                     }
 
                     if(easyEditor_pushButton(appInfo->editor, "Let Go")) {
-                        editorState->entitySelected = 0;
+                        letGoOfSelectedEntity(editorState);
                     }
 
                     if(easyEditor_pushButton(appInfo->editor, "Flip")) {
@@ -2041,8 +2381,10 @@ int main(int argc, char *args[]) {
 
                     easyEditor_endWindow(appInfo->editor); //might not actuall need this
 
-                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && !insideEntity && editorState->gizmoSelect == EDITOR_GIZMO_NONE) {
-                        editorState->entitySelected = 0;
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && !insideEntity && editorState->gizmoSelect == EDITOR_GIZMO_NONE && !justCreatedEntity) {
+                        
+                        letGoOfSelectedEntity(editorState);
+                        
                     }
 
                     //Update the entity moving
@@ -2166,9 +2508,9 @@ int main(int argc, char *args[]) {
                     Texture *t = getInvetoryTexture(gameState->playerHolding[1]->type);
                     renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
 
-                    if(gameState->playerHolding[0]->isDisposable) {
+                    if(gameState->playerHolding[1]->isDisposable) {
                         float offset = 50;
-                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[0]->count);
+                        char *str = easy_createString_printf(&globalPerFrameArena, "%d", gameState->playerHolding[1]->count);
                         outputTextNoBacking(gameFont, x + offset, gameState->fuaxResolution.y - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_WHITE, 1.3f, true, 1);
                     }
 
@@ -2382,8 +2724,8 @@ int main(int argc, char *args[]) {
                    gameState->itemCollectType = ENTITY_NULL;
                    gameState->entityChestToDisplay = 0;
 
-                   easyAnimation_emptyAnimationContoller(&manager->player->animationController, &gameState->animationFreeList);
-                   easyAnimation_addAnimationToController(&manager->player->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
+                   easyAnimation_emptyAnimationContoller(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList);
+                   easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
 
                    // easyPlatform_freeMemory(gameState->inventoryString_mustFree);
                    
@@ -2680,7 +3022,7 @@ int main(int argc, char *args[]) {
 
                 if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
                     gameState->gameModeType = GAME_MODE_PLAY;
-                    manager->player->health = manager->player->maxHealth;
+                    ((Entity *)(manager->player))->health = ((Entity *)(manager->player))->maxHealth;
                 }
             }
 
@@ -2700,7 +3042,7 @@ int main(int argc, char *args[]) {
                          noMatch = false;
 
                         if(appInfo->console.questionId == 1) { //Save Scene Id
-                            gameScene_saveScene(manager, gameState->sceneFileNameTryingToSave);
+                            gameScene_saveScene(gameState, manager, gameState->sceneFileNameTryingToSave);
                             easyFlashText_addText(&globalFlashTextManager, "SAVED");
 
                             easyPlatform_freeMemory(gameState->sceneFileNameTryingToSave);
@@ -2734,7 +3076,7 @@ int main(int argc, char *args[]) {
                                 appInfo->console.questionId = 1;
                                 gameState->sceneFileNameTryingToSave = sceneFileName;
                             } else {
-                                gameScene_saveScene(manager, sceneFileName);
+                                gameScene_saveScene(gameState, manager, sceneFileName);
                                 easyFlashText_addText(&globalFlashTextManager, "SAVED");   
                             }
                             
@@ -2753,7 +3095,7 @@ int main(int argc, char *args[]) {
 
                             if(gameScene_doesSceneExist(sceneFileName)) {
                                 entityManager_emptyEntityManager(manager, &gameState->physicsWorld);
-                                editorState->entitySelected = 0;
+                                letGoOfSelectedEntity(editorState);
                                 //NOTE: MEMEORY LEAK HERE. We don' free the scene file name when we load a new scene
                                 gameScene_loadScene(gameState, manager, nullTerminateArena(token.at, token.size, &globalLongTermArena));
                             } else {

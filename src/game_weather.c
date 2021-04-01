@@ -6,7 +6,12 @@ typedef struct {
 static inline GameWeatherState *initWeatherState() {
 	GameWeatherState *state = pushStruct(&globalLongTermArena, GameWeatherState);
 
-	state->timeOfDay = 1.f;
-	state->timeOfDaySpeed= 0.1f;
+	state->timeOfDay = 0.5f;
+	state->timeOfDaySpeed= 0.001f;
 	return state;
+}
+
+static inline float getTimeOfDay(GameWeatherState *w) {
+	float time = 24.0f*w->timeOfDay;
+	return time;
 }

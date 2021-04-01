@@ -38,6 +38,16 @@ float absVal(float a) {
 }
 
 
+float easeInQuart(float x) {
+return x * x * x * x;
+}
+
+float easeOutCubic(float start, float x, float end) {
+    float lerpValue = 1 - pow(1 - x, 3);
+
+    float result = start + (1 - lerpValue)*(end - start);
+    return result;
+}
 
 
 float lerp(float a, float t, float b) {

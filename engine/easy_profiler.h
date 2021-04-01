@@ -5,7 +5,7 @@ DEBUG_TIME_BLOCK(); //put this at the begining of a scope like a fiunction
 DEBUG_TIME_BLOCK_NAMED(name); //this is if you want to profile just a block
 
 */
-
+#define EASY_PROFILER_ON 1
 
 typedef enum {
 	EASY_PROFILER_PUSH_SAMPLE,
@@ -327,9 +327,7 @@ static inline void easyProfiler_addDrawCount(u32 drawCount, u32 shapeTypeIndexIn
 				//NOTE(ollie): New one so fill out it's info
 				EasyProfiler_DrawCountWithStringId *id = &info->ids[info->uniqueModelCount++];
 				id->drawCount += drawCount;
-	#if DEVELOPER_MODE
 				easyPlatform_copyMemory(id->stringId, stringId, sizeof(char)*arrayCount(id->stringId));
-	#endif
 			} else {
 				//NOTE(ollie): Buffer to small
 				assert(!"overflow buffer");
@@ -338,7 +336,7 @@ static inline void easyProfiler_addDrawCount(u32 drawCount, u32 shapeTypeIndexIn
 	}
 }
 
-#if DEVELOPER_MODE
+#if EASY_PROFILER_ON
 #define DEBUG_TIME_BLOCK() EasyProfileBlock pb_##__FILE__##__LINE__##__FUNCTION__(__LINE__, __FILE__, __FUNCTION__, false); 
 #define DEBUG_TIME_BLOCK_FOR_FRAME_BEGIN(varName, functionName) DEBUG_globalEasyEngineProfilerState = EasyProfiler_initProfilerState(); EasyProfileBlock *varName = new EasyProfileBlock(__LINE__, __FILE__, functionName, true); 
 #define DEBUG_TIME_BLOCK_FOR_FRAME_START(varName, functionName) varName = new EasyProfileBlock(__LINE__, __FILE__, functionName, true); 

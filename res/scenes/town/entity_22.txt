@@ -1,0 +1,19 @@
+{
+
+	id: 22;
+	type: "ENTITY_SCENERY";
+	position: 36.000000 9.000000 -0.500000;
+	scale: 0.400000 0.400000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "grass_splat";
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 0.000000;
+	typeToCreate: "ENTITY_NULL";
+}
+

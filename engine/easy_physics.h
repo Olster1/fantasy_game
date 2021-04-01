@@ -123,6 +123,7 @@ static inline EasyPhysics_RayCastAABB3f_Info EasyPhysics_CastRayAgainstAABB3f(Ma
 
 
 typedef enum {
+	EASY_COLLISION_LAYER_NULL,
 	EASY_COLLISION_LAYER_WORLD,
 	EASY_COLLISION_LAYER_ITEMS,
 	EASY_COLLISION_LAYER_ENEMIES,
@@ -135,6 +136,11 @@ typedef enum {
 
 static inline bool EasyPhysics_layersCanCollider(EasyCollisionLayer a, EasyCollisionLayer b) {
 	bool result = false;
+
+	if(a == EASY_COLLISION_LAYER_NULL || b == EASY_COLLISION_LAYER_NULL) {
+		return false;
+	}
+
 	if(a == b) {
 
 	} else if(a == EASY_COLLISION_LAYER_WORLD || b == EASY_COLLISION_LAYER_WORLD) {
@@ -222,6 +228,8 @@ typedef struct {
 
 	int collisionCount;
 	EasyCollisionInfo collisions[256];
+
+	bool canCollide; //this is since rigid bodies have to have a collider to update their position
 
 	union {
 		struct {
@@ -673,7 +681,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
     for (int i = 0; i < colliders->count; ++i)
     {
         EasyCollider *a = (EasyCollider *)getElement(colliders, i);
-        if(a && a->rb->inverseWeight > 0.0f) {
+        if(a && a->rb && a->rb->inverseWeight > 0.0f) {
 
         	V3 lastPos = a->T->pos;
         	Quaternion lastQ = a->T->Q;

@@ -917,6 +917,10 @@ typedef struct {
     //
 
 
+    //alloc used if user wants to sort their render group
+    InfiniteAlloc renderBatches_forSorting;
+    InfiniteAlloc allInstanceData;
+
     Rect2f viewport;
 
     bool cullingEnabled;
@@ -1077,6 +1081,9 @@ static inline void easy_addLight(RenderGroup *group, EasyLight *light) {
 void initRenderGroup(RenderGroup *group, float bufferWidth, float bufferHeight) {
     DEBUG_TIME_BLOCK()
     assert(!group->initied);
+
+    easyMemory_zeroSize(group, sizeof(RenderGroup));
+
     group->currentDepthTest = true;
     group->blendFuncType = BLEND_FUNC_STANDARD_PREMULTIPLED_ALPHA;
     group->depthFunc = RENDER_DEPTH_FUNC_LESS;
@@ -1085,6 +1092,9 @@ void initRenderGroup(RenderGroup *group, float bufferWidth, float bufferHeight) 
     group->modelTransform = mat4();
     group->viewTransform = mat4();
     group->projectionTransform = mat4();
+
+    group->renderBatches_forSorting = initInfinteAlloc(EasyRenderBatch *);
+    group->allInstanceData = initInfinteAlloc(float);
 
     group->skybox = 0;
     group->initied = true;
@@ -3035,7 +3045,7 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
         V2 vp = getDim(info->viewport);
         glViewport(info->viewport.min.x, info->viewport.min.y, vp.x, vp.y);
 
-        InfiniteAlloc allInstanceData = initInfinteAlloc(float);        
+                
         
         for(int i = 0; i < items->count; ++i) {
             RenderItem *nextItem = (RenderItem *)getElementFromAlloc_(items, i);
@@ -3044,20 +3054,20 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
                 assert(info->blendFuncType == nextItem->blendFuncType);
                 assert(info->depthTest == nextItem->depthTest);
                 //collect data
-                addElementInifinteAllocWithCount_(&allInstanceData, nextItem->mMat.val, 16);
+                addElementInifinteAllocWithCount_(&group->allInstanceData, nextItem->mMat.val, 16);
 
-                addElementInifinteAllocWithCount_(&allInstanceData, nextItem->vMat.val, 16);
+                addElementInifinteAllocWithCount_(&group->allInstanceData, nextItem->vMat.val, 16);
 
                 // addElementInifinteAllocWithCount_(&allInstanceData, nextItem->pMat.val, 16);
                 
-                addElementInifinteAllocWithCount_(&allInstanceData, nextItem->color.E, 4);
+                addElementInifinteAllocWithCount_(&group->allInstanceData, nextItem->color.E, 4);
                 
                 if(nextItem->textureHandle) {
-                    addElementInifinteAllocWithCount_(&allInstanceData, nextItem->textureUVs.E, 4);
+                    addElementInifinteAllocWithCount_(&group->allInstanceData, nextItem->textureUVs.E, 4);
                 } else {
                     //We do this to keep the spacing correct for the struct.
                     float nullData[4] = {};
-                    addElementInifinteAllocWithCount_(&allInstanceData, nullData, 4);
+                    addElementInifinteAllocWithCount_(&group->allInstanceData, nullData, 4);
                 }
                 // } 
             } 
@@ -3066,7 +3076,7 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
             
         initVao(info->bufferHandles, info->triangleData, info->triCount, info->indicesData, info->indexCount);
     
-        easyRender_updateInstanceData(info->bufferHandles, &allInstanceData, info->program, info->textureHandle);
+        easyRender_updateInstanceData(info->bufferHandles, &group->allInstanceData, info->program, info->textureHandle);
 
         {
             drawVao(info->bufferHandles, info->program, info->type, info->textureHandle, items->count, info->material, group, &info->pMat, info->dataPacket_);
@@ -3076,7 +3086,7 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
             
         }
         
-        releaseInfiniteAlloc(&allInstanceData);
+        group->allInstanceData.count = 0;
     }
 }
 
@@ -3128,16 +3138,15 @@ void drawRenderGroup(RenderGroup *group, RenderDrawSettings settings) {
         }
     } else if (settings & RENDER_DRAW_SORT) {
 
-        //NOTE(ol): Going to cache the groups in an array 
-        InfiniteAlloc renderBatches = initInfinteAlloc(EasyRenderBatch *);
-
+        //NOTE(ol): Cache the groups in an array using renderBatches_forSorting on rendergroup
+        assert(group->renderBatches_forSorting.sizeOfMember > 0);
         //NOTE(Ol): get all the batches that need drawing
         for(int i = 0; i < RENDER_BATCH_HASH_COUNT; ++i) {
             if(group->batches[i]) {
                 EasyRenderBatch *b = group->batches[i];
                 while(b) {
                     if(b->items.count) {
-                        EasyRenderBatch **result = (EasyRenderBatch **)addElementInifinteAlloc_(&renderBatches, 0);
+                        EasyRenderBatch **result = (EasyRenderBatch **)addElementInifinteAlloc_(&group->renderBatches_forSorting, 0);
                         *result = b;
                     }
                                         
@@ -3148,16 +3157,12 @@ void drawRenderGroup(RenderGroup *group, RenderDrawSettings settings) {
         //
 
         //Sort the items
-        //NOTE(ollie): For some reason the qsort wasn't working? It may have been something to do with infinite allocs?
-        // But works without it just using the homemade function. Oliver 26/01/20
-
-        // qsort(renderBatches.memory, renderBatches.count, sizeof(EasyRenderBatch **), cmpDepthfunc);
-        sortRenderBatchesOnDepth(&renderBatches);
+        sortRenderBatchesOnDepth(&group->renderBatches_forSorting);
         //
 
         //Draw the render batches from z+ve big to z small
-        for(int i = 0; i < renderBatches.count; ++i) {
-            EasyRenderBatch *b = *((EasyRenderBatch **)getElementFromAlloc_(&renderBatches, i));
+        for(int i = 0; i < group->renderBatches_forSorting.count; ++i) {
+            EasyRenderBatch *b = *((EasyRenderBatch **)getElementFromAlloc_(&group->renderBatches_forSorting, i));
             if(b) {
                 easyRender_DrawBatch(group, &b->items);
                 easyRender_EndBatch(b);
@@ -3165,7 +3170,9 @@ void drawRenderGroup(RenderGroup *group, RenderDrawSettings settings) {
         }
         ////
 
-        releaseInfiniteAlloc(&renderBatches);
+        //We don't release memory any more, we just set the count back to zero
+        group->renderBatches_forSorting.count = 0;
+        // releaseInfiniteAlloc(&renderBatches);
     }
     
 

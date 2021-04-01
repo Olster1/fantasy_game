@@ -1,0 +1,21 @@
+{
+
+	id: 2;
+	type: "ENTITY_TRIGGER";
+	position: 33.000000 1.000000 -0.500000;
+	scale: 2.000000 2.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "white texture";
+	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	levelToLoad: "house";
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	triggerType: "ENTITY_TRIGGER_LOAD_SCENE";
+}
+

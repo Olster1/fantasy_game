@@ -19,6 +19,11 @@ FUNC(ENTITY_HORSE)\
 FUNC(ENTITY_CHEST)\
 FUNC(ENTITY_HOUSE)\
 FUNC(ENTITY_LAMP_POST)\
+FUNC(ENTITY_TILE_MAP)\
+FUNC(ENTITY_TRIGGER)\
+FUNC(ENTITY_SEAGULL)\
+FUNC(ENTITY_ENTITY_CREATOR)\
+
 
 
 typedef enum {
@@ -34,6 +39,38 @@ typedef enum {
 	GAME_PAUSE_MENU_MAIN,
 	GAME_PAUSE_MENU_SETTINGS
 } PauseMenuSubType;
+
+
+//// Entity Trigger Types ////////////
+#define MY_TRIGGER_TYPE(FUNC) \
+FUNC(ENTITY_TRIGGER_NULL)\
+FUNC(ENTITY_TRIGGER_START_SWIM)\
+FUNC(ENTITY_TRIGGER_LOCATION_SOUND)\
+FUNC(ENTITY_TRIGGER_LOAD_SCENE)\
+
+
+typedef enum {
+    MY_TRIGGER_TYPE(ENUM)
+} EntityTriggerType;
+
+static char *MyEntity_TriggerTypeStrings[] = { MY_TRIGGER_TYPE(STRING) };
+
+/////////////////////////////////////////////////////////////////
+
+//// Entity Sound Types ////////////
+#define MY_LOCATION_SOUND_TYPE(FUNC) \
+FUNC(ENTITY_SOUND_NULL)\
+FUNC(ENTITY_SOUND_SEASIDE)\
+
+
+typedef enum {
+    MY_LOCATION_SOUND_TYPE(ENUM)
+} EntityLocationSoundType;
+
+static char *MyEntity_LocationSoundTypeStrings[] = { MY_LOCATION_SOUND_TYPE(STRING) };
+
+/////////////////////////////////////////////////////////////////
+
 
 
 typedef enum {
@@ -83,6 +120,28 @@ static ItemAnimationInfo items_initItemAnimation(V2 startP, V2 endP, EntityType 
 FUNC(WORLD_TILE_GRASS)\
 FUNC(WORLD_TILE_LAVA)\
 FUNC(WORLD_TILE_ROCK)\
+FUNC(WORLD_TILE_COBBLE)\
+FUNC(WORLD_TILE_PATH)\
+FUNC(WORLD_TILE_PATH1)\
+FUNC(WORLD_TILE_PATH2)\
+FUNC(WORLD_TILE_PATH3)\
+FUNC(WORLD_TILE_PATH4)\
+FUNC(WORLD_TILE_PATH5)\
+FUNC(WORLD_TILE_BEACH)\
+FUNC(WORLD_TILE_SEA)\
+FUNC(WORLD_TILE_SEA1)\
+FUNC(WORLD_TILE_BEACH_GRASS)\
+FUNC(WORLD_TILE_SAND_WATER)\
+FUNC(WORLD_TILE_SAND_WATER1)\
+FUNC(WORLD_TILE_PIER_MIDDLE)\
+FUNC(WORLD_TILE_PIER_SAND)\
+FUNC(WORLD_TILE_PIER_SIDE_LEFT)\
+FUNC(WORLD_TILE_PIER_SIDE_RIGHT)\
+FUNC(WORLD_TILE_PIER_SAND_CORNER_LEFT)\
+FUNC(WORLD_TILE_PIER_SAND_CORNER_RIGHT)\
+FUNC(WORLD_TILE_PIER_SEA_CORNER_RIGHT)\
+FUNC(WORLD_TILE_PIER_SEA_CORNER_LEFT)\
+
 
 typedef enum {
     MY_TILE_TYPE(ENUM)
@@ -94,6 +153,8 @@ typedef struct {
 	WorldTileType type;
 	int x;
 	int y;
+
+	EasyAnimation_Controller animationController;
 } WorldTile;
 
 typedef struct {
@@ -125,6 +186,11 @@ typedef struct {
 	Animation wizardRight;
 	Animation wizardGetItem;
 
+	Animation wizardSwimLeft;
+	Animation wizardSwimRight;
+	Animation wizardSwimUp;
+	Animation wizardSwimDown;
+
 	Animation wizardIdleForward;
 	Animation wizardIdleBottom;
 	Animation wizardIdleLeft;
@@ -137,9 +203,19 @@ typedef struct {
 	Animation skeltonHit;
 	Animation skeltonWalk;
 
+
+
+	Animation seagullAnimation;
+
 	Animation walkAnimation;
 
 	Animation werewolfIdle;
+
+	///// TIle Animations ///
+	Animation seaTileAnimation;
+	Animation sandWaterTileAnimation;
+
+	/////
 
 	Texture *playerTexture;
 
@@ -150,6 +226,9 @@ typedef struct {
 
 	///////////
 
+	char *emptyString;
+
+	
 
 	///// INVENTORY MENU attributes ///////
 
@@ -194,6 +273,8 @@ typedef struct {
 	WavFile *chestOpenSound;
 	WavFile *bubbleSound;
 	WavFile *doorSound;
+	WavFile *waterInSound;
+	WavFile *seagullsSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -235,6 +316,9 @@ typedef struct {
 
 	InfiniteAlloc splatList;
 	InfiniteAlloc splatTextures;
+
+	InfiniteAlloc splatList_tiles;
+	InfiniteAlloc splatTextures_tiles;
 
 	//Player variables loaded in tweak file
 	float jumpPower;
@@ -303,6 +387,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->bubbleSound = findSoundAsset("bubble1.wav");
 
 	state->doorSound = findSoundAsset("door_close.wav");
+	state->waterInSound = findSoundAsset("waterIn.wav");
+	state->seagullsSound = findSoundAsset("seaside.wav");
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -337,6 +423,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->splatList = initInfinteAlloc(char *);
 	state->splatTextures = initInfinteAlloc(Texture *);
+
+	state->splatList_tiles = initInfinteAlloc(char *);
+	state->splatTextures_tiles = initInfinteAlloc(Texture *);
 
 	state->walkPower = 400;
 
@@ -419,7 +508,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
     ////////////////////////////////////////////////////////////////////////////
 
-
+    state->emptyString = "emptyString"; //string used for entities that the string is altered using textboxes in editor, but just need it to not be null to preload the textbox
     
 
 
@@ -456,6 +545,8 @@ static Texture *gameState_findSplatTexture(GameState *gameState, char *textureNa
 static inline bool addWorldTile(GameState *gameState, int x, int y, WorldTileType type) {
 	bool didAdd = false;
 
+	x = x - (x % GLOBAL_WORLD_TILE_SIZE);
+	y = y - (y % GLOBAL_WORLD_TILE_SIZE);
 	WorldTile *foundTile = 0;
 	//look for tile first
 	for(int i = 0; i < gameState->tileSheet.tileCount && !foundTile; ++i) {
@@ -478,6 +569,8 @@ static inline bool addWorldTile(GameState *gameState, int x, int y, WorldTileTyp
 		foundTile->x = x;
 		foundTile->y = y;
 		foundTile->type = type; 
+
+		easyAnimation_initController(&foundTile->animationController);
 	}
 
 	return didAdd;

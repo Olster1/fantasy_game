@@ -3,6 +3,7 @@
 typedef enum {
 	ENTITY_SHOW_HEALTH_BAR = 1 << 0,
 	ENTITY_SHOULD_SAVE = 1 << 1,
+	ENTITY_SHOULD_NOT_RENDER = 1 << 2,
 } EntityFlags;
 
 typedef enum {
@@ -26,11 +27,26 @@ typedef struct {
 
 	bool isDead;
 
+	bool isSwimming;
+
+	//FOr empty triggers that do stuff
+	EntityTriggerType triggerType;
+	char *levelToLoad; //for triggers that load levels
+
+	//Location Sound type to retrieve string
+	EntityLocationSoundType locationSoundType;
+
 	///NOTE: CHest information
 	EntityType chestContains;
 	int itemCount;
 	bool chestIsOpen;
 	/////
+
+	//For entity creator
+	float rateOfCreation;
+	float timeSinceLastCreation;
+	EntityType typeToCreate;
+	/////////////////////////////
 
 
 	int subEntityType;
@@ -100,18 +116,6 @@ typedef struct {
 
 } Entity;
 
-typedef struct {
-	Array_Dynamic entities;
-
-	Array_Dynamic entitiesToAddForFrame;
-	Array_Dynamic entitiesToDeleteForFrame;
-
-	Array_Dynamic damageNumbers;
-
-	int lastEntityIndex;
-
-	Entity *player;
-} EntityManager;	
 
 typedef struct {
 	EntityType type;
@@ -431,10 +435,42 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 }
 
 
-static void unpauseGame(void *data) {
-	GameState *gameState = (GameState *)data;
+static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics_World *physicsWorld) {
+	easyArray_clear(&manager->entitiesToDeleteForFrame);
+	easyArray_clear(&manager->entities);
+	easyArray_clear(&manager->entitiesToAddForFrame);
+	easyArray_clear(&manager->damageNumbers);
 
-	gameState->gameIsPaused = false;
+	EasyPhysics_emptyPhysicsWorld(physicsWorld);
+	
+	manager->lastEntityIndex = 0;
+	manager->player = 0;
+}
+
+
+
+typedef struct {
+	GameState *gameState;
+	EntityManager *manager;	
+	char *sceneToLoad;
+	EditorState *editorState;
+} EntityLoadSceneData;
+
+static void loadScene(void *data_) {
+	EntityLoadSceneData *data = (EntityLoadSceneData *)data_;
+
+	if(gameScene_doesSceneExist(data->sceneToLoad)) {
+		letGoOfSelectedEntity(data->editorState);
+
+		entityManager_emptyEntityManager(data->manager, &data->gameState->physicsWorld);
+
+		gameScene_loadScene(data->gameState, data->manager, data->sceneToLoad);
+
+		
+	}
+	data->gameState->gameIsPaused = false;	
+
+	free(data_);
 }
 
 
@@ -466,6 +502,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->flags = 0;
 	entity->isDead = false;
 
+	entity->rateOfCreation = 3.f;
+	entity->typeToCreate = ENTITY_NULL;
 	entity->healthBarTimer = -1;
 
 	entity->isDying = false;
@@ -503,7 +541,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
-	if(type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_HEALTH_POTION_1) {
+	if(type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SEAGULL) {
 
 	} else {
 		entity->flags |= (u64)ENTITY_SHOULD_SAVE;
@@ -527,6 +565,10 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 	if(type == ENTITY_TERRAIN) { canCollide = false; isTrigger = false; gravityFactor = 0; inverse_weight = 0; dragFactor = 0; }
 	
+	if(type == ENTITY_TRIGGER) { isTrigger = true; gravityFactor = 0; inverse_weight = 0; dragFactor = 0;} 
+
+
+	if(type == ENTITY_SEAGULL) { gravityFactor = 0; inverse_weight = 1.f / 20.0f; dragFactor = 0; }
 
 	if(canCollide) {
 		// char string[256];
@@ -546,7 +588,6 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 				float newHeight = entity->collider1->dim2f.y * 2.0f;
 				float diff = newHeight - entity->collider1->dim2f.y;
 
-				easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.y);
 				//Offset the trigger in front of the player
 				entity->collider1->offset.y += 2.5f;
 				entity->collider1->layer = EASY_COLLISION_LAYER_PLAYER_BULLET;
@@ -568,6 +609,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENTITY_SKELETON: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
+			case ENTITY_TRIGGER:
 			case ENTITY_SHEILD:
 			case ENTITY_SWORD: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -587,6 +629,9 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENTITY_WEREWOLF: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
+			case ENTITY_SEAGULL: {
+				entity->collider->layer = EASY_COLLISION_LAYER_NULL;
+			} break;
 		}
 
 	}
@@ -599,10 +644,10 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState) {
 
 
-	if(!isPaused) {
+	if(!isPaused && !entity->isSwimming) {
 
 		if(entity->staminaTimer >= 0.0f) {
 			entity->staminaTimer += dt;
@@ -626,7 +671,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	if(entity->type == ENTITY_WIZARD) {
 
+		//Update listener position which is the wizard
+		easySound_updateListenerPosition(soundState, easyTransform_getWorldPos(&entity->T));
+
 		Animation *animToAdd = 0;
+
+		
 
 		Animation *idleAnimation = 0;
 		// if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardBottom) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRight) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardLeft) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump))
@@ -642,30 +692,62 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				walkModifier = 0.5f;
 			}
 
+			float staminaFactor = 0.01f;
+
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
-				animToAdd = &gameState->wizardLeft;
-				idleAnimation = &gameState->wizardIdleLeft;
+
+				if(entity->isSwimming) {
+					animToAdd = &gameState->wizardSwimLeft;
+				} else {
+					animToAdd = &gameState->wizardLeft;
+					idleAnimation = &gameState->wizardIdleLeft;	
+				}
+				
+				staminaFactor = 0.1f;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 				entity->rb->accumForce.x += gameState->walkPower*walkModifier;
-				animToAdd = &gameState->wizardRight;
-				idleAnimation = &gameState->wizardIdleRight;
+				if(entity->isSwimming) {
+					animToAdd = &gameState->wizardSwimRight;
+				} else {
+					animToAdd = &gameState->wizardRight;
+					idleAnimation = &gameState->wizardIdleRight;
+				}
+				staminaFactor = 0.1f;
 			}
 			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
 				entity->rb->accumForce.y += gameState->walkPower*walkModifier;
-				animToAdd = &gameState->wizardForward;
-				idleAnimation = &gameState->wizardIdleForward;
+				if(entity->isSwimming) {
+					animToAdd = &gameState->wizardSwimUp;
+				} else {
+					animToAdd = &gameState->wizardForward;
+					idleAnimation = &gameState->wizardIdleForward;
+				}
+				staminaFactor = 0.1f;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
 				entity->rb->accumForce.y += -gameState->walkPower*walkModifier;
-				animToAdd = &gameState->wizardBottom;
-				idleAnimation = &gameState->wizardIdleBottom;
+
+				if(entity->isSwimming) {
+					animToAdd = &gameState->wizardSwimDown;
+				} else {
+					animToAdd = &gameState->wizardBottom;
+					idleAnimation = &gameState->wizardIdleBottom;
+				}
+				staminaFactor = 0.1f;
 			}
 
+			//decrement stamina while swimming
+			if(entity->isSwimming) {
+				entity->stamina -= staminaFactor*dt;
 
+				if(entity->stamina < 0) {
+					entity->stamina = 0;
+				}
+			}
 			// entity->rotation = angle;
 
 		}
@@ -858,10 +940,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 
-	if(entity->type == ENTITY_LAMP_POST) {
-		float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
-		easyRender_push2dLight(globalRenderGroup, v3_plus(easyTransform_getWorldPos(&entity->T), v3(0, 0, -1.5f)), entity->lightColor, entity->lightIntensity*perlinFactor);
-	}
+	
 
 	if(entity->type == ENTITY_HOUSE) {
 		if(entity->collider1->collisionCount > 0) {
@@ -877,7 +956,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             		if(isDown(keyStates->gameButtons, BUTTON_UP)) {
             			//GO inside the house
             			playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
-            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, unpauseGame, gameState, EASY_TRANSITION_CIRCLE_N64);
+
+            			EntityLoadSceneData *loadSceneData = (EntityLoadSceneData *)easyPlatform_allocateMemory(sizeof(EntityLoadSceneData), EASY_PLATFORM_MEMORY_ZERO);
+            			loadSceneData->gameState = gameState;
+            			loadSceneData->manager = manager;
+            			loadSceneData->sceneToLoad = entity->levelToLoad;
+            			loadSceneData->editorState = editorState;
+
+
+            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
             			gameState->gameIsPaused = true;	
             		}
         			
@@ -1044,6 +1131,58 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 	}
 
+	if(entity->type == ENTITY_TRIGGER) {
+
+
+		if(entity->triggerType == ENTITY_TRIGGER_LOAD_SCENE) {
+			MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+			if(info.found) {
+				playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
+
+				EntityLoadSceneData *loadSceneData = (EntityLoadSceneData *)easyPlatform_allocateMemory(sizeof(EntityLoadSceneData), EASY_PLATFORM_MEMORY_ZERO);
+				loadSceneData->gameState = gameState;
+				loadSceneData->manager = manager;
+				loadSceneData->sceneToLoad = entity->levelToLoad;
+				loadSceneData->editorState = editorState;
+
+
+				EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
+				gameState->gameIsPaused = true;	
+			}
+		}
+
+		MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+		if(info.found) {
+			if(entity->triggerType == ENTITY_TRIGGER_START_SWIM) {
+				info.e->isSwimming = true;
+				playGameSound(&globalLongTermArena, gameState->waterInSound, 0, AUDIO_FOREGROUND);
+			} else if(entity->triggerType == ENTITY_TRIGGER_LOCATION_SOUND) {
+				entity->currentSound = playLocationSound(&globalLongTermArena, gameState->seagullsSound, 0, AUDIO_FOREGROUND, easyTransform_getWorldPos(&entity->T));
+				EasySound_LoopSound(entity->currentSound);
+
+				entity->currentSound->innerRadius = 1.f;
+				entity->currentSound->outerRadius = 50.0f;
+			} 
+		}
+
+		info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_EXIT);	
+		if(info.found) {
+			if(entity->triggerType == ENTITY_TRIGGER_START_SWIM) {
+				info.e->isSwimming = false;
+				playGameSound(&globalLongTermArena, gameState->waterInSound, 0, AUDIO_FOREGROUND);
+			} else if(entity->triggerType == ENTITY_TRIGGER_LOCATION_SOUND) {
+				easySound_endSound(entity->currentSound);
+				entity->currentSound = 0;
+			} 
+		}
+
+		// if(entity->triggerType == ENTITY_TRIGGER_LOCATION_SOUND && entity->currentSound) {
+			
+		// }
+	}
+
+	
+
 	if(entity->type == ENTITY_BLOCK_TO_PUSH) {
 
 		float margin_dP = 0.0f;
@@ -1085,6 +1224,43 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			}
 		}
 
+	}
+
+	if(entity->type == ENTITY_SEAGULL) {
+		entity->lifeSpanLeft -= dt;
+
+		float fadeVal = 2.0f;
+
+		if(entity->lifeSpanLeft < fadeVal) {
+			//fade out
+			float lerpVal = 1.0f - ((fadeVal - entity->lifeSpanLeft) / fadeVal); 
+
+			entity->colorTint.w = lerpVal;
+
+			if(entity->lifeSpanLeft <= 0.0f) {
+				entity->isDead = true;
+			}
+		}
+	}
+
+	if(entity->type == ENTITY_ENTITY_CREATOR) {
+
+		if(entity->typeToCreate != ENTITY_NULL) {
+			entity->timeSinceLastCreation += dt;
+
+			if(entity->timeSinceLastCreation > entity->rateOfCreation) {
+				entity->timeSinceLastCreation = 0;
+
+				ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+				EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+				entityToAdd->type = entity->typeToCreate;
+				entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, randomBetween(-5, 5), 0));
+
+				entityToAdd->dP.y = 0;
+				entityToAdd->dP.x = -2;//randomBetween(-5, 5);
+			}
+		}
+		
 	}
 
 
@@ -1307,7 +1483,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	setModelTransform(globalRenderGroup, T);
 	
-	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass) { renderSetShader(globalRenderGroup, &pixelArtProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass && !(entity->flags & ENTITY_SHOULD_NOT_RENDER)) { renderSetShader(globalRenderGroup, &pixelArtProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+
+
 
 	// if(entity->model) {
 	// 	renderSetShader(globalRenderGroup, &phongProgram);
@@ -1327,8 +1505,45 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 //Init entity types
 
 static Entity *initScenery_noRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
-    return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1,  false);
+    e->T.pos.z = -0.5f;
+    return e;
 }
+
+
+static Entity *initEntityCreator(GameState *gameState, EntityManager *manager, V3 worldP) {
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_ENTITY_CREATOR, 0, &globalWhiteTexture, COLOR_WHITE, -1,  false);
+    return e;
+}
+
+
+static Entity *initSeagull(GameState *gameState, EntityManager *manager, V3 worldP) {
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SEAGULL, 0, 0, COLOR_WHITE, -1, true);
+    e->T.pos.z = -3.5f;
+    e->rb->dP.x = -2.0f;
+    e->T.scale = v3(2.5f, 2.5f, 2.5f);
+    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, &gameState->seagullAnimation, EASY_ANIMATION_PERIOD);	
+    e->maxLifeSpan = 180.0f;
+    e->lifeSpanLeft = e->maxLifeSpan;
+    return e;
+}
+
+
+
+static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3 worldP, EntityTriggerType triggerType) {
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TRIGGER, 0, &globalWhiteTexture, COLOR_WHITE, -1, true);
+    e->T.pos.z = -0.5f;
+
+    e->triggerType = triggerType;
+
+    e->flags |= (int)ENTITY_SHOULD_NOT_RENDER;
+
+    e->levelToLoad = gameState->emptyString;
+
+    return e;
+}
+
+
 
 static Entity *initScenery_withRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
 	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
@@ -1415,6 +1630,8 @@ static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP
 
 	e->collider1->offset.y = -w - 0.5f;
 	e->collider1->dim2f = v2(0.3f, 0.1f);
+
+	e->levelToLoad = gameState->emptyString;
 	
 
 	return e;
@@ -1457,6 +1674,7 @@ static Entity *initHorse(GameState *gameState, EntityManager *manager, V3 worldP
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_HORSE, 0, findTextureAsset("horse.png"), COLOR_WHITE, -1, true);
 	e->T.scale = v3(5, 5, 5);
 	e->T.pos.z = -2;
+	e->model = findModelAsset_Safe("castle.obj");
 
 	return e;
 }
@@ -1493,14 +1711,92 @@ static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 wor
 	return e;
 }
 
-static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics_World *physicsWorld) {
-	easyArray_clear(&manager->entitiesToDeleteForFrame);
-	easyArray_clear(&manager->entities);
-	easyArray_clear(&manager->entitiesToAddForFrame);
-	easyArray_clear(&manager->damageNumbers);
 
-	EasyPhysics_emptyPhysicsWorld(physicsWorld);
-	
-	manager->lastEntityIndex = 0;
-	manager->player = 0;
+
+static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile) {
+	Entity *newEntity = 0;
+
+	switch(entType) {
+		case ENTITY_SCENERY: {
+			if(subtype & ENTITY_SUB_TYPE_TORCH) {
+				newEntity = initTorch(gameState, manager, position);
+			} else if(subtype & ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM) {
+                newEntity = initOneWayPlatform(gameState, manager, position, splatTexture);
+            } else {
+				if(colliderSet) {
+					newEntity = initScenery_withRigidBody(gameState, manager, position, splatTexture);
+				} else {
+					newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);	
+				}	
+			}
+			
+		} break;
+		case ENTITY_WIZARD: {
+			newEntity = initWizard(gameState, manager, position);
+			manager->player = newEntity;
+
+            easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
+
+		} break;
+		case ENTITY_PLAYER_PROJECTILE: {
+			assert(false);
+		} break;
+		case ENTITY_SKELETON: {
+			newEntity = initSkeleton(gameState, manager, position);
+		} break;
+        case ENTITY_SEAGULL: {
+            newEntity = initSeagull(gameState, manager, position);
+        } break;
+        case ENTITY_SWORD: {
+            newEntity = initSword(gameState, manager, position);
+        } break;
+        case ENTITY_CHEST: {
+            newEntity = initChest(gameState, manager, position);
+        } break;
+        case ENTITY_HORSE: {
+            newEntity = initHorse(gameState, manager, position);
+        } break;
+        case ENTITY_TRIGGER: {
+            newEntity = initEmptyTrigger(gameState, manager, position, triggerType);
+        } break;
+        case ENTITY_BLOCK_TO_PUSH: {
+            newEntity = initPushRock(gameState, manager, position);
+        } break;
+        case ENTITY_SHEILD: {
+            newEntity = initSheild(gameState, manager, position);
+        } break;
+        case ENTITY_SIGN: {
+            newEntity = initSign(gameState, manager, position, splatTexture);
+        } break;
+        case ENTITY_LAMP_POST: {
+            newEntity = initLampPost(gameState, manager, position, splatTexture);
+        } break;
+        case ENTITY_HOUSE: {
+            newEntity = initHouse(gameState, manager, position, splatTexture);
+        } break;
+        case ENTITY_WEREWOLF: {
+            newEntity = initWerewolf(gameState, manager, position);
+        } break;
+		case ENTITY_HEALTH_POTION_1: {
+			assert(false);
+		} break;
+		case ENITY_AUDIO_CHECKPOINT: {
+			newEntity = initAudioCheckPoint(gameState, manager, position);
+			newEntity->audioFile = audioFile;
+		} break;
+		case ENITY_CHECKPOINT: {
+			newEntity = initCheckPoint(gameState, manager, position);
+		} break;
+        case ENTITY_TERRAIN: {
+            newEntity = initTerrain(gameState, manager, position);
+        } break;
+        case ENTITY_ENTITY_CREATOR: {
+            newEntity = initEntityCreator(gameState, manager, position);
+        } break;
+		default: {
+
+		}
+	}
+
+	return newEntity;
 }

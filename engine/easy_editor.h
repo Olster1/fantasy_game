@@ -888,6 +888,26 @@ static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(Eas
 	return result;
 }
 
+
+#define easyEditor_preloadName(e, str) easyEditor_preloadName_(e, str, __LINE__, __FILE__)
+static inline void easyEditor_preloadName_(EasyEditor *e, char *str, int lineNumber, char *fileName) {
+
+	
+
+	if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
+
+	} else {
+		EasyEditorState *hasState = easyEditor_hasState(e, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_TEXT_FIELD);
+		if(hasState) {
+			EasyEditorState *field = easyEditor_addTextField(e, lineNumber, fileName, 0);
+			field->buffer.length = 0;
+			field->buffer.cursorAt = 0;
+			splice(&field->buffer, str, true);
+
+		}
+	}
+}
+
 #define easyEditor_pushTextBox(e, name, startStr) easyEditor_pushTextBox_(e, name, startStr, __LINE__, __FILE__)
 static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *startStr, int lineNumber, char *fileName) {
 	EasyEditorState *w = e->currentWindow;

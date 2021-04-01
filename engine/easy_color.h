@@ -44,9 +44,41 @@ typedef struct {
     float v;
 } EasyColor_HSV;
 
+// static inline EasyColor_HSV easyColor_rgbToHsv(float r, float g, float b) { //rgb = 0 - 1 
+//     EasyColor_HSV out = { 0, 0, 0 };
+// double cmax = Math.max(r, Math.max(g, b)); // maximum of r, g, b
+//       double cmin = Math.min(r, Math.min(g, b)); // minimum of r, g, b
+//       double diff = cmax - cmin; // diff of cmax and cmin.
+//       double h = -1, s = -1;
+        
+//       // if cmax and cmax are equal then h = 0
+//       if (cmax == cmin)
+//           h = 0;
+
+//       // if cmax equal r then compute h
+//       else if (cmax == r)
+//           h = (60 * ((g - b) / diff) + 360) % 360;
+
+//       // if cmax equal g then compute h
+//       else if (cmax == g)
+//           h = (60 * ((b - r) / diff) + 120) % 360;
+
+//       // if cmax equal b then compute h
+//       else if (cmax == b)
+//           h = (60 * ((r - g) / diff) + 240) % 360;
+
+//       // if cmax equal zero
+//       if (cmax == 0)
+//           s = 0;
+//       else
+//           s = (diff / cmax) * 100;
+
+//       // compute v
+//       double v = cmax * 100;
+
 static inline EasyColor_HSV easyColor_rgbToHsv(float r, float g, float b) { //rgb = 0 - 1 
     EasyColor_HSV out = { 0, 0, 0 };
-    double      min, max, delta;
+    float      min, max, delta;
 
     min = r < g ? r : g;
     min = min  < b ? min  : b;

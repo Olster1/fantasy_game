@@ -169,7 +169,13 @@ static void easySound_endSound(PlayingSound *sound) {
     //NOTE(ollie): Since the sound is in a linked list, we can't remove
     //NOTE(ollie):  it without prev pointer. So we just let the sound loop do it for us 
     sound->bytesAt = sound->wavFile->size;
-    
+    sound->nextSound =0;
+    // while(sound) {
+        
+    //     if(sound != nextSound) {
+    //         sound = sound->nextSound;
+    //     }
+    // }
 }
 
 typedef struct {
@@ -473,9 +479,12 @@ SDL_AUDIO_CALLBACK(audioCallback) {
                 volume = lerp(0, parentChannelVolumes_[sound->soundType], lerp(0, sound->volume, channelVolumes_[sound->channel]));
                 if(sound->attenuate) {
                     float dist = getLengthV3(v3_minus(globalSoundState->listenerLocation, sound->location));
-                    float factor = 1.0f - clamp01(inverse_lerp(sound->innerRadius, dist, sound->outerRadius));
 
-                    volume *= factor;
+                    float value = clamp01(inverse_lerp(sound->innerRadius, dist, sound->outerRadius));
+
+                    float factor = 1.0f - value;
+
+                    volume *= factor*factor;
                 }
                
             }

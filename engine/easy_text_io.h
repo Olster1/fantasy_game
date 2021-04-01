@@ -252,7 +252,7 @@ V2 buildV2FromDataObjects(EasyTokenizer *tokenizer) {
 
     DataObject *objs = (DataObject *)data->memory;
     assert(objs[0].type == VAR_FLOAT || objs[0].type == VAR_INT);
-    assert(objs[1].type == VAR_FLOAT || objs[0].type == VAR_INT);
+    assert(objs[1].type == VAR_FLOAT || objs[1].type == VAR_INT);
     
     float a = easyText_getIntOrFloat(objs[0]);
     float b = easyText_getIntOrFloat(objs[1]);
@@ -267,11 +267,12 @@ V2 buildV2FromDataObjects(EasyTokenizer *tokenizer) {
 V3 buildV3FromDataObjects(EasyTokenizer *tokenizer) {
     InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
-    assert(objs[0].type == VAR_FLOAT);
-    assert(objs[1].type == VAR_FLOAT);
-    assert(objs[2].type == VAR_FLOAT);
+    assert(objs[0].type == VAR_FLOAT || objs[0].type == VAR_INT);
+    assert(objs[1].type == VAR_FLOAT || objs[1].type == VAR_INT);
+    assert(objs[2].type == VAR_FLOAT || objs[2].type == VAR_INT);
+
     
-    V3 result = v3(objs[0].floatVal, objs[1].floatVal, objs[2].floatVal);
+    V3 result = v3(easyText_getIntOrFloat(objs[0]), easyText_getIntOrFloat(objs[1]), easyText_getIntOrFloat(objs[2]));
 
     data->count = 0; //release the memoy
     return result;
