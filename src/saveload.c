@@ -106,6 +106,12 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
             addVar(&fileContents, MyEntity_EntityTypeStrings[(int)e->typeToCreate], "typeToCreate", VAR_CHAR_STAR);
             
 
+            if(e->type == ENTITY_SCENERY && !easyAnimation_isControllerEmpty(&e->animationController)) {
+                   
+                char *animationName = e->animationController.parent.next->animation->name;
+                addVar(&fileContents, animationName, "animationName", VAR_CHAR_STAR);  
+            }
+
             if(e->model) {
                 addVar(&fileContents, e->model->name, "model", VAR_CHAR_STAR);  
             }
@@ -268,6 +274,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		SubEntityType subtype = ENTITY_SUB_TYPE_NONE;
 
         		char *audioFile = 0;
+
+                Animation *animation = 0;
 
                 V3 lightColor = v3(1, 0.5f, 0);
                 float lightIntensity = 2.0f;
@@ -450,6 +458,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                             }
 
 
+                            if(stringsMatchNullN("animationName", token.at, token.size)) {
+                                char *name = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+                                animation = gameState_findSplatAnimation(gameState, name); 
+
+                            }
+
             				if(stringsMatchNullN("spriteName", token.at, token.size)) {
             		    		char *name = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
             		    		if(easyString_stringsMatch_nullTerminated(name, "white texture") ) {
@@ -558,6 +572,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                          newEntity->T.Q = rotation;
                         // newEntity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);//rotation;
                     }
+
+                    if(animation) {
+                        easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+                    }
                    
                     newEntity->locationSoundType = locationSoundType;
                     newEntity->T.scale = scale;
@@ -593,7 +611,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		colliderSet2 = false;
 
         		splatTexture = 0;
-
+                animation = 0; 
         		audioFile = 0;
 
         		subtype = ENTITY_SUB_TYPE_NONE;

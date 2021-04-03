@@ -63,6 +63,7 @@ static void easyAssets_addAssetIdentifier(EasyAssetIdentifier_State *state, char
         u32 newSize = state->totalCount*sizeof(EasyAssetIdentifier);
 
         if(state->identifiers) {
+            //This copies the old array aswell 
             state->identifiers = (EasyAssetIdentifier *)easyPlatform_reallocMemory(state->identifiers, oldSize, newSize);
         } else {
             state->identifiers = (EasyAssetIdentifier *)easyPlatform_allocateMemory(newSize, EASY_PLATFORM_MEMORY_NONE);
@@ -162,6 +163,12 @@ static Event *getEventAsset(Asset *assetPtr) {
     return result;
 }
 
+static Animation *getAnimationAsset(Asset *assetPtr) {
+    Animation *result = (Animation *)(assetPtr->file);
+    assert(result);
+    return result;
+}
+
 static Asset *addAsset_(char *fileName, char *fullFilePath_, void *asset) { 
     DEBUG_TIME_BLOCK()
     char *truncName = getFileLastPortion(fileName);
@@ -191,6 +198,7 @@ static Asset *addAsset_(char *fileName, char *fullFilePath_, void *asset) {
     assert(found);
     return result;
 }
+
 
 static void easyAsset_removeAsset(char *fileName) {
     DEBUG_TIME_BLOCK()
@@ -224,6 +232,14 @@ Asset *addAssetTexture(char *fileName, char *fullFileName, Texture *asset) { // 
     Asset *result = addAsset_(fileName, fullFileName, asset);
 
     easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_TEXTURE);
+    return result;
+}
+
+
+Asset *addAssetAnimation(char *fileName, char *fullFileName, Animation *asset) { // we have these for type checking
+    Asset *result = addAsset_(fileName, fullFileName, asset);
+
+    easyAssets_addAssetIdentifier(&global_easyArrayIdentifierstate, result->name, ASSET_ANIMATION);
     return result;
 }
 

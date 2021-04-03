@@ -20,7 +20,7 @@ static bool DEBUG_LOCK_POSITION_TO_GRID = true;
 static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
-static bool DEBUG_USE_ORTHO_MATRIX = false;
+static bool DEBUG_USE_ORTHO_MATRIX = true;
 
 static int GLOBAL_WORLD_TILE_SIZE = 8;
 
@@ -285,6 +285,9 @@ int main(int argc, char *args[]) {
         easyAnimation_initAnimation(&gameState->seagullAnimation, "seagullAnimation");
         loadAndAddImagesStripToAssets(&gameState->seagullAnimation, "img/fantasy_sprites/seagull_animation.png", 32, false);
 
+        // easyAnimation_initAnimation(&gameState->barrelWater, "barrelWater");
+        // loadAndAddImagesStripToAssets(&gameState->barrelWater, "img/fantasy_sprites/barrelWater.png", 32, false);
+
         easyAnimation_initAnimation(&gameState->firePitAnimation, "firepit_idle");
         loadAndAddImagesStripToAssets(&gameState->firePitAnimation, "img/fantasy_sprites/firePlace.png", 64, false);
 
@@ -474,6 +477,39 @@ int main(int argc, char *args[]) {
 
         ////////////////////////
 
+        ///////// LOAD ALL ANIMATION FILES
+
+        
+        {
+            char *str = "Empty";
+            addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, str);
+            char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
+            char *folderName = concatInArena(globalExeBasePath, "img/fantasy_sprites/animaionPreLoad_32Strip/", &globalPerFrameArena);
+            FileNameOfType splatAnimationFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
+            int splatAnimationCount = splatAnimationFileNames.count;
+            for(int i = 0; i < splatAnimationFileNames.count; ++i) {
+                char *fullName = splatAnimationFileNames.names[i];
+                char *shortName = getFileLastPortion(fullName);
+                if(shortName[0] != '.') { //don't load hidden file 
+                    addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, shortName);
+
+                    Animation *animation = (Animation *)easyPlatform_allocateMemory(sizeof(Animation), EASY_PLATFORM_MEMORY_NONE);
+
+                    easyAnimation_initAnimation(animation, shortName);
+                    loadAndAddImagesStripToAssets_(animation, fullName, 32, false);
+
+                    addAssetAnimation(shortName, shortName, animation);
+
+                    addElementInfinteAlloc_notPointer(&gameState->splatAnimations, animation);
+                }
+                free(fullName);
+            }
+        }
+
+
+        
+
+        //////////////////////////////////////////////////
 
                 char *modelDirs[] = { "models/robertModels/"};
                 
@@ -1083,7 +1119,7 @@ int main(int argc, char *args[]) {
                         sprite = findTextureAsset("sand.png");
                     } else if(t->type == WORLD_TILE_SEA || t->type == WORLD_TILE_SEA1) {
                         if(easyAnimation_isControllerEmpty(&t->animationController)) {
-                            easyAnimation_addAnimationToController(&t->animationController, &gameState->animationFreeList, &gameState->seaTileAnimation, 0.1f);    
+                            easyAnimation_addAnimationToController(&t->animationController, &gameState->animationFreeList, &gameState->seaTileAnimation, 0.5f);    
                         }
 
                         char *animationFileName = easyAnimation_updateAnimation(&t->animationController, &gameState->animationFreeList, appInfo->dt);
@@ -1501,6 +1537,22 @@ int main(int argc, char *args[]) {
                             EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider);
                         }
 
+                        if(e->collider1) {
+                            EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider1);
+                        }
+
+                        if(e->collider2) {
+                            EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider2);
+                        }
+
+                        if(e->collider3) {
+                            EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider3);
+                        }
+
+                        if(e->collider4) {
+                            EasyPhysics_removeCollider(&gameState->physicsWorld, e->collider4);
+                        }
+
                         if(e->rb) {
                             EasyPhysics_removeRigidBody(&gameState->physicsWorld, e->rb);
                         }
@@ -1650,6 +1702,12 @@ int main(int argc, char *args[]) {
                 if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
                     splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
+                }
+
+
+                int animationOn = 0;
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY) {
+                    animationOn = easyEditor_pushList(appInfo->editor, "Animations: ", (char **)gameState->splatListAnimations.memory, gameState->splatListAnimations.count); 
                 }   
 
                 int splatIndexOn_tiles = 0;
@@ -1816,6 +1874,15 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
+
+                                if(animationOn > 0) {
+                                    Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
+
+                                    Entity *e = (Entity *)(editorState->entitySelected);
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+
+                                    e->sprite = 0;
+                                }
                                 justCreatedEntity = true;
                             }
 
@@ -2162,6 +2229,8 @@ int main(int argc, char *args[]) {
                         e->typeToCreate = (EntityType)easyEditor_pushList_(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
                         easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
                     }
+
+
                     
 
                     if(e->type == ENTITY_LAMP_POST) {
@@ -2169,7 +2238,7 @@ int main(int argc, char *args[]) {
                         lColor.xyz = e->lightColor;
                         lColor.w = 1;
                         easyEditor_pushFloat1(appInfo->editor, "LightPower: ", &e->lightIntensity);
-                        easyEditor_pushColor(appInfo->editor, "Light Color: ", &lColor);
+                        easyEditor_pushColor_(appInfo->editor, "Light Color: ", &lColor, e->T.id, gameState->currentSceneName);
 
                         e->lightColor = lColor.xyz;
                     }
@@ -2228,7 +2297,7 @@ int main(int argc, char *args[]) {
 
                     ////////////////////////////////////////////////////////////////////
 
-                    easyEditor_pushColor(appInfo->editor, "Color: ", &e->colorTint);
+                    easyEditor_pushColor_(appInfo->editor, "Color: ", &e->colorTint, e->T.id, gameState->currentSceneName);
                     easyEditor_pushInt1(appInfo->editor, "MaxHealth: ", &e->maxHealth);
                     easyEditor_pushFloat1(appInfo->editor, "MaxStamina: ", &e->maxStamina);
 

@@ -204,7 +204,7 @@ typedef struct {
 	Animation skeltonWalk;
 
 
-
+	Animation barrelWater;
 	Animation seagullAnimation;
 
 	Animation walkAnimation;
@@ -313,6 +313,9 @@ typedef struct {
 	EntityDialogInfo currentTalkText;
 	PlayingSound *talkingNPC;
 
+
+	InfiniteAlloc splatListAnimations;
+	InfiniteAlloc splatAnimations;
 
 	InfiniteAlloc splatList;
 	InfiniteAlloc splatTextures;
@@ -427,6 +430,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->splatList_tiles = initInfinteAlloc(char *);
 	state->splatTextures_tiles = initInfinteAlloc(Texture *);
 
+	state->splatListAnimations = initInfinteAlloc(char *);
+	state->splatAnimations = initInfinteAlloc(Animation *);
+
 	state->walkPower = 400;
 
 	state->gravityScale = 150;
@@ -536,6 +542,30 @@ static Texture *gameState_findSplatTexture(GameState *gameState, char *textureNa
 
 		//save the texture name so it doesn't get overwritten when we save the level 
 		found->name = textureName;
+	}
+
+	return found;
+}
+
+static Animation *gameState_findSplatAnimation(GameState *gameState, char *name) {
+	Animation *found = 0;
+
+	for(int i = 0; i < gameState->splatListAnimations.count && !found; ++i) {
+		char *t = *getElementFromAlloc(&gameState->splatListAnimations, i , char *);
+
+		if(easyString_stringsMatch_nullTerminated(name, t)) {
+			
+			assert(i > 0);
+			Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[i - 1];
+			found = animation;
+			
+			break;
+		}
+	}	
+
+	if(!found) {
+
+		easyConsole_addToStream(DEBUG_globalEasyConsole, easy_createString_printf(&globalPerFrameArena, "Couldn't find animation: %s", name));
 	}
 
 	return found;

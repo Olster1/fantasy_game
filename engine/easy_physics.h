@@ -226,8 +226,8 @@ typedef struct {
 
 	EasyCollisionLayer layer;
 
-	int collisionCount;
-	EasyCollisionInfo collisions[256];
+
+	InfiniteAlloc collisions;
 
 	bool canCollide; //this is since rigid bodies have to have a collider to update their position
 
@@ -270,6 +270,8 @@ static void EasyPhysics_beginWorld(EasyPhysics_World *world) {
 
 
 static void EasyPhysics_removeCollider(EasyPhysics_World *world, EasyCollider *collider) {
+	releaseInfiniteAlloc(&collider->collisions);
+
 	for (int i = 0; i < world->colliders.count; ++i) {
 	    EasyCollider *col = (EasyCollider *)getElement(&world->colliders, i);
 	    if(col == collider) {
@@ -311,8 +313,9 @@ static EasyCollisionInfo *EasyCollider_addCollisionInfo(EasyCollider *col, int h
 	DEBUG_TIME_BLOCK()
 	EasyCollisionInfo *result = 0;
 
-	for(int i = 0; i < col->collisionCount; ++i) {
-		EasyCollisionInfo *info = col->collisions + i;
+	for(int i = 0; i < col->collisions.count; ++i) {
+		EasyCollisionInfo *info = getElementFromAlloc(&col->collisions, i, EasyCollisionInfo);
+
 
 		if(info->objectId == hitObjectId) {
 			result = info;
@@ -333,8 +336,7 @@ static EasyCollisionInfo *EasyCollider_addCollisionInfo(EasyCollider *col, int h
 
 	if(!result) {
 		//get a new collision
-		assert(col->collisionCount < arrayCount(col->collisions));
-		result =  col->collisions + col->collisionCount++;
+		result = (EasyCollisionInfo * )addElementInifinteAllocWithCount_(&col->collisions, 0, 1);
 		result->type = EASY_COLLISION_ENTER;
 	}
 
@@ -348,9 +350,9 @@ static EasyCollisionInfo *EasyCollider_addCollisionInfo(EasyCollider *col, int h
 
 static void EasyCollider_removeCollisions(EasyCollider *col) {
 	DEBUG_TIME_BLOCK()
-	for(int i = 0; i < col->collisionCount;) {
+	for(int i = 0; i < col->collisions.count;) {
 		bool increment = true;
-		EasyCollisionInfo *info = col->collisions + i;
+		EasyCollisionInfo *info = getElementFromAlloc(&col->collisions, i, EasyCollisionInfo);
 
 		if(!info->hitThisFrame_) {
 			if(info->type != EASY_COLLISION_EXIT) {
@@ -359,7 +361,8 @@ static void EasyCollider_removeCollisions(EasyCollider *col) {
 			} else {
 				//NOTE(ollie): remove the collision info from the array
 				//Take from the end & fill the gap
-				col->collisions[i] = col->collisions[--col->collisionCount];
+				EasyCollisionInfo *array = (EasyCollisionInfo *)col->collisions.memory;
+				array[i] = array[--col->collisions.count];
 				increment = false;
 			}
 		}
@@ -370,8 +373,8 @@ static void EasyCollider_removeCollisions(EasyCollider *col) {
 	}
 
 ///////////////////////************ Empty out all hits this frame*************////////////////////
-	for(int i = 0; i < col->collisionCount; i++) {
-		EasyCollisionInfo *info = col->collisions + i;
+	for(int i = 0; i < col->collisions.count; i++) {
+		EasyCollisionInfo *info = getElementFromAlloc(&col->collisions, i, EasyCollisionInfo);
 		info->hitThisFrame_ = false;
 	}
 ////////////////////////////////////////////////////////////////////
@@ -600,6 +603,9 @@ static EasyCollider *EasyPhysics_AddCollider(EasyPhysics_World *world, EasyTrans
 	
 	col->arrayIndex = arrayInfo.absIndex;
 
+	col->collisions = initInfinteAlloc(EasyCollisionInfo);
+	col->collisions.expandCount = 1;
+
 	assert(T);
 	col->T = T;
 	col->rb = rb;
@@ -609,7 +615,6 @@ static EasyCollider *EasyPhysics_AddCollider(EasyPhysics_World *world, EasyTrans
 
 	col->isTrigger = isTrigger;
 
-	col->collisionCount = 0;
 
 	switch (type) {
 		case EASY_COLLIDER_SPHERE:
@@ -870,12 +875,12 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		EasyCollider_addCollisionInfo(a, b->T->id);
 	                		EasyCollider_addCollisionInfo(b, a->T->id);
 
-	                		if((a->layer == EASY_COLLISION_LAYER_ITEMS || a->layer == EASY_COLLISION_LAYER_PLAYER) && (b->layer == EASY_COLLISION_LAYER_ITEMS || b->layer == EASY_COLLISION_LAYER_PLAYER)) {
-	                			char string[256];
-	                			sprintf(string, "%d %d", a->collisionCount, b->collisionCount);
-	                			easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+	                		// if((a->layer == EASY_COLLISION_LAYER_ITEMS || a->layer == EASY_COLLISION_LAYER_PLAYER) && (b->layer == EASY_COLLISION_LAYER_ITEMS || b->layer == EASY_COLLISION_LAYER_PLAYER)) {
+	                		// 	// char string[256];
+	                		// 	// sprintf(string, "%d %d", a->collisionCount, b->collisionCount);
+	                		// 	// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
 	                			
-	                		}
+	                		// }
 	                	}
 	                }
 	            }

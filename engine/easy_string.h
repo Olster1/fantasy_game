@@ -22,7 +22,7 @@ static char *easyString_copyToBuffer(char *at, char *buffer, u32 bufferLen) {
     return buffer;
 }
 
-#define easyString_copyToArena(a, arena) easyString_copyToArena_(a, area, easyString_getSizeInBytes_utf8(a))
+#define easyString_copyToArena(a, arena) easyString_copyToArena_(a, arena, easyString_getSizeInBytes_utf8(a))
 char *easyString_copyToArena_(char *a, Arena *arena, int newStrLen_) {
     int newStrLen = newStrLen_ + 1; //for null terminator
     
