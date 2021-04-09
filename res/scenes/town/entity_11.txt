@@ -2,7 +2,7 @@
 
 	id: 11;
 	type: "ENTITY_LAMP_POST";
-	position: 33.344688 3.662575 -3.000000;
+	position: 57.000000 -3.000000 -3.000000;
 	scale: 3.000000 6.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
@@ -12,7 +12,7 @@
 	colliderScale: 0.500000 0.300000;
 	colliderOffset: -1.000000 -1.500000 0.000000;
 	lightColor: 0.000000 1.000000 0.230514;
-	lightIntensity: 2.000000;
+	lightIntensity: 3.000000;
 	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 	rateOfCreation: 0.000000;

@@ -24,13 +24,35 @@ int loadAndAddImagesToAssets_(char *folderNameAbsolute, bool loadImmediate) {
 	return result;
 }
 
-#define loadAndAddImagesStripToAssets(animation, fileName, widthPerImage, hasMipMaps) loadAndAddImagesStripToAssets_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage, hasMipMaps)
-void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolute, float widthPerImage, bool hasMipMaps) {
+#define loadAndAddImagesStripToAssets(animation, fileName, widthPerImage, hasMipMaps) loadAndAddImagesStripToAssets_(animation, concatInArena(globalExeBasePath, fileName, &globalPerFrameArena), widthPerImage, hasMipMaps, false)
+void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolute, float widthPerImage, bool hasMipMaps, bool useWidth) {
 	DEBUG_TIME_BLOCK()
 
 	bool premultiplyAlpha = true;
     Texture texOnStack = loadImage(folderNameAbsolute, TEXTURE_FILTER_LINEAR, hasMipMaps, premultiplyAlpha);
     
+    if(useWidth) {
+    	char *shortName = getFileLastPortionWithoutExtension_arena(folderNameAbsolute, &globalPerFrameArena);
+    	int strLength = easyString_getSizeInBytes_utf8(shortName);
+    	char *at = shortName;
+
+    	int byteLeft = strLength;
+
+    	char *result = 0;
+    	while(byteLeft > 0) {
+    		if(at[byteLeft - 1] >= '0' && at[byteLeft - 1] <= '9') {
+    			result = &at[byteLeft - 1];
+    		} else {
+    			break;
+    		}
+    		byteLeft--;
+    	}
+    	assert(result);
+    	int frameCount = atoi(result); //get the number of frames from the end of the filename
+    	assert(frameCount > 0);
+    	widthPerImage = texOnStack.width / frameCount; 
+    }
+
     int count = 0;
 
     float xAt = 0;
@@ -43,9 +65,13 @@ void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolu
 
     	tex->uvCoords.minX = xAt / texOnStack.width;
 
+
+
     	xAt += widthPerImage;
 
     	tex->uvCoords.maxX = xAt / texOnStack.width;
+
+    	tex->aspectRatio_h_over_w = ((float)texOnStack.height) / ((float)(tex->uvCoords.maxX - tex->uvCoords.minX)*(float)texOnStack.width);
 
     	char countAsString[128];
 
@@ -86,6 +112,8 @@ void loadAndAddImagesStripToAssets_count_offset_(Animation *animation, char *fol
     	xAt += widthPerImage;
 
     	tex->uvCoords.maxX = xAt / texOnStack.width;
+
+    	tex->aspectRatio_h_over_w = ((float)texOnStack.height) / ((tex->uvCoords.maxX - tex->uvCoords.minX)*(float)texOnStack.width);
 
     	char countAsString[128];
 
@@ -139,6 +167,8 @@ void loadAndAddImagesStripToAssets_xy_(Animation *animation, char *folderNameAbs
 	    	xAt += widthPerImage;
 
 	    	tex->uvCoords.maxX = xAt / texOnStack.width;
+
+	    	tex->aspectRatio_h_over_w = ((tex->uvCoords.maxY - tex->uvCoords.minY)*(float)texOnStack.height) / ((tex->uvCoords.maxX - tex->uvCoords.minX)*(float)texOnStack.width);
 
 	    	char countAsString[128];
 

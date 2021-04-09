@@ -1,0 +1,21 @@
+{
+
+	id: 28;
+	type: "ENTITY_SCENERY";
+	position: 23.000000 26.000000 0.000000;
+	scale: 2.000000 2.000000 2.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.500000 -0.500000 0.500000 -0.500000;
+	layer: -1.000000;
+	subtype: 0;
+	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 0.000000;
+	typeToCreate: "ENTITY_NULL";
+	model: "house.obj";
+}
+

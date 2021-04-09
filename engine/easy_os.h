@@ -734,6 +734,9 @@ static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *sta
 	            case SDLK_r: {
 	                buttonType = BUTTON_R;
 	            } break;
+	            case SDLK_q: {
+	                buttonType = BUTTON_Q;
+	            } break;
 	            case SDLK_i: {
 	                buttonType = BUTTON_I;
 	            } break;

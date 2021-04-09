@@ -307,6 +307,7 @@ typedef enum {
     BUTTON_R,
     BUTTON_I,
     BUTTON_C,
+    BUTTON_Q,
     BUTTON_COMMAND,
     BUTTON_DELETE,
     BUTTON_TILDE,

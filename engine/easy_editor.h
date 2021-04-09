@@ -264,6 +264,22 @@ static inline EasyEditorState *easyEditor_addColorSelector(EasyEditor *e, V4 col
 	return t;
 }
 
+
+
+static inline EasyEditorState *easyEditor_addDropDownSpriteList(EasyEditor *e, int lineNumber, char *fileName, int index) {
+	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+	if(!t) {
+		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+
+		t->isOpen = false;
+		t->dropDownIndex = 0;
+		t->scrollAt = 0;
+		t->holdingScrollBar = false;
+	}
+	return t;
+}
+
+
 static inline EasyEditorState *easyEditor_addDropDownList(EasyEditor *e, int lineNumber, char *fileName, int index) {
 	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
 	if(!t) {
@@ -699,6 +715,261 @@ static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options
 	return state->dropDownIndex;
 
 }
+
+
+
+///////////////////////// LIST TEXTURES /////////////////////////////////////
+
+#define easyEditor_pushSpriteList(e, name, options, optionLength) easyEditor_pushSpriteList_(e, name, options, optionLength, __LINE__, __FILE__)
+static inline int easyEditor_pushSpriteList_(EasyEditor *e, char *name, Texture **options, int optionLength, int lineNumber, char *fileName) {
+	assert(e->currentWindow);
+	EasyEditorState *w = e->currentWindow;
+
+	w->at.y += EASY_EDITOR_MARGIN;
+
+	V4 color = COLOR_WHITE;
+
+	Rect2f spriteTotalBounds = {};
+
+	EasyEditorState *state = easyEditor_addDropDownSpriteList(e, lineNumber, fileName, 0);
+
+	assert(optionLength > 0);
+
+	if(state->dropDownIndex >= optionLength) {
+		//NOTE(ollie): Should only get in here if the user changes the list between frames. 
+		//			   And the one they had selected doesn't exist anymore
+		state->dropDownIndex = 0;
+	}
+
+
+
+	{
+
+		///////////////////////************ Draw the name of the list*************////////////////////
+		Rect2f rect = outputTextNoBacking(e->font, w->at.x, w->at.y, 1, e->fuaxResolution, name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
+		w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
+
+		float handleWidth = 30;
+		float handleHeight = 50;
+
+		//all textures have width 50 then the height will change based on the aspect ratio of the texture
+		float textureWidth = 80;	
+
+		float clippedHeight = 0.3f*e->viewportDim.y - handleHeight;
+			
+		float startY = w->at.y;
+
+		spriteTotalBounds.minY = startY - EASY_EDITOR_MARGIN;
+		spriteTotalBounds.minX = w->at.x;
+
+		{
+			//This is so each 'channel' has a seperate y descending down
+			float yAt_low[3] = { w->at.y, w->at.y, w->at.y };
+
+			///////////////////////************* Find the total height of the scroll window ************////////////////////
+			for(int optionIndex = 0; optionIndex < optionLength; ++optionIndex) {
+				Texture *option = options[optionIndex];
+
+				int modVal = optionIndex % 3; //three for three channels
+
+				yAt_low[modVal] += textureWidth*option->aspectRatio_h_over_w + EASY_EDITOR_MARGIN;
+			}
+			////////////////////////////////////////////////////////////////////
+
+			float maxY = 0;
+
+			for(int i = 0; i < arrayCount(yAt_low); ++i) {
+				 if(yAt_low[i] > maxY) {
+				 	maxY = yAt_low[i];
+				 }
+			}
+
+			w->at.y = maxY;
+		}
+
+
+
+		//NOTE(ollie): Find the height of the window
+		float acutalHeight = w->at.y - startY;
+
+		//NOTE(ollie): Reset the y height
+		w->at.y = startY; 
+
+		bool neededScroll = acutalHeight > clippedHeight;
+		float maxX = 0;
+
+		///////////////////////************ Needed scroll *************////////////////////
+		if(neededScroll) {
+			V2 handlePos = v2(w->at.x - handleWidth - EASY_EDITOR_MARGIN, (startY) + (clippedHeight - handleHeight)*state->scrollAt);
+
+			Rect2f scrollHandle = rect2fMinDim(handlePos.x, handlePos.y, handleWidth, handleHeight);
+			
+			V4 handleColor = COLOR_GOLD;
+
+			if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), scrollHandle, BOUNDS_RECT)) {
+				handleColor = COLOR_YELLOW;
+				 if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+					//NOTE(ollie): grab the handle
+					state->holdingScrollBar = true;									 	
+				 }
+				
+			}
+
+			if(state->holdingScrollBar) {
+				handleColor = COLOR_GREEN;
+
+				///////////////////////************ Update the handle position *************////////////////////
+				float goalPos = easyInput_mouseToResolution(e->keyStates, e->fuaxResolution).y - startY;
+				//update position
+				state->scrollAt = lerp(clippedHeight*state->scrollAt, 0.4f, goalPos) / (clippedHeight - handleHeight);
+				state->scrollAt = clamp01(state->scrollAt);
+
+				////////////////////////////////////////////////////////////////////
+
+				//NOTE(ollie): Let go of the handle
+				if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+					state->holdingScrollBar = false;
+				}
+			}
+			//NOTE(ollie): Reclculate the scroll handle position
+			scrollHandle = rect2fMinDim(handlePos.x, handlePos.y, handleWidth, handleHeight);
+
+			//NOTE(ollie): Draw the scroll handle
+			renderDrawRect(scrollHandle, NEAR_CLIP_PLANE, handleColor, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+		}
+		////////////////////////////////////////////////////////////////////
+
+		//NOTE(ollie): Push the scissors on the stack
+		float scrollOffset = 0;
+
+		Rect2f scrollWindow = rect2fMinDim(w->at.x, startY - EASY_EDITOR_MARGIN, e->fuaxResolution.x, clippedHeight);
+
+		if(neededScroll) {
+			easyRender_pushScissors(globalRenderGroup, scrollWindow, NEAR_CLIP_PLANE, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix, e->viewportDim);
+			scrollOffset = state->scrollAt*(acutalHeight - clippedHeight);
+		}
+
+		//This is so each 'channel' has a seperate y descending down
+		float yAt_low[3] = { w->at.y - scrollOffset, w->at.y - scrollOffset, w->at.y - scrollOffset};
+		
+		///////////////////////************ Draw & Update the list *************////////////////////
+		for(int optionIndex = 0; optionIndex < optionLength; ++optionIndex) {
+			Texture *option = options[optionIndex];
+
+			int modVal = optionIndex % 3; 
+
+			float yAt = yAt_low[modVal];
+			color = COLOR_WHITE;
+
+			float xAt = w->at.x + modVal*textureWidth + modVal*EASY_EDITOR_MARGIN;
+			float textureHeight = textureWidth*option->aspectRatio_h_over_w;
+
+			bool shouldDraw = (!neededScroll || ((yAt + textureHeight) >= (startY - textureHeight) && (yAt + textureHeight) < (startY + clippedHeight + textureHeight)));
+
+			Rect2f bounds = rect2fMinDim(xAt, yAt, textureWidth, textureHeight);
+			bounds = expandRectf(bounds, v2(EASY_EDITOR_MARGIN, EASY_EDITOR_MARGIN));
+
+
+			if(shouldDraw) {
+				
+				bool hover = inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), bounds, BOUNDS_RECT);
+				if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, optionIndex + 1)) { //+ 1 because 0 is taken by the box that can open to display the list 
+					e->interactingWith.visitedThisFrame = true;
+					color = COLOR_GREEN;
+
+					if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+						if(hover) {
+							//actually comiting to this option
+							state->dropDownIndex = optionIndex;
+							state->isOpen = false;
+						} else {
+							easyEditor_stopInteracting(e);	
+						}
+					}
+				} else if(hover) {
+					if(!e->interactingWith.item) {
+						color = COLOR_YELLOW;	
+					}
+					
+					if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+						if(e->interactingWith.item) {
+							//NOTE: Clicking on a different cell will swap it
+							easyEditor_stopInteracting(e);	
+						}
+						easyEditor_startInteracting(e, &e->bogusItem, lineNumber, fileName, optionIndex + 1, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+					} 
+				}
+				
+			}
+			if(shouldDraw) {
+				// renderDrawRect(bounds, 2, color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+
+				renderTextureCentreDim(option, v3(xAt + 0.5f*textureWidth, yAt + 0.5f*textureHeight, 0.3f), v2(textureWidth, textureHeight), COLOR_WHITE, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y),  mat4(),  e->orthoMatrix);
+				renderDrawRectOutlineCenterDim_(v3(xAt + 0.5f*textureWidth, yAt + 0.5f*textureHeight, 0.3f), v2(textureWidth, textureHeight), color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y),   e->orthoMatrix, 5);
+
+			}
+
+			yAt_low[modVal] += textureHeight + EASY_EDITOR_MARGIN;	
+			
+			if(w->maxX < xAt) {
+				w->maxX = xAt;
+			}
+
+			float mX = (xAt + textureWidth + EASY_EDITOR_MARGIN);
+			if(mX > maxX) {
+				maxX = mX;
+			}
+		}
+
+		float maxY = 0;
+
+		for(int i = 0; i < arrayCount(yAt_low); ++i) {
+			 if(yAt_low[i] > maxY) {
+			 	maxY = yAt_low[i];
+			 }
+		}
+
+		// renderDrawRectCenterDim(v3(, 0.4f), v2(textureWidth, textureHeight), COLOR_GREY, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y),   e->orthoMatrix);
+
+		w->at.y = maxY + EASY_EDITOR_MARGIN + e->font->fontHeight;
+
+		float yValue = w->at.y;
+		///////////////////////************ Pop the scissors*************////////////////////
+		if(neededScroll) {
+			easyRender_disableScissors(globalRenderGroup);
+		
+			w->at.y = startY + clippedHeight + EASY_EDITOR_MARGIN + e->font->fontHeight;
+			
+			yValue = scrollWindow.maxY; 
+		}
+
+		spriteTotalBounds.maxX = maxX;
+		spriteTotalBounds.maxY = yValue;
+		
+
+		renderDrawRect(spriteTotalBounds, 0.5f, COLOR_GREY, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+
+		if(neededScroll) {
+			if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), spriteTotalBounds, BOUNDS_RECT)) {
+				state->scrollAt = clamp01(state->scrollAt + -0.02f*e->keyStates->scrollWheelY);
+			}
+		}
+
+		if(w->maxX < w->at.x) {
+			w->maxX = w->at.x;
+		}
+
+		w->at.x = w->topCorner.x;
+	}
+
+	return state->dropDownIndex;
+
+}
+
+
+
+
+//////////////////////////////////////////////////
 
 #define easyEditor_pushButton(e, name) easyEditor_pushButton_(e, name, __LINE__, __FILE__)
 static inline bool easyEditor_pushButton_(EasyEditor *e, char *name, int lineNumber, char *fileName) {

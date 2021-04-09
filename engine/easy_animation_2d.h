@@ -41,6 +41,8 @@ typedef struct EasyAnimation_ListItem {
 
 typedef struct {
     EasyAnimation_ListItem parent;
+
+    bool finishedAnimationLastUpdate; //goes to true if it finished an animation in the last update so you can change it if you need to
 } EasyAnimation_Controller;
 
 ///////////////////////************ Header definitions start here *************////////////////////
@@ -97,6 +99,7 @@ static char *easyAnimation2d_copyString(char *str) {
 
 static void easyAnimation_initController(EasyAnimation_Controller *controller) {
     controller->parent.next = controller->parent.prev = &controller->parent;
+    controller->finishedAnimationLastUpdate = false;
 }
 
 static void easyAnimation_initAnimation_withFrames(Animation *animation, char **FileNames, int FileNameCount, char *name) {
@@ -196,6 +199,8 @@ static void easyAnimation_emptyAnimationContoller(EasyAnimation_Controller *cont
 static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr, float dt) {
     EasyAnimation_ListItem *AnimationListSentintel = &controller->parent;
 
+    controller->finishedAnimationLastUpdate = false; //clear out the value
+
     EasyAnimation_ListItem *Item = AnimationListSentintel->next;
     EASY_HEADERS_ASSERT(Item != AnimationListSentintel);
     
@@ -223,6 +228,8 @@ static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller,
                 Item->next = *AnimationItemFreeListPtr;
                 *AnimationItemFreeListPtr = Item;
             } 
+
+            controller->finishedAnimationLastUpdate = true;
 
         }
         

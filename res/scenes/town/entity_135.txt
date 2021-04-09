@@ -14,6 +14,6 @@
 	dialogType: "ENTITY_DIALOG_NULL";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";
-	animationName: "barrelWater.png";
+	animationName: "barrelWater4.png";
 }
 

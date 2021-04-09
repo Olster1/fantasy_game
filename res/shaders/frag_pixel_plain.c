@@ -2,6 +2,7 @@ uniform sampler2D tex;
 
 in vec4 colorOut;
 in vec2 texUV_out;
+in mat3 modelToWorldMatrix;
 
 out vec4 color;
 void main (void) {

@@ -21,6 +21,7 @@ static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
 static bool DEBUG_USE_ORTHO_MATRIX = true;
+static bool DEBUG_AI_BOARD_FOR_ENTITY = true;
 
 static int GLOBAL_WORLD_TILE_SIZE = 8;
 
@@ -121,6 +122,25 @@ typedef struct {
 } EntityManager;    
 
 
+static V3 roundToGridBoard(V3 in, float tileSize) {
+    float xMod = (in.x < 0) ? -tileSize : tileSize;
+    float yMod = (in.y < 0) ? -tileSize : tileSize;
+    
+    V3 result = {};
+    if(tileSize == 1) {
+        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
+    } else {
+        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
+
+        result.x -= ((int)result.x) % (int)tileSize;
+        result.y -= ((int)result.y) % (int)tileSize;
+    }
+    
+    return result;
+}
+
+
+
 bool gameScene_doesSceneExist(char *sceneName);
 void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_);
 #include "entity.c"
@@ -172,13 +192,6 @@ static void drawTriggerCollider_DEBUG(Entity *e, EasyCollider *collider) {
 }
 
 
-
-static V3 roundToGridBoard(V3 in) {
-    float xMod = (in.x < 0) ? -1 : 1;
-    float yMod = (in.y < 0) ? -1 : 1;
-    V3 result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
-    return result;
-}
 
 
 
@@ -272,7 +285,7 @@ int main(int argc, char *args[]) {
         EasyTransform sunTransform;
         easyTransform_initTransform(&sunTransform, v3(0, -10, 0), EASY_TRANSFORM_TRANSIENT_ID);
 
-        sunTransform.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
+        sunTransform.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
         EasyLight *light = easy_makeLight(&sunTransform, EASY_LIGHT_DIRECTIONAL, 1.0f, v3(1, 1, 1));
         easy_addLight(globalRenderGroup, light); //ignore first light in rendergroup for pixel art programs? 
@@ -324,6 +337,18 @@ int main(int argc, char *args[]) {
             loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimUp, "img/fantasy_sprites/swim2.png", 41, false, 1, 2);
             easyAnimation_initAnimation(&gameState->wizardSwimDown, "wizardSwimDown");
             loadAndAddImagesStripToAssets_count_offset(&gameState->wizardSwimDown, "img/fantasy_sprites/swim3.png", 41, false, 1, 0);
+
+            easyAnimation_initAnimation(&gameState->wizardSwordAttackLeft, "wizardAttackLeft");
+            loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackLeft, "img/fantasy_sprites/man_attack_left.png", 58, false);
+
+            easyAnimation_initAnimation(&gameState->wizardSwordAttackRight, "wizardAttackRight");
+            loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackRight, "img/fantasy_sprites/man_attack_right.png", 58, false);
+
+            easyAnimation_initAnimation(&gameState->wizardSwordAttackFront, "wizardAttackFront");
+            loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackFront, "img/fantasy_sprites/man_attack_front.png", 47, false);
+
+            easyAnimation_initAnimation(&gameState->wizardSwordAttackBack, "wizardAttackBack");
+            loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackBack, "img/fantasy_sprites/man_attack_back.png", 42, false);
 
 
 
@@ -484,7 +509,7 @@ int main(int argc, char *args[]) {
             char *str = "Empty";
             addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, str);
             char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
-            char *folderName = concatInArena(globalExeBasePath, "img/fantasy_sprites/animaionPreLoad_32Strip/", &globalPerFrameArena);
+            char *folderName = concatInArena(globalExeBasePath, "img/fantasy_sprites/animaionPreLoad/", &globalPerFrameArena);
             FileNameOfType splatAnimationFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
             int splatAnimationCount = splatAnimationFileNames.count;
             for(int i = 0; i < splatAnimationFileNames.count; ++i) {
@@ -496,7 +521,7 @@ int main(int argc, char *args[]) {
                     Animation *animation = (Animation *)easyPlatform_allocateMemory(sizeof(Animation), EASY_PLATFORM_MEMORY_NONE);
 
                     easyAnimation_initAnimation(animation, shortName);
-                    loadAndAddImagesStripToAssets_(animation, fullName, 32, false);
+                    loadAndAddImagesStripToAssets_(animation, fullName, 0, false, true);
 
                     addAssetAnimation(shortName, shortName, animation);
 
@@ -651,7 +676,12 @@ int main(int argc, char *args[]) {
             }
             ////////////////
 
-            easy3d_updateCamera(&camera, &appInfo->keyStates, 1, 1000.0f, appInfo->dt, camMove);
+
+            AppKeyStates cameraKeyStates = appInfo->keyStates;
+            if(appInfo->editor->isHovering) {
+                cameraKeyStates.scrollWheelY = 0;
+            }
+            easy3d_updateCamera(&camera, &cameraKeyStates, 1, 1000.0f, appInfo->dt, camMove);
 
 
             easy_setEyePosition(globalRenderGroup, camera.pos);
@@ -1031,12 +1061,18 @@ int main(int argc, char *args[]) {
                floor.normal = v3(0, 0, -1);
 
                if(easyMath_castRayAgainstPlane(mouseP_worldRay, floor, &hitP, &tAt)) {
+                    float tileScale = 1;
+                    if(editorState->createMode == EDITOR_CREATE_TILE_MODE) {
+                       tileScale = GLOBAL_WORLD_TILE_SIZE;
+                    }
 
                    
-                   hitP = roundToGridBoard(hitP);
+                   hitP = roundToGridBoard(hitP, tileScale);
 
+                   hitP.z = -0.1f;
                    outlineTransform.pos = hitP;
-                   outlineTransform.scale = v3(1, 1, 1);
+                   
+                   outlineTransform.scale = v3(tileScale, tileScale, tileScale);
 
                    // easyConsole_pushFloat(DEBUG_globalEasyConsole, outlineTransform.pos.y);
 
@@ -1103,6 +1139,14 @@ int main(int argc, char *args[]) {
                         sprite = findTextureAsset("lava_tile.png");
                     } else if(t->type == WORLD_TILE_COBBLE) {
                         sprite = findTextureAsset("cobble.png");
+
+                        //assign the normal map id
+                        if(sprite->normalMapId <= 0) {
+                            Texture *normalMap = findTextureAsset("cobble_n.png");
+                            assert(normalMap);
+                            sprite->normalMapId = normalMap->id;
+                        }
+                        
                     } else if(t->type == WORLD_TILE_PATH) {
                         sprite = findTextureAsset("grass_road.png");
                     } else if(t->type == WORLD_TILE_PATH1) {
@@ -1729,6 +1773,7 @@ int main(int argc, char *args[]) {
                 easyEditor_pushSlider(appInfo->editor, "Time of day: ", &weatherState->timeOfDay, 0, 1);
                 easyEditor_pushSlider(appInfo->editor, "Time of Day Speed: ", &weatherState->timeOfDaySpeed, 0, 1);
 
+                easyEditor_pushSpriteList(appInfo->editor, "Sprites: ", (Texture **)gameState->splatTextures.memory, gameState->splatTextures.count);
                 
 
                 EasyModel *modelSelected = 0;
@@ -1769,7 +1814,14 @@ int main(int argc, char *args[]) {
                     if(easyMath_castRayAgainstPlane(mouseP_worldRay, floor, &hitP, &tAt)) {
                         //NOTE: Lock entities to integer coordinates - grid base gameplay
                         if(DEBUG_LOCK_POSITION_TO_GRID) {
-                            hitP = roundToGridBoard(hitP);
+                            
+                            float tileScale = 1;
+                            if(editorState->createMode == EDITOR_CREATE_TILE_MODE) {
+                               tileScale = GLOBAL_WORLD_TILE_SIZE;
+                            }
+
+
+                            hitP = roundToGridBoard(hitP, tileScale);
                         }
                     }
 
@@ -1785,6 +1837,25 @@ int main(int argc, char *args[]) {
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
                             }
+                        } break;
+                        case EDITOR_CREATE_ENTITY_BOARD_MODE: {
+                            if(editorState->entitySelected) {
+                                Entity *e = (Entity *)editorState->entitySelected;
+                                if(!e->aiController) {
+                                    e->aiController = easyAi_initController(&globalPerFrameArena);    
+                                }
+                                
+
+                                if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                    if(easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash)) {
+                                        // easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
+                                    } else {
+                                        easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
+                                        // easyFlashText_addText(&globalFlashTextManager, "Removed Ai Tile");
+                                    }
+                                }
+                            }
+                            
                         } break;
                         case EDITOR_CREATE_TILE_MODE: {
                             if(editorState->tileOption == EDITOR_TILE_SINGLE) {
@@ -1865,6 +1936,14 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initTerrain(gameState, manager, hitP);
                                 gameState->currentTerrainEntity = editorState->entitySelected; 
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                                justCreatedEntity = true;
+                            }
+                        } break;
+                        case EDITOR_CREATE_ENTITY_AI_STATE: {
+                            if(pressed) {
+                                editorState->entitySelected = initAiAnimation(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
@@ -2027,6 +2106,11 @@ int main(int argc, char *args[]) {
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_USE_ORTHO_MATRIX) ? "Ortho Off" : "Ortho On")) {
                     DEBUG_USE_ORTHO_MATRIX = !DEBUG_USE_ORTHO_MATRIX;
                 }
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_AI_BOARD_FOR_ENTITY) ? "Ai Grid Off" : "Ai Grid On")) {
+                    DEBUG_AI_BOARD_FOR_ENTITY = !DEBUG_AI_BOARD_FOR_ENTITY;
+                }
+                
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
                     DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = !DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS;
@@ -2231,7 +2315,22 @@ int main(int argc, char *args[]) {
                     }
 
 
-                    
+                    if(e->aiController && DEBUG_AI_BOARD_FOR_ENTITY) {
+                        //Draw the ai board
+                        EasyAiController *aiController = e->aiController;
+                        for(int i = 0; i < arrayCount(aiController->boardHash); ++i) {
+                            EasyAi_Node *n = aiController->boardHash[i];
+
+                            while(n) {
+
+                                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, 0)); 
+                                setModelTransform(globalRenderGroup, T);
+                                renderDrawQuad(globalRenderGroup, COLOR_GOLD);
+
+                                n = n->next;
+                            }
+                        }
+                    }
 
                     if(e->type == ENTITY_LAMP_POST) {
                         V4 lColor = {};
@@ -2450,14 +2549,14 @@ int main(int argc, char *args[]) {
 
                     easyEditor_endWindow(appInfo->editor); //might not actuall need this
 
-                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && !insideEntity && editorState->gizmoSelect == EDITOR_GIZMO_NONE && !justCreatedEntity) {
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && !insideEntity && editorState->gizmoSelect == EDITOR_GIZMO_NONE && !justCreatedEntity && editorState->createMode != EDITOR_CREATE_ENTITY_BOARD_MODE) {
                         
                         letGoOfSelectedEntity(editorState);
                         
                     }
 
                     //Update the entity moving
-                    if(editorState->entitySelected && isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && editorState->gizmoSelect == EDITOR_GIZMO_NONE) {
+                    if(editorState->entitySelected && isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE) && !appInfo->editor->isHovering && editorState->gizmoSelect == EDITOR_GIZMO_NONE && editorState->createMode != EDITOR_CREATE_ENTITY_BOARD_MODE) {
                         Entity *e = ((Entity *)editorState->entitySelected);
                             
                         EasyPlane floor = {};
@@ -2476,7 +2575,7 @@ int main(int argc, char *args[]) {
 
                             //NOTE: Lock entities to integer coordinates - grid base gameplay
                             if(DEBUG_LOCK_POSITION_TO_GRID) {
-                                e->T.pos.xy = roundToGridBoard(e->T.pos).xy;
+                                e->T.pos.xy = roundToGridBoard(e->T.pos, 1).xy;
                             }
                         }
                     }

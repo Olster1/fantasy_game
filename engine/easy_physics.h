@@ -705,7 +705,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
         ////////////////////////////////////////////////////////////////////
 
-            float smallestDistance = 0.3f;
+            float smallestDistance = 0.5f;
 	
 			int hitEntCount = 0;            	
             EasyPhysics_HitBundle hitEnts[32];

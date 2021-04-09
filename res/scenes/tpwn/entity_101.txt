@@ -1,0 +1,19 @@
+{
+
+	id: 101;
+	type: "ENTITY_SCENERY";
+	position: 28.877874 5.445080 -0.500000;
+	scale: 1.500000 1.500000 1.000000;
+	color: 0.722472 0.722472 0.722472 1.000000;
+	rotation: 0.653282 -0.270598 0.270598 0.653282;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "barrel";
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 3.000000;
+	typeToCreate: "ENTITY_NULL";
+}
+

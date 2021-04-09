@@ -238,6 +238,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 	//Check that this level exists
 	if(platformDoesDirectoryExist(fullSceneFolderPath)) {
 
+        Entity *wizard = 0;
+
         int maxId = 0;
 		char *fileType[] = {"txt"};
         FileNameOfType files = getDirectoryFilesOfType(fullSceneFolderPath, fileType, arrayCount(fileType));
@@ -488,6 +490,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             		}
         		}
 
+
                 
 
                 if(entType == ENTITY_TILE_MAP) {
@@ -549,6 +552,11 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         				newEntity->collider->dim2f = colliderScale;	
                         newEntity->collider->offset = colliderOffset;
         			}
+
+
+                    if(entType == ENTITY_WIZARD) {
+                        wizard = newEntity;
+                    }
 
 
         			if(newEntity->collider1) {
@@ -639,6 +647,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         // 	teleportEnts[i]->teleporterPartner = e;
         // }
         GLOBAL_transformID_static = maxId + 1;
+
+
+        if(wizard) {
+            //we make sure the wizard has an offset for the collider1 which it the hurt box when she uses her sword
+            wizard->collider1->offset.y = 0.5f;
+            wizard->collider1->dim2f = v2(1, 1.4f);    
+        }
+        
     }
 	
 

@@ -23,6 +23,7 @@ FUNC(ENTITY_TILE_MAP)\
 FUNC(ENTITY_TRIGGER)\
 FUNC(ENTITY_SEAGULL)\
 FUNC(ENTITY_ENTITY_CREATOR)\
+FUNC(ENTITY_AI_ANIMATION)\
 
 
 
@@ -180,6 +181,11 @@ typedef struct {
 	Animation wizardIdle;
 	Animation wizardJump;
 	Animation wizardFall;
+
+	Animation wizardSwordAttackLeft;
+	Animation wizardSwordAttackRight;
+	Animation wizardSwordAttackFront;
+	Animation wizardSwordAttackBack;
 
 	Animation wizardBottom;
 	Animation wizardLeft;

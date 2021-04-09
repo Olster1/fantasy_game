@@ -449,6 +449,8 @@ static VaoHandle globalCubeMapVaoHandle = {};
 
 typedef struct {
     GLuint id;
+    GLuint normalMapId;
+
     int width;
     int height;
     float aspectRatio_h_over_w;
@@ -483,6 +485,9 @@ static bool globalWhiteTextureInited;
 
 static Texture globalPinkTexture;
 static bool globalPinkTextureInited;
+
+static Texture globalBlueTexture;
+static bool globalBlueTextureInited;
 
 typedef struct {
     int w;
@@ -745,6 +750,7 @@ typedef struct {
     ShapeType type; 
     
     u32 textureHandle;
+    u32 textureNormalId;
     Rect2f textureUVs;    
     
     Matrix4 mMat;  
@@ -1143,6 +1149,21 @@ void initRenderGroup(RenderGroup *group, float bufferWidth, float bufferHeight) 
          globalPinkTexture.name = "pink texture";
          
      }
+
+     if(!globalBlueTextureInited) {
+         u32 *imageData = pushArray(&globalPerFrameArena, 32*32, u32);
+         for(int y = 0; y < 32; ++y) {
+             for(int x = 0; x < 32; ++x) {
+                 imageData[y*32 + x] = 0xFFFF0000;     
+             }
+         }
+         
+         globalBlueTexture = createTextureOnGPU((unsigned char *)imageData, 32, 32, 4, TEXTURE_FILTER_LINEAR, false);
+         globalBlueTextureInited = true;
+         globalBlueTexture.name = "pink texture";
+         
+     }
+
 }
 
 static inline void renderClearDepthBuffer(u32 frameBufferId) {
@@ -1366,6 +1387,7 @@ static RenderItem *pushRenderItem(VaoHandle *handles, RenderGroup *group, Vertex
         info->textureHandle = (u32)texture->id;
         assert(info->textureHandle);
         info->textureUVs = texture->uvCoords;
+        info->textureNormalId = texture->normalMapId;
     } 
 
 
@@ -2435,7 +2457,7 @@ static void easyRender_blurBuffer_(FrameBuffer *src, FrameBuffer *dest, FrameBuf
 
 
 static V2 globalBlurDir = {};
-void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u32 textureId, int instanceCount, EasyMaterial *material, RenderGroup *group, Matrix4 *projectionTransform, void *dataPacket) {
+void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u32 textureId, u32 textureId_Normal, int instanceCount, EasyMaterial *material, RenderGroup *group, Matrix4 *projectionTransform, void *dataPacket) {
     DEBUG_TIME_BLOCK()
     assert(bufferHandles);
     assert(bufferHandles->valid);
@@ -2719,7 +2741,17 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
 
             glUniform1i(glGetUniformLocation(program->glProgram, "lightCount"), group->light2dCountForFrame);
 
-            
+            int textureNormalId = globalBlueTexture.id;
+            if(textureId_Normal > 0) {
+                textureNormalId = textureId_Normal;
+            } 
+
+            easy_BindTexture("normal_tex", 4, textureNormalId, program); //only one texture per draw call            
+
+            GLint eyepos = glGetUniformLocation(program->glProgram, "eye_worldspace"); 
+            renderCheckError();
+            glUniform3f(eyepos, group->eyePos.x, group->eyePos.y, group->eyePos.z);
+            renderCheckError();
 
 
         }
@@ -2815,8 +2847,8 @@ void renderDrawRectOutlineCenterDim_(V3 center, V2 dim, V4 color, float rot, Mat
     }
 }
 
-void renderDrawRectOutlineRect2f(Rect2f rect, V4 color, float rot, Matrix4 offsetTransform, Matrix4 projectionMatrix) {
-    renderDrawRectOutlineCenterDim(v2ToV3(getCenter(rect), -1), getDim(rect), color, rot, offsetTransform, projectionMatrix);
+void renderDrawRectOutlineRect2f(Rect2f rect, float depth, V4 color, float rot, Matrix4 offsetTransform, Matrix4 projectionMatrix) {
+    renderDrawRectOutlineCenterDim(v2ToV3(getCenter(rect), depth), getDim(rect), color, rot, offsetTransform, projectionMatrix);
 }
 
 //
@@ -3079,7 +3111,7 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
         easyRender_updateInstanceData(info->bufferHandles, &group->allInstanceData, info->program, info->textureHandle);
 
         {
-            drawVao(info->bufferHandles, info->program, info->type, info->textureHandle, items->count, info->material, group, &info->pMat, info->dataPacket_);
+            drawVao(info->bufferHandles, info->program, info->type, info->textureHandle, info->textureNormalId, items->count, info->material, group, &info->pMat, info->dataPacket_);
 #if DEVELOPER_MODE 
             easyProfiler_addDrawCount(1, (u32)info->type, info->name);
 #endif
@@ -3092,7 +3124,7 @@ static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items
 
 static inline void easyRender_EndBatch(EasyRenderBatch *b) {
     DEBUG_TIME_BLOCK()
-    assert(b->items.sizeOfMember > 0);
+    assert(b->items.sizeOfMember > 0 || b->items.count == 0);
     if(b->items.count > 0) {
         memset(b->items.memory, 0, b->items.count*b->items.sizeOfMember);
     }
@@ -3188,7 +3220,7 @@ void drawRenderGroup(RenderGroup *group, RenderDrawSettings settings) {
         if(!globalCubeMapVaoHandle.valid) {
             initVao(&globalCubeMapVaoHandle, globalCubeMapVertexData, arrayCount(globalCubeMapVertexData), globalCubeIndicesData, arrayCount(globalCubeIndicesData));
         }
-        drawVao(&globalCubeMapVaoHandle, &skyboxProgram, SHAPE_SKYBOX, group->skybox->gpuHandle, 1, 0, group, &group->projectionTransform, 0);
+        drawVao(&globalCubeMapVaoHandle, &skyboxProgram, SHAPE_SKYBOX, group->skybox->gpuHandle, 0, 1, 0, group, &group->projectionTransform, 0);
 #else
         if(!globalFullscreenQuadVaoHandle.valid) {
             initVao(&globalFullscreenQuadVaoHandle, globalFullscreenQuadPositionData, arrayCount(globalFullscreenQuadPositionData), globalFullscreenQuadIndicesData, arrayCount(globalFullscreenQuadIndicesData));

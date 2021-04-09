@@ -10,14 +10,23 @@ typedef enum {
 	ENTITY_SUB_TYPE_NONE = 0,
 	ENTITY_SUB_TYPE_TORCH = 1 << 0,
 	ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM = 1 << 1,
-	ENTITY_SUB_TYPE_SWORD = 2 << 1,
+	ENTITY_SUB_TYPE_SWORD = 1 << 2,
+	ENTITY_SUB_TYPE_CAT = 1 << 3,
 } SubEntityType;
+
+typedef enum {
+	ENTITY_DIRECTION_LEFT,
+	ENTITY_DIRECTION_RIGHT,
+	ENTITY_DIRECTION_UP,
+	ENTITY_DIRECTION_DOWN,
+} EntityDirection;
 
 typedef struct {
 	EntityType type;
 
 	u64 flags;
 
+	EntityDirection direction;
 
 	//NOTE: This is for the redo undo system, and to save entities that shouldn't be deleted like the sword and shield
 	bool isDeleted;
@@ -59,6 +68,8 @@ typedef struct {
 	EasyTransform T;
 	EasyAnimation_Controller animationController;
 
+	EasyAiController *aiController;
+
 	EasyRigidBody *rb;
 	EasyCollider *collider;
 	//Four colliders for the rock
@@ -71,6 +82,8 @@ typedef struct {
 	bool staminaMaxedOut;
 
 	float flashHurtTimer;
+
+	int animationIndexOn; //for ai state machines
 
 	float layer; //NOTE: zero for infront, +ve for more behind
 
@@ -491,6 +504,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	easyTransform_initTransform_withScale(&entity->T, pos, v3(width, height, 1), EASY_TRANSFORM_STATIC_ID);
 	easyAnimation_initController(&entity->animationController);
 
+	// entity->aiController = easyAi_initController(&globalLongTermArena);
+
 	if(DEBUG_ANGLE_ENTITY_ON_CREATION) {
 		//NOTE: Have entities spun around the x axis 45 degrees for the top down effect
 		entity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -585,8 +600,6 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 			//FOR WIZARD CREATE THE HIT BOX WHEN ENTITIES ARE INSIDE IT 
 			if(type == ENTITY_WIZARD) {
-				float newHeight = entity->collider1->dim2f.y * 2.0f;
-				float diff = newHeight - entity->collider1->dim2f.y;
 
 				//Offset the trigger in front of the player
 				entity->collider1->offset.y += 2.5f;
@@ -695,6 +708,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				walkModifier = 0.5f;
 			}
 
+
+			float maxOffsetValue = Max(absVal(entity->collider1->offset.y), absVal(entity->collider1->offset.x));
+			float maxDim = Max(absVal(entity->collider1->dim2f.y), absVal(entity->collider1->dim2f.x));
+			float minDim = Min(absVal(entity->collider1->dim2f.y), absVal(entity->collider1->dim2f.x));
+
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.x);
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.y);
+
 			float staminaFactor = 0.01f;
 
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
@@ -706,8 +727,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					animToAdd = &gameState->wizardLeft;
 					idleAnimation = &gameState->wizardIdleLeft;	
 				}
-				
+
+				entity->collider1->offset.x = -maxOffsetValue;
+				entity->collider1->offset.y = 0;
+
+				entity->collider1->dim2f = v2(maxDim, minDim);
+
 				staminaFactor = 0.1f;
+
+				entity->direction = ENTITY_DIRECTION_LEFT;
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
@@ -719,6 +747,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					idleAnimation = &gameState->wizardIdleRight;
 				}
 				staminaFactor = 0.1f;
+
+				entity->collider1->offset.x = maxOffsetValue;
+				entity->collider1->offset.y = 0;
+
+				entity->collider1->dim2f = v2(maxDim, minDim);
+
+				entity->direction = ENTITY_DIRECTION_RIGHT;
+
 			}
 			if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
 				entity->rb->accumForce.y += gameState->walkPower*walkModifier;
@@ -729,6 +765,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					idleAnimation = &gameState->wizardIdleForward;
 				}
 				staminaFactor = 0.1f;
+
+				entity->collider1->offset.x = 0;
+				entity->collider1->offset.y = maxOffsetValue;
+
+				entity->collider1->dim2f = v2(minDim, maxDim);
+
+				entity->direction = ENTITY_DIRECTION_UP;
+
 			}
 
 			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && !isPaused) {
@@ -741,6 +785,13 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					idleAnimation = &gameState->wizardIdleBottom;
 				}
 				staminaFactor = 0.1f;
+
+				entity->collider1->offset.x = 0;
+				entity->collider1->offset.y = -maxOffsetValue;
+
+				entity->collider1->dim2f = v2(minDim, maxDim);
+
+				entity->direction = ENTITY_DIRECTION_DOWN;
 			}
 
 			//decrement stamina while swimming
@@ -826,6 +877,23 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			} 
 		} 
 
+
+		if(wasPressed(keyStates->gameButtons, BUTTON_Q) && !isPaused) {
+			if(entity->direction == ENTITY_DIRECTION_LEFT) {
+				animToAdd = &gameState->wizardSwordAttackLeft;
+				idleAnimation = &gameState->wizardIdleLeft;
+			} else if(entity->direction == ENTITY_DIRECTION_RIGHT) {
+				animToAdd = &gameState->wizardSwordAttackRight;
+				idleAnimation = &gameState->wizardIdleRight;
+			} else if(entity->direction == ENTITY_DIRECTION_UP) {
+				animToAdd = &gameState->wizardSwordAttackBack;
+				idleAnimation = &gameState->wizardIdleForward;
+			} else if(entity->direction == ENTITY_DIRECTION_DOWN) {
+				animToAdd = &gameState->wizardSwordAttackFront;
+				idleAnimation = &gameState->wizardIdleBottom;
+			}  
+
+		} 
 		// if((wasReleased(keyStates->gameButtons, BUTTON_X) && gameState->playerHolding[1] && gameState->playerHolding[1]->type == ENTITY_SHEILD) ||
 		// (wasReleased(keyStates->gameButtons, BUTTON_Z) && gameState->playerHolding[0] == ENTITY_SHEILD)) {
 		// 	entity->shieldInUse = false;
@@ -1057,8 +1125,20 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 	if(entity->type == ENTITY_WEREWOLF) {
+
 		V3 worldP = easyTransform_getWorldPos(&player->T);
 		V3 entP = easyTransform_getWorldPos(&entity->T);
+
+		if(!entity->aiController) {
+			entity->aiController = easyAi_initController(&globalLongTermArena);
+		}
+
+		EasyAi_A_Star_Result aiResult = easyAi_update_A_star(entity->aiController, roundToGridBoard(entP, 1), roundToGridBoard(worldP, 1));
+
+		if(aiResult.found) {
+			entity->T.pos = aiResult.nextPos;
+		}
+		
 
 		V3 diff = v3_minus(worldP, entP);
 
@@ -1073,7 +1153,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(getLength(diff.xy) < 10) {
 			//Move towards the player
-			entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);  
+			// entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);  
 		}
 
 
@@ -1131,6 +1211,39 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
         //////////////////////////////////////////////
 
         
+		
+	}
+
+	if(entity->type == ENTITY_AI_ANIMATION) {
+		if(entity->subEntityType & (int)ENTITY_SUB_TYPE_CAT) {
+			//	 
+			
+			if(!entity->animationController.finishedAnimationLastUpdate && !easyAnimation_isControllerEmpty(&entity->animationController)) {
+				//keep animation going
+			} else {
+				Animation *anim = 0;
+				if(entity->animationIndexOn == 0) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_sitting_tail6.png"); 
+					entity->animationIndexOn++;
+				} else if(entity->animationIndexOn == 1) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_sitting6.png"); 
+					entity->animationIndexOn++;
+				} else if(entity->animationIndexOn == 2) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_sittinglickingpaw9.png"); 
+					entity->animationIndexOn++;
+				} else if(entity->animationIndexOn == 3) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_sittingwaggingtail9.png"); 
+					entity->animationIndexOn++;
+				} else if(entity->animationIndexOn == 4) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_standing_licking_paw7.png"); 
+					entity->animationIndexOn++;
+				} else if(entity->animationIndexOn == 5) {
+					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_walking4.png"); 
+					entity->animationIndexOn = 0;
+				}
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, anim, EASY_ANIMATION_PERIOD);	
+			}
+		}
 		
 	}
 
@@ -1432,7 +1545,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
-	
+
+		//We snap alter the width based on the aspect ratio of the sprite, this is based on that the y is the same across frames
+		entity->T.scale.x = (1.0f / sprite->aspectRatio_h_over_w)*entity->T.scale.y;
+
 		if(entity->isDying && entity->type == ENTITY_SKELETON && !easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->skeletonDeath)) {
 			//NOTE: Check if finished the dying animation, if so delete entity
 			entity->isDead = true;
@@ -1602,10 +1718,15 @@ static Entity *initSword(GameState *gameState, EntityManager *manager, V3 worldP
 	return e;
 }
 
+static Entity *initAiAnimation(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_AI_ANIMATION, 0, 0, COLOR_WHITE, -1, false);
+	e->subEntityType |= ENTITY_SUB_TYPE_CAT;
+	return e;
+}
+
 static Entity *initSheild(GameState *gameState, EntityManager *manager, V3 worldP) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SHEILD, 0, 0, COLOR_WHITE, -1, true);
-	e->model = findModelAsset_Safe("shield.obj"); 
-	e->T.Q = eulerAnglesToQuaternion(0, -0.5f*PI32, 0);
+	e->model =  findModelAsset_Safe("shield.obj"); 
 	return e;
 }
 
@@ -1773,6 +1894,9 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
         case ENTITY_SIGN: {
             newEntity = initSign(gameState, manager, position, splatTexture);
         } break;
+        case ENTITY_AI_ANIMATION: {
+			newEntity = initAiAnimation(gameState, manager, position);
+		} break;
         case ENTITY_LAMP_POST: {
             newEntity = initLampPost(gameState, manager, position, splatTexture);
         } break;
