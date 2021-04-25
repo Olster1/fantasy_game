@@ -32,8 +32,6 @@ static int GLOBAL_WORLD_TILE_SIZE = 8;
 #include "enemy_ai.c"
 #include "game_weather.c"
 
-
-
 static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
     switch(type) {
@@ -595,7 +593,7 @@ int main(int argc, char *args[]) {
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
 
-        // EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
+        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
 
         easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
 
@@ -608,7 +606,12 @@ int main(int argc, char *args[]) {
 
         EasyFont_Font *gameFont = globalDebugFont;//easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
 
-        easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
+        easyFont_initFontWriter(&gameState->fontWriter, gameFont, 870, easyAudio_findSound("text.wav"));
+
+        float tweakWidth;
+        float tweakY;
+        float tweakSpacing;
+
         float cameraFollow_yOffset = 20;
         while(appInfo->running) {
 
@@ -617,6 +620,10 @@ int main(int argc, char *args[]) {
                 gameState->walkPower = getIntFromTweakData(tweaker, "walkPower");
                 gameState->gravityScale = (float)getFloatFromTweakData(tweaker, "gravityScale");
                 gameState->cameraSnapDistance = (float)getFloatFromTweakData(tweaker, "cameraSnapDistance");
+
+                tweakWidth = getIntFromTweakData(tweaker, "tweakWidth");
+                tweakY = getIntFromTweakData(tweaker, "tweakY");
+                tweakSpacing = getIntFromTweakData(tweaker, "tweakSpacing");
 
                 gameState->werewolf_attackSpeed = (float)getFloatFromTweakData(tweaker, "werewolf_attackSpeed");
                 gameState->werewolf_restSpeed = (float)getFloatFromTweakData(tweaker, "werewolf_restSpeed");
@@ -633,6 +640,7 @@ int main(int argc, char *args[]) {
                     }
                 }
             }
+
 
             easyOS_processKeyStates(appInfo, &appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
             easyOS_beginFrame(resolution, appInfo);
@@ -715,6 +723,8 @@ int main(int argc, char *args[]) {
                 gameState->indexInItems = 0;
                 gameState->animationItemTimers[0].target = UI_ITEM_PICKER_MAX_SIZE;
 
+                gameState->inventoryMenuType = GAME_INVENTORY_MENU_MAIN;
+
                 //Stop all the other animation timers
                 for(int i = 1; i < arrayCount(gameState->animationItemTimers); ++i) {
                     gameState->animationItemTimers[i].target = UI_ITEM_PICKER_MIN_SIZE;
@@ -760,67 +770,93 @@ int main(int argc, char *args[]) {
 
 
             if(gameState->isLookingAtItems) {
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT) && (gameState->indexInItems  != 0 && gameState->indexInItems  != 4 && gameState->indexInItems  != 8)) {
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                switch(gameState->inventoryMenuType) {
+                    case GAME_INVENTORY_MENU_MAP: {
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
+                            gameState->inventoryMenuType = GAME_INVENTORY_MENU_MAIN;
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT)) {
+                            gameState->inventoryMenuType = GAME_INVENTORY_MENU_ITEMS;
+                        }
+                    } break;
+                    case GAME_INVENTORY_MENU_ITEMS: {
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
+                            gameState->inventoryMenuType = GAME_INVENTORY_MENU_MAP;
+                        }
+                    } break;
+                    case GAME_INVENTORY_MENU_MAIN: {
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT) && (gameState->indexInItems  != 0 && gameState->indexInItems  != 4 && gameState->indexInItems  != 8)) {
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
 
 
-                    gameState->indexInItems--;
-                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+                            gameState->indexInItems--;
+                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
 
-                    easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
-                    gameState->inventoryBreathSelector = 0;
+                            easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
+                            gameState->inventoryBreathSelector = 0;
 
-                    if(gameState->indexInItems < 0) {
-                        gameState->indexInItems = 0;
-                    }
+                            if(gameState->indexInItems < 0) {
+                                gameState->indexInItems = 0;
+                            }
 
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT) && (gameState->indexInItems == 3 || gameState->indexInItems == 7 || gameState->indexInItems == 11)) {
+                            //go to the Map from here
+                            gameState->inventoryMenuType = GAME_INVENTORY_MENU_MAP;
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT) && (gameState->indexInItems  != 3 && gameState->indexInItems != 7 && gameState->indexInItems  != 11)) {
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                            gameState->inventoryBreathSelector = 0;
+
+
+                            gameState->indexInItems++;
+                            easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
+                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+                            if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
+                                gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
+
+                            }
+
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP) && (gameState->indexInItems + 4) < 12) {
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                            gameState->indexInItems += 4;
+                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+                            gameState->inventoryBreathSelector = 0;
+
+                            if(gameState->indexInItems < 0) {
+                                gameState->indexInItems = 0;
+                            }
+
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                        }
+
+                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN) && (gameState->indexInItems - 4) >= 0) {
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
+
+                            gameState->inventoryBreathSelector = 0;
+
+                            gameState->indexInItems -= 4;
+                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+                            if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
+                                gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
+                            }
+
+                            gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
+                        }
+                    } break;
                 }
-
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT) && (gameState->indexInItems  != 3 && gameState->indexInItems  != 7 && gameState->indexInItems  != 11)) {
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
-
-                    gameState->inventoryBreathSelector = 0;
-
-
-                    gameState->indexInItems++;
-                    easyConsole_pushInt(DEBUG_globalEasyConsole, gameState->indexInItems);
-                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
-                    if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
-                        gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
-                    }
-
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
-                }
-
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP) && (gameState->indexInItems + 4) < 12) {
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
-
-                    gameState->indexInItems += 4;
-                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
-
-                    gameState->inventoryBreathSelector = 0;
-
-                    if(gameState->indexInItems < 0) {
-                        gameState->indexInItems = 0;
-                    }
-
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
-                }
-
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN) && (gameState->indexInItems - 4) >= 0) {
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MIN_SIZE;
-
-                    gameState->inventoryBreathSelector = 0;
-
-                    gameState->indexInItems -= 4;
-                    playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
-                    if(gameState->indexInItems >= arrayCount(gameState->itemSpots)) {
-                        gameState->indexInItems = arrayCount(gameState->itemSpots) - 1;
-                    }
-
-                    gameState->animationItemTimers[gameState->indexInItems].target = UI_ITEM_PICKER_MAX_SIZE;
-                }
+                
             } else 
             {
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
@@ -1101,6 +1137,10 @@ int main(int argc, char *args[]) {
            ////////////////////////
 
 
+
+           renderDisableBatchOnZ(globalRenderGroup);
+
+
            //  //DRAW THE TERRATIN FIRST
             if(gameState->currentTerrainEntity && DEBUG_DRAW_TERRAIN) {
                 Entity *terrainEntity = (Entity *)(gameState->currentTerrainEntity);
@@ -1133,6 +1173,9 @@ int main(int argc, char *args[]) {
 
                     } else if(t->type == WORLD_TILE_GRASS) {
                         sprite = findTextureAsset("grass_tile.png");
+                    } else if(t->type == WORLD_TILE_DIRT) {
+                        sprite = findTextureAsset("dirt_tile.png");
+
                     } else if(t->type == WORLD_TILE_LAVA) {
                         sprite = findTextureAsset("lava_tile.png");
                     } else if(t->type == WORLD_TILE_ROCK) {
@@ -1206,7 +1249,6 @@ int main(int argc, char *args[]) {
                 
                 gameState->tempTransform.Q = gameState->angledQ;
 
-                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
 
    
@@ -1375,7 +1417,6 @@ int main(int argc, char *args[]) {
 
            //  ////
 
-            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
             {
                 for(int i = 0; i < manager->entities.count; ++i) {
@@ -1411,7 +1452,9 @@ int main(int argc, char *args[]) {
             #endif
             ///////////////////////////////////////////////////////////////
 
-            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_DEFAULT));
+
+            renderEnableBatchOnZ(globalRenderGroup);
             
             for(int i = 0; i < manager->entities.count; ++i) {
                 Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -1424,8 +1467,25 @@ int main(int argc, char *args[]) {
                         *indexToAdd = i;
                     }
                 }
-                
             }
+
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+            
+
+            //////////////////// DRAW ALPHA ENTITIES //////////////////////////////////////////
+
+            for(int i = 0; i < gameState->alphaSpritesToRender.count; ++i) {
+                EntityRender_Alpha *e = getElementFromAlloc(&gameState->alphaSpritesToRender, i, EntityRender_Alpha);
+
+                setModelTransform(globalRenderGroup, e->T);
+                renderSetShader(globalRenderGroup, e->shader); 
+                renderDrawSprite(globalRenderGroup, e->sprite, e->colorTint);
+
+            } 
+            gameState->alphaSpritesToRender.count = 0;
+            /////////////////////////////////////////////////
+
 
             //Draw any particle systems
             {   
@@ -1615,7 +1675,27 @@ int main(int argc, char *args[]) {
                 gameState->isEditorOpen = !gameState->isEditorOpen;
             }
 
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
+            ////////////// DRAW FOG //////////////////////
+            EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+            renderSetShader(globalRenderGroup, &fogProgram); 
+            for(int i = 0; i < manager->entities.count; ++i) {
+                Entity *e = (Entity *)getElement(&manager->entities, i);
+                if(e && e->type == ENTITY_FOG) {
+                   setModelTransform(globalRenderGroup, easyTransform_getTransform(&e->T));
+                   renderDrawSprite(globalRenderGroup, e->sprite, e->colorTint);
+               }
+            } 
+
+            easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+            ///////////////////////////////////////////////////////////////////////////////////
+
+            
 
             //DRAW THE PLAYER HUD
             {
@@ -1744,7 +1824,8 @@ int main(int argc, char *args[]) {
 
                 int splatIndexOn = 0;
                 if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
-                    splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
+                    splatIndexOn = easyEditor_pushSpriteList(appInfo->editor, "Sprites: ", (Texture **)gameState->splatTextures.memory, gameState->splatTextures.count);
+                    // splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
                 }
 
@@ -1773,7 +1854,7 @@ int main(int argc, char *args[]) {
                 easyEditor_pushSlider(appInfo->editor, "Time of day: ", &weatherState->timeOfDay, 0, 1);
                 easyEditor_pushSlider(appInfo->editor, "Time of Day Speed: ", &weatherState->timeOfDaySpeed, 0, 1);
 
-                easyEditor_pushSpriteList(appInfo->editor, "Sprites: ", (Texture **)gameState->splatTextures.memory, gameState->splatTextures.count);
+                
                 
 
                 EasyModel *modelSelected = 0;
@@ -1847,7 +1928,8 @@ int main(int argc, char *args[]) {
                                 
 
                                 if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
-                                    if(easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash)) {
+                                    bool shiftDown = isDown(gameKeyStates.gameButtons, BUTTON_SHIFT);
+                                    if(easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash, !shiftDown)) {
                                         // easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
                                     } else {
                                         easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
@@ -1944,6 +2026,14 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_ENTITY_AI_STATE: {
                             if(pressed) {
                                 editorState->entitySelected = initAiAnimation(gameState, manager, hitP);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                                justCreatedEntity = true;
+                            }
+                        } break;
+                        case EDITOR_CREATE_ENTITY_FOG: {
+                            if(pressed) {
+                                editorState->entitySelected = initFog(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
@@ -2310,7 +2400,7 @@ int main(int argc, char *args[]) {
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
                     if(e->type == ENTITY_ENTITY_CREATOR) {
-                        e->typeToCreate = (EntityType)easyEditor_pushList_(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
+                        e->typeToCreate = (EntityType)easyEditor_pushList_withIds(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
                         easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
                     }
 
@@ -2325,7 +2415,7 @@ int main(int argc, char *args[]) {
 
                                 Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, 0)); 
                                 setModelTransform(globalRenderGroup, T);
-                                renderDrawQuad(globalRenderGroup, COLOR_GOLD);
+                                renderDrawQuad(globalRenderGroup, n->canSeePlayerFrom ? COLOR_GOLD : COLOR_AQUA);
 
                                 n = n->next;
                             }
@@ -2348,15 +2438,15 @@ int main(int argc, char *args[]) {
 
 
                     if(e->type == ENTITY_TRIGGER) {
-                         easyEditor_alterListIndex(appInfo->editor, (int)e->triggerType); e->triggerType = (EntityTriggerType)easyEditor_pushList(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
+                         e->triggerType = (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
                         
-                        easyEditor_alterListIndex(appInfo->editor, (int)e->locationSoundType); e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings));
+                        e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList_withIds(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings), e->T.id, gameState->currentSceneName);
                    
-                        easyEditor_preloadName(appInfo->editor, e->levelToLoad); e->levelToLoad = easyEditor_pushTextBox(appInfo->editor, "Scene to load:", e->levelToLoad);
+                        e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
                    }
 
                    if(e->type == ENTITY_HOUSE) {
-                       e->levelToLoad = easyEditor_pushTextBox_(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
+                       e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
                    }
 
 
@@ -2425,7 +2515,7 @@ int main(int argc, char *args[]) {
                     if(e->type == ENTITY_SIGN) {
 
                         //These have to be on the same line since the editor uses __LINE__ as the uuid.
-                        easyEditor_alterListIndex(appInfo->editor, (int)e->dialogType); DialogInfoType dialogType = (DialogInfoType)easyEditor_pushList(appInfo->editor, "Dialog: ", MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings)); 
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->dialogType, e->T.id, gameState->currentSceneName); DialogInfoType dialogType = (DialogInfoType)easyEditor_pushList_withIds(appInfo->editor, "Dialog: ", MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings), e->T.id, gameState->currentSceneName); 
 
                         e->dialogType = dialogType;
                     }
@@ -2529,11 +2619,13 @@ int main(int argc, char *args[]) {
                         if(newEntity) {
                             if(newEntity->collider) {
                                 newEntity->collider->dim2f = e->collider->dim2f; 
+                                newEntity->collider->offset = e->collider->offset;
                             }
 
 
                             if(newEntity->collider1) {
-                                newEntity->collider1->dim2f = e->collider1->dim2f;   
+                                newEntity->collider1->dim2f = e->collider1->dim2f; 
+                                newEntity->collider1->offset = e->collider1->offset;  
                             }
 
                             newEntity->maxHealth = e->maxHealth;
@@ -2916,37 +3008,180 @@ int main(int argc, char *args[]) {
 
                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
+               char *currentTalkText = gameState->currentTalkText->texts[gameState->messageIndex];
 
                float fuaxWidth = 1920.0f;
                float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
 
+               float xOffset_leftColumn = 0;
+               float xOffset_rightColumn = 0;
+
+               float alpha = 0.0f;
+
+               EntityDialogNode *nextTalkNode = 0;
+
+               float revealChoicePeriod = 0.6f;
+
+               //update Timer
+               if(gameState->dialogChoiceTimer >= 0.0f) {
+                gameState->dialogChoiceTimer += appInfo->dt;
+
+                float canVal = clamp01(gameState->dialogChoiceTimer / revealChoicePeriod);
+
+                alpha = canVal; 
+
+                xOffset_leftColumn = smoothStep01(0, canVal, -400);                
+                xOffset_rightColumn = smoothStep01(0, canVal, 150);                
+
+               }    
+
+               float returnToCenterPeriod = 0.3f;
+
+               //update Timer
+               if(gameState->dialogChoiceTimerReturn >= 0.0f) {
+                gameState->dialogChoiceTimerReturn += appInfo->dt;
+
+                float canVal = clamp01(gameState->dialogChoiceTimerReturn / returnToCenterPeriod);
+
+                alpha = 1.0f - canVal; 
+
+                xOffset_leftColumn = smoothStep01(-400, canVal, 0);                
+                xOffset_rightColumn = smoothStep01(150, canVal, 0);
+
+                if(canVal >= 1.0f) {
+                    gameState->dialogChoiceTimerReturn = -1.0f;
+                }                
+               }
+
+               bool isFontWriterFinished = false;
+
                setViewTransform(globalRenderGroup, mat4());
-               setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
+               Matrix4 projection = OrthoMatrixToScreen(fuaxWidth, fuaxHeight);
+               setProjectionTransform(globalRenderGroup, projection);
 
-               float textBg_height = 0.5f*fuaxHeight;
+               {
+                   // EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
-               float textureY = -0.5f*fuaxHeight + 0.5f*textBg_height;
+                   EasyTransform T;
+                   easyTransform_initTransform_withScale(&T, v3(xOffset_leftColumn, -300, 0.4f), v3(1000, 400, 1), EASY_TRANSFORM_NO_ID); 
 
-               //Stamina points backing
-               Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, textBg_height, 0)), v3(0, textureY, 0.4f));
-               setModelTransform(globalRenderGroup, T);
-               renderDrawSprite(globalRenderGroup, fadeBlackTexture, COLOR_WHITE);
+                   setModelTransform(globalRenderGroup, easyTransform_getTransform(&T));
+                   
+                   renderSetShader(globalRenderGroup, &textureProgram);
+                   renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), COLOR_WHITE);
 
-               char *currentTalkText = gameState->currentTalkText.textArray[gameState->messageIndex];
+                   renderSetShader(globalRenderGroup, &fontProgram);
 
-               float fontx = 0.2f*gameState->fuaxResolution.x;
+                   //if we're returning back to center we don't start writing 
+                   float tUpdate = appInfo->dt;
+
+                   if(gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod) {
+                      tUpdate = 0;
+                   }
+
+                   isFontWriterFinished = easyFontWriter_updateFontWriter(&gameState->fontWriter, currentTalkText, tUpdate, &T, v3(xOffset_leftColumn + -400, -200, 0.1f), false); 
+
+                   // easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+               }
+
+               //Since we advance from the current node when we animate back in, we keep the last available node around to draw the right options. 
+                bool drawOptions = false;
+
+                EntityDialogNode *nodeToDrawOptionsFrom = gameState->currentTalkText;
+
+               if(gameState->dialogChoiceTimerReturn >= 0.0f) {
+                 drawOptions = true;
+                 nodeToDrawOptionsFrom = gameState->prevTalkNode;
+               }
+
+               if(isFontWriterFinished && gameState->messageIndex >= (gameState->currentTalkText->textCount - 1) && gameState->currentTalkText->choiceCount > 0) {
+
+                if(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION) {
+                    gameState->dialogChoiceTimer = 0;
+                    gameState->choiceOptionIndex = 0;
+                }
+
+                drawOptions = true;
+
+                //Check if there are any resposes
+                  gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION; 
+
+
+                  //don't let the player choose while is still animating (up until 90% through animation)
+                  if((gameState->dialogChoiceTimer / revealChoicePeriod) > 0.9f) {
+                      //Choose the option 
+                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
+                        gameState->choiceOptionIndex++;
+                      }
+
+                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
+                        gameState->choiceOptionIndex--;
+                      }
+
+                      gameState->choiceOptionIndex = clamp(0, gameState->choiceOptionIndex, gameState->currentTalkText->choiceCount - 1);
+                      ////////////////////////////////////////////////////////////
+
+                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
+                        nextTalkNode = gameState->currentTalkText->next[gameState->choiceOptionIndex];
+                        // assert(nextTalkNode);
+
+                      }
+                  }
+
+
+                  
+               }
+
+
+               if(drawOptions) {
+                EasyTransform T;
+                easyTransform_initTransform_withScale(&T, v3(0, tweakY, 0), v3(1, 1, 1), EASY_TRANSFORM_NO_ID); 
+                
+
+                EasyTransform quillT;
+                easyTransform_initTransform_withScale(&quillT, v3(0, tweakY, 0.7f), v3(tweakWidth, 100, 1), EASY_TRANSFORM_NO_ID); 
+
+                //Draw the options
+                for(int i = 0; i < nodeToDrawOptionsFrom->choiceCount; ++i) {
+                      char *str = nodeToDrawOptionsFrom->choices[i];
+
+                      T.pos.y -= tweakSpacing;
+
+                      quillT.pos.x = xOffset_rightColumn + 300;
+                      quillT.pos.y = T.pos.y;
+                      
+
+                      setModelTransform(globalRenderGroup, easyTransform_getTransform(&quillT));
+                      renderSetShader(globalRenderGroup, &textureProgram);
+
+                      V4 c = COLOR_WHITE;
+
+                      if(gameState->choiceOptionIndex == i) {
+                          c = COLOR_GOLD;
+                      }
+                      
+                      c.w = alpha;
+                      renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), c);
+
+                      renderSetShader(globalRenderGroup, &fontProgram);
+                     
+                      easyFont_drawString(str, &T, v3(xOffset_rightColumn, T.pos.y, 0.6f), gameFont, false, v4(0, 0, 0, alpha));
+                    }
+               }
+
+               // float fontx = 0.2f*gameState->fuaxResolution.x;
 
                // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
                 
 
                // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
-               float fonty = fuaxHeight - 0.3f*textBg_height;
+               // float fonty = fuaxHeight - 0.3f*textBg_height;
 
-               outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
+               // outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
 
-
+               renderSetShader(globalRenderGroup, &textureProgram);
                //Draw prompt button to continue
-               T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
+               Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
                setModelTransform(globalRenderGroup, T);
                renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
                ///////
@@ -2957,38 +3192,73 @@ int main(int argc, char *args[]) {
 
                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
+                bool returningToCenter = (gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod);
+
                //Exit back to game
-               if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
-                    if(gameState->talkingNPC) {
-                        easySound_endSound(gameState->talkingNPC);
-                    }
+               if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING && !gameState->enteredTalkModeThisFrame && !returningToCenter) {
+                    // if(gameState->talkingNPC) {
+                    //     easySound_endSound(gameState->talkingNPC);
+                    // }
 
-                    if(gameState->messageIndex < (gameState->currentTalkText.count - 1)) {
-                        //still messages left in array
-                        gameState->messageIndex++;
+                    bool writerFinished = easyFontWriter_isFontWriterFinished(&gameState->fontWriter, currentTalkText);
 
-                        WavFile *sound = 0;
-                        if(gameState->currentTalkText.audioArray) {
-                            Asset *asset = findAsset(gameState->currentTalkText.audioArray[gameState->messageIndex]);
-                            if(asset) {
-                                sound = (WavFile *)asset->file;
-                            }
-                            if(sound) {
-                                gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
-                                gameState->talkingNPC->volume = 3.0f;
-                            }
+                    //still messages
+                    if(gameState->messageIndex < (gameState->currentTalkText->textCount - 1) || (gameState->messageIndex == (gameState->currentTalkText->textCount - 1) && !writerFinished)) {
+                        assert(gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING);
+
+                        if(!writerFinished) {
+                            easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
+                        } else {
+                            //still messages left in array
+                            gameState->messageIndex++;
+
+                            easyFontWriter_resetFontWriter(&gameState->fontWriter);
+
+                            WavFile *sound = 0;
+                            // if(gameState->currentTalkText.audioArray) {
+                            //     Asset *asset = findAsset(gameState->currentTalkText.audioArray[gameState->messageIndex]);
+                            //     if(asset) {
+                            //         sound = (WavFile *)asset->file;
+                            //     }
+                            //     if(sound) {
+                            //         gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+                            //         gameState->talkingNPC->volume = 3.0f;
+                            //     }
+                            // }    
                         }
 
+                    } else if(gameState->currentTalkText->choiceCount > 0) {
+                        //go to choices
+                        assert(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION);
+
+                        gameState->dialogChoiceTimer = 0;
+                        gameState->choiceOptionIndex = 0;
+                        gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION;
+                        easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
                     } else {
+                        //finished
                         gameState->gameModeType = GAME_MODE_PLAY;
                         gameState->gameIsPaused = false;
-                        gameState->talkingNPC = 0;
+                        // gameState->talkingNPC = 0;
                         //go back to start just to make sure the next time someone else tries to play it
                         gameState->messageIndex = 0;
                         
                     }
                 }
 
+                if(nextTalkNode) {
+                    //Store the previous node   
+                    gameState->prevTalkNode = gameState->currentTalkText;
+
+                    gameState->currentTalkText = nextTalkNode;
+                    gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
+                    easyFontWriter_resetFontWriter(&gameState->fontWriter);
+                    gameState->dialogChoiceTimer = -1;
+                    gameState->messageIndex = 0;
+                    gameState->dialogChoiceTimerReturn = 0;
+                }
+                
+                gameState->enteredTalkModeThisFrame = false;
             }
            //  ///////////////////////////
 
@@ -3005,169 +3275,198 @@ int main(int argc, char *args[]) {
 
                 setViewTransform(globalRenderGroup, mat4());
 
-                V2 size = getBounds("ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
-                outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
-                
                 float fuaxWidth = 1920.0f;
                 float fuaxHeight = appInfo->aspectRatio_yOverX*fuaxWidth;
                 
                 setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
 
-                //Update animation timer
-                // gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);
-                ////
+                switch(gameState->inventoryMenuType) {
+                    case GAME_INVENTORY_MENU_MAP: {
+                        Texture *mapTex = findTextureAsset("map.jpg");
 
-
-                //DRAW BACKGROUND
-                Texture *t = findTextureAsset("inventory_backing.png");
-
-                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, fuaxHeight, 0)), v3(0, 0, 0.4f));
-                
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-                                        
-                //DRAW PLAYER
-                Texture *playerPoseTexture = findTextureAsset("player_pose.png");
-
-                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
-
-                float pWidth = 0.3f*fuaxWidth;
-                T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.3f));
-                
-                setModelTransform(globalRenderGroup, T);
-                renderDrawSprite(globalRenderGroup, playerPoseTexture, COLOR_WHITE);
-
-                renderSetShader(globalRenderGroup, &glossProgram);
-                
-                //////////////////////////////////////////////////////////////
-                t = findTextureAsset("inventory_spot.png");
-                Texture *hover_t = findTextureAsset("targeting2.png");
-                float xAt = 0;
-                float yAt = 0;
-
-                float spacing = 180;
-                float circleSize = 150;
-
-                for(int i = 1; i < arrayCount(gameState->itemSpots) + 1; ++i) {   
-
-                    Texture *t_todraw = t;
-
-                     ItemInfo *itemI = &gameState->itemSpots[i - 1];
-
-                    if(gameState->indexInItems == (i - 1)) {
-                        gameState->inventoryBreathSelector += appInfo->dt;
-
-                        if(gameState->inventoryBreathSelector > 1.0f) {
-                            gameState->inventoryBreathSelector -= 1.0f;
-                        }
-
-                        float s = smoothStep00(1.3f*circleSize, gameState->inventoryBreathSelector, 1.6f*circleSize);
-
-                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.3f));
-                                            
+                        ///Color background yellow
+                        Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth,fuaxHeight, 0)), v3(0, 0, 0.5f));
                         setModelTransform(globalRenderGroup, T);
-                        renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
+                        renderDrawQuad(globalRenderGroup, settingsYellowColor);    
+                        ///////////////////////
+
+                        float h = 0.9f*fuaxHeight;
+                        //Draw prompt button to continue
+                        float aspectRatio = 1.0f / mapTex->aspectRatio_h_over_w;
+                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(h*aspectRatio, h, 0)), v3(0, 0, 0.4f));
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawSprite(globalRenderGroup, mapTex, COLOR_WHITE);
+                        ///////
 
 
-                        if(itemI->type != ENTITY_NULL) {
-                            char *s = getInventoryString(itemI->type);
-                            float descripX = 0.5f*gameState->fuaxResolution.x;
-                            outputTextNoBacking(gameFont, descripX, gameState->fuaxResolution.y - 200, 0.1f, gameState->fuaxResolution, s, rect2fMinMax(descripX, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.4f, true, 1);
-                        }
+                    } break;
+                    case GAME_INVENTORY_MENU_ITEMS: {
+
+                    } break;
+                    case GAME_INVENTORY_MENU_MAIN: {
+                        V2 size = getBounds("ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
+                        outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 100, 0.1f, gameState->fuaxResolution, "ITEMS", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
                         
 
-                        t_todraw = findTextureAsset("inventory_spot1.png");
+                        //Update animation timer
+                        // gameState->lookingAt_animTimer.current = lerp(gameState->lookingAt_animTimer.current, 20.0f*clamp01(appInfo->dt), gameState->lookingAt_animTimer.target);
+                        ////
 
-                        //UPDATE PLAYER EQUIPING ITEM
-                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
+
+                        //DRAW BACKGROUND
+
+                        Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, fuaxHeight, 0)), v3(0, 0, 0.4f));
                             
-                            //NOTE: Equip item sound
-                            playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
 
-                            gameState->playerHolding[0] = &gameState->itemSpots[i - 1];
+                        V4 c = COLOR_GOLD;
+                        c.w = 0.5f;
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawQuad(globalRenderGroup, c);
+                                                
+                        //DRAW PLAYER
+                        Texture *playerPoseTexture = findTextureAsset("player_pose.png");
 
-                            gameState->animationItemTimersHUD[0] = 0.0f;
+                        renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
 
-                        }
+                        float pWidth = 0.3f*fuaxWidth;
+                        T = Matrix4_translate(Matrix4_scale(mat4(), v3(pWidth, playerPoseTexture->aspectRatio_h_over_w*pWidth, 0)), v3(-220, 0, 0.3f));
+                        
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawSprite(globalRenderGroup, playerPoseTexture, COLOR_WHITE);
 
-                        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
-                            //NOTE: Equip item sound
-                            playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+                        renderSetShader(globalRenderGroup, &glossProgram);
+                        
+                        //////////////////////////////////////////////////////////////
+                        Texture *t = findTextureAsset("inventory_spot.png");
+                        Texture *hover_t = findTextureAsset("targeting2.png");
+                        float xAt = 0;
+                        float yAt = 0;
 
-                            gameState->playerHolding[1] = &gameState->itemSpots[i - 1];
+                        float spacing = 180;
+                        float circleSize = 150;
 
-                            gameState->animationItemTimersHUD[1] = 0.0f;
+                        for(int i = 1; i < arrayCount(gameState->itemSpots) + 1; ++i) {   
 
-                        }
-                        //////////////////////
-                    }
+                            Texture *t_todraw = t;
+
+                             ItemInfo *itemI = &gameState->itemSpots[i - 1];
+
+                            if(gameState->indexInItems == (i - 1)) {
+                                gameState->inventoryBreathSelector += appInfo->dt;
+
+                                if(gameState->inventoryBreathSelector > 1.0f) {
+                                    gameState->inventoryBreathSelector -= 1.0f;
+                                }
+
+                                float s = smoothStep00(1.3f*circleSize, gameState->inventoryBreathSelector, 1.6f*circleSize);
+
+                                T = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(0.1f*fuaxWidth + xAt, -0.15f*fuaxHeight + yAt, 0.3f));
+                                                    
+                                setModelTransform(globalRenderGroup, T);
+                                renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
 
 
-                    float x = 0.1f*fuaxWidth + xAt;
-                    float y = -0.15f*fuaxHeight + yAt;
-                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.4f));
-                    
-                    setModelTransform(globalRenderGroup, T);
-                    renderDrawSprite(globalRenderGroup, t_todraw, COLOR_WHITE);
+                                if(itemI->type != ENTITY_NULL) {
+                                    char *s = getInventoryString(itemI->type);
+                                    float descripX = 0.5f*gameState->fuaxResolution.x;
+                                    outputTextNoBacking(gameFont, descripX, gameState->fuaxResolution.y - 200, 0.1f, gameState->fuaxResolution, s, rect2fMinMax(descripX, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.4f, true, 1);
+                                }
+                                
 
-                   
-                    if(itemI->type != ENTITY_NULL) {
-                        renderSetShader(globalRenderGroup, &pixelArtProgram);
-                         T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.2f));
-                         setModelTransform(globalRenderGroup, T);
-                        renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
-                        renderSetShader(globalRenderGroup, mainShader);
+                                t_todraw = findTextureAsset("inventory_spot1.png");
 
-                        if(itemI->isDisposable) {
-                            float offset = 50;
-                            char *str = easy_createString_printf(&globalPerFrameArena, "%d", itemI->count);
-                            outputTextNoBacking(gameFont, x + 0.5f*fuaxWidth + offset, 0.5f*fuaxHeight - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+                                //UPDATE PLAYER EQUIPING ITEM
+                                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_Z)) {
+                                    
+                                    //NOTE: Equip item sound
+                                    playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                                    gameState->playerHolding[0] = &gameState->itemSpots[i - 1];
+
+                                    gameState->animationItemTimersHUD[0] = 0.0f;
+
+                                }
+
+                                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_X)) {
+                                    //NOTE: Equip item sound
+                                    playGameSound(&globalLongTermArena, gameState->equipItemSound, 0, AUDIO_BACKGROUND);
+
+                                    gameState->playerHolding[1] = &gameState->itemSpots[i - 1];
+
+                                    gameState->animationItemTimersHUD[1] = 0.0f;
+
+                                }
+                                //////////////////////
+                            }
+
+
+                            float x = 0.1f*fuaxWidth + xAt;
+                            float y = -0.15f*fuaxHeight + yAt;
+                            T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.4f));
+                            
+                            setModelTransform(globalRenderGroup, T);
+                            renderDrawSprite(globalRenderGroup, t_todraw, COLOR_WHITE);
+
+                           
+                            if(itemI->type != ENTITY_NULL) {
+                                renderSetShader(globalRenderGroup, &pixelArtProgram);
+                                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.2f));
+                                 setModelTransform(globalRenderGroup, T);
+                                renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
+                                renderSetShader(globalRenderGroup, mainShader);
+
+                                if(itemI->isDisposable) {
+                                    float offset = 50;
+                                    char *str = easy_createString_printf(&globalPerFrameArena, "%d", itemI->count);
+                                    outputTextNoBacking(gameFont, x + 0.5f*fuaxWidth + offset, 0.5f*fuaxHeight - y + offset, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+                                }
+                                
+                                
+                            }
+                            
+
+                            xAt += spacing;
+
+                            if((i % 4) == 0) {
+                                yAt += spacing;
+                                xAt = 0;
+                            }
+                        
                         }
                         
+                        /////////////////////////////////////////////////
+
+                        //LEFT SIDE OF INVENTORY
+                        t = findTextureAsset("inventory_marker.png");
+                        xAt = 0;
+                        yAt = 0;
+
                         
-                    }
-                    
+                        for(int i = 1; i < 9; ++i) {
 
-                    xAt += spacing;
+                            float xspacing = 120;
+                            float yspacing = 150;
+                            circleSize = 20;
 
-                    if((i % 4) == 0) {
-                        yAt += spacing;
-                        xAt = 0;
-                    }
-    
+                            if(i == 7) { t = findTextureAsset("inventory_sword.png"); circleSize = 100; }
+                            if(i == 8) { t = findTextureAsset("inventory_shield.png"); circleSize = 100; }
+
+                            T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(-0.4f*fuaxWidth + xAt, -0.2f*fuaxHeight + yAt, 0.4f));
+                            
+                            setModelTransform(globalRenderGroup, T);
+                            renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                            xAt += xspacing;
+
+                            if((i % 2) == 0) {
+                                yAt += yspacing;
+                                xAt = 0;
+                            }
+                        
+                        }
+                    } break;
                 }
                 
-                /////////////////////////////////////////////////
-
-                //LEFT SIDE OF INVENTORY
-                t = findTextureAsset("inventory_marker.png");
-                xAt = 0;
-                yAt = 0;
-
-                
-                for(int i = 1; i < 9; ++i) {
-
-                    float xspacing = 120;
-                    float yspacing = 150;
-                    circleSize = 20;
-
-                    if(i == 7) { t = findTextureAsset("inventory_sword.png"); circleSize = 100; }
-                    if(i == 8) { t = findTextureAsset("inventory_shield.png"); circleSize = 100; }
-
-                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(-0.4f*fuaxWidth + xAt, -0.2f*fuaxHeight + yAt, 0.4f));
-                    
-                    setModelTransform(globalRenderGroup, T);
-                    renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
-
-                    xAt += xspacing;
-
-                    if((i % 2) == 0) {
-                        yAt += yspacing;
-                        xAt = 0;
-                    }
-                
-                }
-
                 easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
                 ////////////////////////////////////////////////////////////////////////////

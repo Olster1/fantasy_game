@@ -1,0 +1,21 @@
+{
+
+	id: 886;
+	type: "ENTITY_SCENERY";
+	position: 39.000000 14.000000 -3.500000;
+	scale: 8.000000 11.130435 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	spriteName: "tree_dead";
+	colliderScale: 0.500000 0.200000;
+	colliderOffset: 0.000000 -3.000000 0.000000;
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 3.000000;
+	typeToCreate: "ENTITY_NULL";
+}
+

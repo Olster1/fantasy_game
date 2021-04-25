@@ -68,7 +68,14 @@ typedef struct {
 	EasyTransform T;
 	EasyAnimation_Controller animationController;
 
+	//For the ai stuff
 	EasyAiController *aiController;
+	V3 lastSetPos; //the position the A* path find is travelling to
+	V3 beginSetPos;
+	float travelTimer; //timer to lerp between A* positions
+	V3 lastGoalPos;
+	///
+
 
 	EasyRigidBody *rb;
 	EasyCollider *collider;
@@ -522,9 +529,12 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->healthBarTimer = -1;
 
 	entity->isDying = false;
+
+	entity->travelTimer = -1.0f;
 	
 	entity->layer = layer;
 	entity->sprite = sprite;
+	entity->lifeSpanLeft = -1.0f;
 	entity->type = type;
 	entity->rotation = 0;
 	entity->shieldInUse = false;
@@ -536,6 +546,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->lightColor = v3(1, 0.5f, 0);
 
 	entity->flashHurtTimer = -1.0f;
+
 
 	entity->maxStamina = findMaxStamina(type);
 	entity->stamina = entity->maxStamina;
@@ -582,6 +593,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	
 	if(type == ENTITY_TRIGGER) { isTrigger = true; gravityFactor = 0; inverse_weight = 0; dragFactor = 0;} 
 
+	if(type == ENTITY_FOG) { isTrigger = true; gravityFactor = 0; inverse_weight = 0; dragFactor = 0;} 
+
 
 	if(type == ENTITY_SEAGULL) { gravityFactor = 0; inverse_weight = 1.f / 20.0f; dragFactor = 0; }
 
@@ -622,6 +635,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENTITY_SKELETON: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
+			case ENTITY_FOG:
 			case ENTITY_TRIGGER:
 			case ENTITY_SHEILD:
 			case ENTITY_SWORD: {
@@ -662,6 +676,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState) {
 
+	RenderProgram *shaderProgram = &pixelArtProgram;
 
 	if(!isPaused && !entity->isSwimming) {
 
@@ -687,11 +702,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	if(entity->type == ENTITY_WIZARD) {
 
+		V3 wP = easyTransform_getWorldPos(&entity->T);
+
 		//Update listener position which is the wizard
-		easySound_updateListenerPosition(soundState, easyTransform_getWorldPos(&entity->T));
+		easySound_updateListenerPosition(soundState, wP);
 
 		Animation *animToAdd = 0;
 
+
+		easy_setPlayerPosition(globalRenderGroup, wP);
 		
 
 		Animation *idleAnimation = 0;
@@ -713,8 +732,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			float maxDim = Max(absVal(entity->collider1->dim2f.y), absVal(entity->collider1->dim2f.x));
 			float minDim = Min(absVal(entity->collider1->dim2f.y), absVal(entity->collider1->dim2f.x));
 
-			easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.x);
-			easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.y);
+			// easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.x);
+			// easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->collider1->offset.y);
 
 			float staminaFactor = 0.01f;
 
@@ -1023,7 +1042,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
             	if(canInteractWith) {
             		// renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, false);
-            		
+            			
             		if(isDown(keyStates->gameButtons, BUTTON_UP)) {
             			//GO inside the house
             			playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
@@ -1034,6 +1053,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             			loadSceneData->sceneToLoad = entity->levelToLoad;
             			loadSceneData->editorState = editorState;
 
+
+            			easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 2");
 
             			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
             			gameState->gameIsPaused = true;	
@@ -1086,22 +1107,26 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            			} else {
 		            			if(entity->dialogType != ENTITY_DIALOG_NULL) {
 									gameState->gameModeType = GAME_MODE_READING_TEXT;
-									gameState->currentTalkText = findDialogInfo(entity->dialogType);
+									gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
+									gameState->enteredTalkModeThisFrame = true;
+									
+									gameState->currentTalkText = findDialogInfo(entity->dialogType, &gameState->gameDialogs);
 									gameState->messageIndex = 0; //start at the begining
+									easyFontWriter_resetFontWriter(&gameState->fontWriter);
 
-									WavFile *sound = 0;
-									if(gameState->currentTalkText.audioArray) {
-										Asset *asset = findAsset(gameState->currentTalkText.audioArray[0]);
-										if(asset) {
-											sound = (WavFile *)asset->file;
-										}
-									}
+									// WavFile *sound = 0;
+									// if(gameState->currentTalkText.audioArray) {
+									// 	Asset *asset = findAsset(gameState->currentTalkText.audioArray[0]);
+									// 	if(asset) {
+									// 		sound = (WavFile *)asset->file;
+									// 	}
+									// }
 									
 
-									if(sound) {
-										gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
-										gameState->talkingNPC->volume = 3.0f;
-									}
+									// if(sound) {
+									// 	gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+									// 	gameState->talkingNPC->volume = 3.0f;
+									// }
 		            			}	
 	            			}
 	            		}	
@@ -1124,6 +1149,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		}
 	}
 
+	
+
 	if(entity->type == ENTITY_WEREWOLF) {
 
 		V3 worldP = easyTransform_getWorldPos(&player->T);
@@ -1131,18 +1158,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		if(!entity->aiController) {
 			entity->aiController = easyAi_initController(&globalLongTermArena);
-		}
+		}	
 
-		EasyAi_A_Star_Result aiResult = easyAi_update_A_star(entity->aiController, roundToGridBoard(entP, 1), roundToGridBoard(worldP, 1));
-
-		if(aiResult.found) {
-			entity->T.pos = aiResult.nextPos;
-		}
-		
-
-		V3 diff = v3_minus(worldP, entP);
-
-		V2 dir = normalizeV2(diff.xy);
 
 		float werewolfMoveSpeed = gameState->werewolf_attackSpeed;
 
@@ -1150,6 +1167,50 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		if(entity->stamina < entity->maxStamina) {
 			werewolfMoveSpeed = gameState->werewolf_restSpeed;
 		}
+
+		
+		V3 playerInWorldP = roundToGridBoard(worldP, 1);
+		V3 entP_inWorld = roundToGridBoard(entP, 1);
+
+		EasyAi_A_Star_Result aiResult = easyAi_update_A_star(entity->aiController, entP_inWorld,  playerInWorldP);
+
+		if(aiResult.found) {
+			entity->lastSetPos = aiResult.nextPos;
+
+			if(v3Equal(entity->lastSetPos, playerInWorldP)) {
+				entity->lastSetPos = worldP; //get floating point version
+			}
+
+			// entity->T.pos = lerpV3(, clamp01(dt*werewolfMoveSpeed), entity->lastSetPos);
+			
+			V3 diff = v3_minus(entity->lastSetPos, entity->T.pos);
+
+			V2 dir = normalizeV2(diff.xy);
+
+			entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);
+		} 
+
+
+		
+
+		// //update the position of the entity based on the new position of the path finding
+		// if(entity->travelTimer >= 0.0f) {
+		// 	entity->travelTimer += dt;
+
+		// 	float canVal = clamp01(entity->travelTimer / maxTravelTime);
+			
+
+		// 	if(canVal >= 1.0f) {
+		// 		entity->travelTimer = -1.0f;
+		// 	}
+		// }
+		
+
+		V3 diff = v3_minus(worldP, entP);
+
+		V2 dir = normalizeV2(diff.xy);
+
+		
 
 		if(getLength(diff.xy) < 10) {
 			//Move towards the player
@@ -1261,6 +1322,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				loadSceneData->sceneToLoad = entity->levelToLoad;
 				loadSceneData->editorState = editorState;
 
+				easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 1");
 
 				EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
 				gameState->gameIsPaused = true;	
@@ -1565,6 +1627,47 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	} else if(!DEBUG_DRAW_SCENERY_TEXTURES || entity->type == ENTITY_TERRAIN) {
 		sprite = 0;
 	}
+
+	if(entity->type == ENTITY_FOG) {
+		shaderProgram = &fogProgram;
+
+		EasyCollider *col = entity->collider;
+		if(col->collisions.count > 0) {
+			assert(col->isTrigger);
+
+            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, col, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
+            if(info.found) {
+            	entity->chestIsOpen = false;
+            	entity->lifeSpanLeft = 0;
+
+            }
+
+            info = MyEntity_hadCollisionWithType(manager, col, ENTITY_WIZARD, EASY_COLLISION_EXIT);	
+            if(info.found) {
+            	entity->chestIsOpen = true;
+            	entity->lifeSpanLeft = 0;
+
+            } 
+        }
+
+	    if(entity->lifeSpanLeft >= 0.0f) {
+	    	entity->lifeSpanLeft += dt;
+
+	    	float canVal = clamp01(entity->lifeSpanLeft / 1.0f);
+
+	    	if(entity->chestIsOpen) {
+	    		entity->colorTint.w = 1.0f - canVal;	
+	    	} else {
+	    		entity->colorTint.w = canVal;	
+	    	}
+ 
+	    	if(canVal >= 1.0f) {
+	    		entity->lifeSpanLeft = -1.0f;
+	    	}
+	    } else if(!entity->chestIsOpen) {
+	    	entity->colorTint = COLOR_WHITE;
+	    }
+	}
 	
 
 	Quaternion Q = entity->T.Q;
@@ -1604,9 +1707,23 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	/////////////////////
 
 	setModelTransform(globalRenderGroup, T);
-	
-	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass && !(entity->flags & ENTITY_SHOULD_NOT_RENDER)) { renderSetShader(globalRenderGroup, &pixelArtProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint); }
+		
 
+	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass && !(entity->flags & ENTITY_SHOULD_NOT_RENDER)) {
+		if(sprite->isAlpha) {
+			EntityRender_Alpha alphaStruct = {};
+			alphaStruct.sprite = sprite;
+			alphaStruct.T = T;
+			alphaStruct.shader = shaderProgram;
+			alphaStruct.colorTint = entity->colorTint; 
+
+			addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
+		} else {
+			renderSetShader(globalRenderGroup, shaderProgram); renderDrawSprite(globalRenderGroup, sprite, entity->colorTint);
+		}
+		
+	}
+	
 
 
 	// if(entity->model) {
@@ -1629,6 +1746,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 static Entity *initScenery_noRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
     Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1,  false);
     e->T.pos.z = -0.5f;
+    return e;
+}
+
+
+static Entity *initFog(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_FOG, 0, findTextureAsset("fog1.png"), COLOR_WHITE, -1,  true);
+    e->T.pos.z = -0.5f;
+    e->flags |= ENTITY_SHOULD_NOT_RENDER;
+    // gameState->currentFogEntity = e;
     return e;
 }
 
@@ -1921,6 +2047,9 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
         } break;
         case ENTITY_ENTITY_CREATOR: {
             newEntity = initEntityCreator(gameState, manager, position);
+        } break;
+        case ENTITY_FOG: {
+        	newEntity = initFog(gameState, manager, position, splatTexture);
         } break;
 		default: {
 

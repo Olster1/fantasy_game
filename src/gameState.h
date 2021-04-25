@@ -24,6 +24,8 @@ FUNC(ENTITY_TRIGGER)\
 FUNC(ENTITY_SEAGULL)\
 FUNC(ENTITY_ENTITY_CREATOR)\
 FUNC(ENTITY_AI_ANIMATION)\
+FUNC(ENTITY_FOG)\
+
 
 
 
@@ -37,9 +39,21 @@ typedef enum {
 } GameModeType;
 
 typedef enum {
+	GAME_MODE_SUBTYPE_TALKING,
+	GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION,
+} GameModeSubType;
+
+typedef enum {
 	GAME_PAUSE_MENU_MAIN,
 	GAME_PAUSE_MENU_SETTINGS
 } PauseMenuSubType;
+
+
+typedef enum {
+	GAME_INVENTORY_MENU_MAP,
+	GAME_INVENTORY_MENU_ITEMS,
+	GAME_INVENTORY_MENU_MAIN
+} GameInventoryMenuType;
 
 
 //// Entity Trigger Types ////////////
@@ -107,6 +121,14 @@ typedef struct {
 } ItemGrowTimerUI;
 
 
+typedef struct {
+	Texture *sprite;
+	Matrix4 T;
+	RenderProgram *shader;
+	V4 colorTint;
+} EntityRender_Alpha;
+
+
 static ItemAnimationInfo items_initItemAnimation(V2 startP, V2 endP, EntityType type) {
 	ItemAnimationInfo result = {};
 	result.tAt = 0;
@@ -142,6 +164,7 @@ FUNC(WORLD_TILE_PIER_SAND_CORNER_LEFT)\
 FUNC(WORLD_TILE_PIER_SAND_CORNER_RIGHT)\
 FUNC(WORLD_TILE_PIER_SEA_CORNER_RIGHT)\
 FUNC(WORLD_TILE_PIER_SEA_CORNER_LEFT)\
+FUNC(WORLD_TILE_DIRT)\
 
 
 typedef enum {
@@ -226,6 +249,7 @@ typedef struct {
 	Texture *playerTexture;
 
 	GameModeType gameModeType;
+	GameModeSubType gameModeSubType;
 
 	//Cached Models
 	EasyModel *potionModel;
@@ -240,6 +264,9 @@ typedef struct {
 
 	//
 	bool isLookingAtItems;
+
+	GameInventoryMenuType inventoryMenuType;
+
 	//This is for the menu to grow as you open it
 	// ItemGrowTimerUI lookingAt_animTimer;
 	int indexInItems;
@@ -301,7 +328,6 @@ typedef struct {
 
 	float inverse_weight;
 
-
 	////For when collecting item in the Gamestate = GAME_MODE_ITEM_COLLECT
 	EntityType itemCollectType;
 	void *entityChestToDisplay;
@@ -315,10 +341,17 @@ typedef struct {
 	///////
 
 	//Message for the message box
+	EntityDialogNode *currentTalkText;
+	EntityDialogNode *prevTalkNode; //We need this to animate back from the choice dialog, becuase we;ve advanced from the one that was showing
+	//	
 	int messageIndex;
-	EntityDialogInfo currentTalkText;
-	PlayingSound *talkingNPC;
+	int choiceOptionIndex;
+	bool enteredTalkModeThisFrame;
+	// EntityDialogInfo currentTalkText;
+	// PlayingSound *talkingNPC;
+	////////////////////////////////////////
 
+	EasyFontWriter fontWriter;
 
 	InfiniteAlloc splatListAnimations;
 	InfiniteAlloc splatAnimations;
@@ -328,6 +361,10 @@ typedef struct {
 
 	InfiniteAlloc splatList_tiles;
 	InfiniteAlloc splatTextures_tiles;
+
+	//used to render alpha textures after main game loop
+	InfiniteAlloc alphaSpritesToRender;
+	//////////////////////// 
 
 	//Player variables loaded in tweak file
 	float jumpPower;
@@ -352,12 +389,18 @@ typedef struct {
 	WavFile *playerAttackSounds[3];
 
 	void *currentTerrainEntity;
+	void *currentFogEntity;
 
 	float swordSwingTimer;
 
 	EasyTerrainDataPacket terrainPacket;
 
 	TileSheet tileSheet;
+
+	GameDialogs gameDialogs;
+	float dialogChoiceTimer;
+	float dialogChoiceTimerReturn;
+
 
 	WavFile *successSound;
 	bool gameIsPaused;
@@ -380,6 +423,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->isLookingAtItems = false;
 
+	initDialogTrees(&state->gameDialogs);
+	state->enteredTalkModeThisFrame = false;
 
 	//NOTE: Clear out what the player is holding
 	state->playerHolding[0] = 0;
@@ -411,6 +456,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	easyTransform_initTransform(&state->tempTransform_model, v3(0, 0, 0), EASY_TRANSFORM_TRANSIENT_ID);
 	/////////////////////////
 
+	state->alphaSpritesToRender = initInfinteAlloc(EntityRender_Alpha);
+	state->alphaSpritesToRender.expandCount = 8;
+
 
 	//NOTE: Initialize the ui item pickers to nothing
 	for(int i = 0; i < arrayCount(state->animationItemTimers); ++i) {
@@ -423,10 +471,16 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->isEditorOpen = false;
 
+	state->dialogChoiceTimerReturn = -1.0f;
+	state->dialogChoiceTimer = -1.0f;
+	state->choiceOptionIndex = 0;
+
 	state->inverse_weight = 1 / 10.0f;
 
 	state->currentSceneName = 0;
 	state->sceneFileNameTryingToSave = 0;
+
+	state->currentFogEntity = 0;
 
 	state->gameModeType = GAME_MODE_PLAY;
 
@@ -453,6 +507,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->playerAttackSounds[2] = easyAudio_findSound("player_attack3.wav");
 
 	state->successSound = findSoundAsset("success.wav");
+
+
 
 
 	state->terrainPacket.textureCount = 4;;

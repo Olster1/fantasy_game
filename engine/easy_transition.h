@@ -63,8 +63,22 @@ EasySceneTransition *EasyTransition_PushTransition(EasyTransitionState *state, t
     trans->direction = true;
     trans->type = type;
 
-    trans->next = state->currentTransition;
 
+
+    //clear the list
+    EasySceneTransition *list = state->currentTransition;
+    while(list) {
+        EasySceneTransition *n = list->next;
+
+        list->next = state->freeListTransitions;
+        state->freeListTransitions = list;
+
+        list = n;
+    }
+
+    state->currentTransition = 0;
+
+    trans->next = state->currentTransition;
     state->currentTransition = trans;
 
     return trans;
@@ -127,6 +141,7 @@ static bool EasyTransition_updateTransitions(EasyTransitionState *transState, V2
                 
                 trans->direction = false;
                 turnTimerOn(&trans->timer);
+                
             } else {
                 //finished the transition
                 transState->currentTransition = trans->next;

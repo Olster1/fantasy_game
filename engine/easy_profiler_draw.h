@@ -1,3 +1,5 @@
+#define DRAW_PROFILER_MIN_BAR_WIDTH 10
+
 typedef enum {
 	EASY_PROFILER_DRAW_OVERVIEW,
 	EASY_PROFILER_DRAW_ACCUMALTED,
@@ -364,7 +366,7 @@ static void EasyProfile_DrawGraph(EasyProfile_ProfilerDrawState *drawState, floa
 							float barHeight = 0.05f*resolution.y;
 
 							//NOTE(ollie): If the bar can actually been seen do we draw it 
-							if(barWidth > 50) 
+							if(barWidth > DRAW_PROFILER_MIN_BAR_WIDTH) 
 							{ //pixels in a fuax resolution projection
 
 								float expandedSize = (graphWidth - defaultGraphWidth);

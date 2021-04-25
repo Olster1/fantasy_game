@@ -7,3 +7,6 @@ werewolf_restSpeed: 2;
 werewolf_knockback_distance: 700000;
 player_knockback_distance: 100000;
 cameraFollow_yOffset: 40;
+tweakY: -110;
+tweakWidth: 820;
+tweakSpacing: 90;

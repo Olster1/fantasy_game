@@ -16,6 +16,7 @@ typedef struct  EasyAi_Node EasyAi_Node;
 
 typedef struct EasyAi_Node {
 	V3 pos;
+	bool canSeePlayerFrom; //wether on this node the entity can see the player
 
 	EasyAi_Node *next;
 } EasyAi_Node;
@@ -48,7 +49,7 @@ static EasyAiController *easyAi_initController(Arena *allocationArena) {
 	return result;
 }
 
-static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **boardHash) {
+static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **boardHash, bool canSeePlayerFrom) {
 	pos.z = 0;
 	int hashKey = (int)pos.x*13 + (int)pos.y*3 + (int)pos.z*7;
 	hashKey = hashKey & (arrayCount(controller->boardHash) - 1);
@@ -83,6 +84,7 @@ static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **
 		}
 		
 		newNode->pos = pos;
+		newNode->canSeePlayerFrom = canSeePlayerFrom;
 
 		*node = newNode;
 	}
@@ -91,7 +93,7 @@ static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **
 
 }
 
-static EasyAi_Node *easyAi_hasNode(EasyAiController *controller, V3 pos, EasyAi_Node **boardHash) {
+static EasyAi_Node *easyAi_hasNode(EasyAiController *controller, V3 pos, EasyAi_Node **boardHash, bool canSeePlayerFrom) {
 	pos.z = 0;
 	int hashKey = (int)pos.x*13 + (int)pos.y*3 + (int)pos.z*7;
 	hashKey = hashKey & (arrayCount(controller->boardHash) - 1);
@@ -108,7 +110,7 @@ static EasyAi_Node *easyAi_hasNode(EasyAiController *controller, V3 pos, EasyAi_
 		int y = (*node)->pos.y;
 		int z = (*node)->pos.z;
 
-		if(x == pos.x && y == pos.y && z == pos.z) {
+		if(x == pos.x && y == pos.y && z == pos.z && ((*node)->canSeePlayerFrom || canSeePlayerFrom)) {
 			found = *node;
 		} else {
 			node = &((*node)->next);	
@@ -154,9 +156,9 @@ static EasyAi_Node *easyAi_removeNode(EasyAiController *controller, V3 pos, Easy
 	return found;
 }
 
-static void easyAi_pushOnQueue(EasyAiController *controller, EasyAi_SearchNode *queue, V3 pos, V3 cameFrom) {
+static void easyAi_pushOnQueue(EasyAiController *controller, EasyAi_SearchNode *queue, V3 pos, V3 cameFrom, bool canSeePlayerFrom) {
 
-	if(easyAi_hasNode(controller, pos, controller->boardHash) && !easyAi_hasNode(controller, pos, controller->validBoardHash)) {
+	if(easyAi_hasNode(controller, pos, controller->boardHash, canSeePlayerFrom) && !easyAi_hasNode(controller, pos, controller->validBoardHash, true)) {
 		EasyAi_SearchNode *node = pushStruct(controller->allocationArena, EasyAi_SearchNode);
 		node->pos = pos;
 		node->cameFrom = cameFrom;
@@ -168,7 +170,7 @@ static void easyAi_pushOnQueue(EasyAiController *controller, EasyAi_SearchNode *
 		node->prev = queue;
 
 		//push node to say you visited it
-		easyAi_pushNode(controller, pos, controller->validBoardHash);
+		easyAi_pushNode(controller, pos, controller->validBoardHash, true);
 	}
 		
 }
@@ -213,7 +215,7 @@ static EasyAi_A_Star_Result easyAi_update_A_star(EasyAiController *controller, V
 
 	queue.next = queue.prev = &queue; 
 
-	easyAi_pushOnQueue(controller, &queue, dest, currentPos);
+	easyAi_pushOnQueue(controller, &queue, dest, currentPos, false);
 
 	bool searching = true;
 	while(searching) {	
@@ -233,10 +235,17 @@ static EasyAi_A_Star_Result easyAi_update_A_star(EasyAiController *controller, V
 				break;
 			} else {
 				//push on more directions
-				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(1, 0, 0)), node->pos);
-				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(-1, 0, 0)), node->pos);
-				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(0, 1, 0)), node->pos);
-				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(0, -1, 0)), node->pos);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(1, 0, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(-1, 0, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(0, 1, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(0, -1, 0)), node->pos, true);
+
+
+				//Diagonal movements
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(1, 1, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(1, -1, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(-1, -1, 0)), node->pos, true);
+				easyAi_pushOnQueue(controller, &queue, v3_plus(node->pos, v3(-1, 1, 0)), node->pos, true);
 			}
 		} else {
 			searching = false;

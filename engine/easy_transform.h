@@ -1,6 +1,7 @@
 typedef enum {
 	EASY_TRANSFORM_STATIC_ID,
 	EASY_TRANSFORM_TRANSIENT_ID,
+	EASY_TRANSFORM_NO_ID,
 } EasyTransform_IdType;
 
 typedef struct EasyTransform EasyTransform;
@@ -33,7 +34,11 @@ static inline void easyTransform_initTransform(EasyTransform *t, V3 pos, EasyTra
 	} else if(idType == EASY_TRANSFORM_TRANSIENT_ID) {
 		t->id = GLOBAL_transformID_transient++;
 		t->idType = idType;
+	} else if(idType == EASY_TRANSFORM_NO_ID) {
+		t->id = 0;
+		t->idType = idType;
 	}
+	
 	t->markForDeletion = false;
 }
 
@@ -41,6 +46,7 @@ static inline void easyTransform_initTransform_withScale(EasyTransform *t, V3 po
 	easyTransform_initTransform(t, pos, idType);
 	t->scale =  scale;
 }
+
 
 #define easyTransform_getTransform(T) easyTransform_getTransform_(T, true)
 #define easyTransform_getTransform_withoutScale(T) easyTransform_getTransform_(T, false)

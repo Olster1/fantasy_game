@@ -276,6 +276,7 @@ RenderProgram colorWheelProgram;
 RenderProgram circleProgram;
 RenderProgram model3dTo2dImageProgram;
 RenderProgram fontProgram;
+RenderProgram fogProgram;
 RenderProgram circleTransitionProgram;
 RenderProgram pixelArtProgram;
 RenderProgram pixelArtProgramPlain;
@@ -455,6 +456,8 @@ typedef struct {
     int height;
     float aspectRatio_h_over_w;
 
+    bool isAlpha; //whether the texture is alpha. Used for 2d sprites to work out whether to draw them after the main render loop
+
 
     //NOTE(ollie): This is for debugging purposes
     char *name;
@@ -571,52 +574,62 @@ Texture createTextureOnGPU(unsigned char *image, int w, int h, int comp, RenderT
 }
 
 static inline EasyImage loadImage_(char *fileName, bool premultiplyAlpha) {
-    DEBUG_TIME_BLOCK()
     EasyImage result;
-    result.comp = 4;
+
+    DEBUG_TIME_BLOCK()
     {
-        DEBUG_TIME_BLOCK_NAMED("stb load image");
-        result.image = (unsigned char *)stbi_load(fileName, &result.w, &result.h, 0, STBI_rgb_alpha);
-    }
-    if(result.image) {
-        // assert(result.comp == 4);
-    } else {
-        printf("%s\n", fileName);
-        assert(!"no image found");
-    }
-
-        ///////////////////////************* Do pre-multiplied alpha ************////////////////////
-    if(true) {
-        DEBUG_TIME_BLOCK_NAMED("Pre-multiply alpha");
-        if(result.comp == 4) {
-            u32 *pixels = (u32 *)result.image;  
-            for(int y = 0; y < result.h; ++y) {
-                    for(int x = 0; x < result.w; ++x) {
-                        u32 *pixel = pixels + (y * result.w) + x;
-
-                        float r = ((float)((*pixel >> 0) & 0xff)) / 255.0f;
-                        float g = ((float)((*pixel >> 8) & 0xff)) / 255.0f;
-                        float b = ((float)((*pixel >> 16) & 0xff)) / 255.0f;
-                        float a = ((float)((*pixel >> 24) & 0xff)) / 255.0f;
-
-                        r *= a*255.0f;
-                        g *= a*255.0f;
-                        b *= a*255.0f;
-                        a *= 255.0f;
-
-                        u32 r1 = (u32)r << 0;
-                        u32 g1 = (u32)g << 8;
-                        u32 b1 = (u32)b << 16;
-                        u32 a1 = (u32)a << 24;
-
-                        u32 newColor = r1 | g1 | b1 | a1;
-
-                        *pixel = newColor;
-                }
-            }    
+        DEBUG_TIME_BLOCK_NAMED(getFileLastPortion(fileName));
+        
+        result.comp = 4;
+        {
+            DEBUG_TIME_BLOCK_NAMED("stb load image");
+            result.image = (unsigned char *)stbi_load(fileName, &result.w, &result.h, 0, STBI_rgb_alpha);
         }
+        if(result.image) {
+            // assert(result.comp == 4);
+        } else {
+            printf("%s\n", fileName);
+            assert(!"no image found");
+        }
+
+            ///////////////////////************* Do pre-multiplied alpha ************////////////////////
+        if(true) {
+            DEBUG_TIME_BLOCK_NAMED("Pre-multiply alpha");
+            if(result.comp == 4) 
+            {
+                u32 *pixels = (u32 *)result.image;  
+                for(int y = 0; y < result.h; ++y) {
+                        for(int x = 0; x < result.w; ++x) {
+                            u32 *pixel = pixels + (y * result.w) + x;
+
+                            float r = ((float)((*pixel >> 0) & 0xff)) / 255.0f;
+                            float g = ((float)((*pixel >> 8) & 0xff)) / 255.0f;
+                            float b = ((float)((*pixel >> 16) & 0xff)) / 255.0f;
+                            float a = ((float)((*pixel >> 24) & 0xff)) / 255.0f;
+
+                            r *= a*255.0f;
+                            g *= a*255.0f;
+                            b *= a*255.0f;
+                            a *= 255.0f;
+
+                            u32 r1 = (u32)r << 0;
+                            u32 g1 = (u32)g << 8;
+                            u32 b1 = (u32)b << 16;
+                            u32 a1 = (u32)a << 24;
+
+                            u32 newColor = r1 | g1 | b1 | a1;
+
+                            *pixel = newColor;
+                    }
+                }    
+            } else {
+                assert(false);
+            }
+        }
+       
     }
-    return result;
+
+     return result;
 }
 
 static inline void easy_endImage(EasyImage *image) {
@@ -917,6 +930,7 @@ typedef struct {
     InfiniteAlloc scissorsTests;
 
     V3 eyePos;
+    V3 playerPos;
 
     //for weather. Specific to this project used by pixelArtProgram
     V4 timeOfDayColor;
@@ -1011,9 +1025,12 @@ static inline bool easyRender_canItemBeBatched(RenderItem *i, EasyRender_BatchQu
         i->blendFuncType == j->blendFuncType &&
         i->depthFuncType == j->depthFuncType &&
         easyMath_rect2fAreEqual(i->viewport, j->viewport) &&
-        i->zAt == j->zAt &&
         easyMath_mat4AreEqual(&i->pMat, &j->pMat) &&
         i->dataPacket_ == j->dataPacket);
+
+    if(j->testZ) {
+        result &= i->zAt == j->zAt;
+    }
 
 
     return result;
@@ -1189,6 +1206,10 @@ void easy_setEyePosition(RenderGroup *group, V3 pos) {
     group->eyePos = pos;
 }
 
+void easy_setPlayerPosition(RenderGroup *group, V3 pos) {
+    group->playerPos = pos;
+}
+
 typedef struct {
     Matrix4 P;
     Matrix4 V;
@@ -1241,11 +1262,11 @@ static inline void renderEnableCulling(RenderGroup *group) {
 }
 
 static inline void renderEnableBatchOnZ(RenderGroup *group) {
-    group->batchOnZ = false;
+    group->batchOnZ = true;
 }
 
 static inline void renderDisableBatchOnZ(RenderGroup *group) {
-    group->batchOnZ = true;
+    group->batchOnZ = false;
 }
 
 static inline bool renderDisableDepthTest(RenderGroup *group) {
@@ -1707,6 +1728,9 @@ void enableRenderer(int width, int height, Arena *arena) {
     
     textureProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, fragment_shader_texture_shader, false);
     renderCheckError();
+
+    fogProgram = createProgramFromFile(vertex_pixelArt_shader, frag_fog_shader, false);
+    renderCheckError(); 
 
     textureOutlineProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, fragment_shader_texture_outline_shader, false);
     renderCheckError();
@@ -2718,6 +2742,18 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
         if(smoothingLoc >= 0) { //has this value
             glUniform1f(smoothingLoc, global_smoothingParam);
             renderCheckError();    
+        }
+
+        if(program == &fogProgram) {
+
+            glUniform1f(glGetUniformLocation(program->glProgram, "time"), globalTimeSinceStart);
+            renderCheckError();
+            
+            GLuint eyeLoc = glGetUniformLocation(program->glProgram, "playerPos_inWorldP");
+            glUniform3f(eyeLoc, group->playerPos.x, group->playerPos.y, group->playerPos.z);
+            renderCheckError();    
+
+
         }
         
         //bind time of day in uniform

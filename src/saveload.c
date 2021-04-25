@@ -419,6 +419,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                                 dialogType = (DialogInfoType)findEnumValue(typeString, MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings));
 
+                                if(dialogType == ENTITY_DIALOG_WELCOME_SIGN) {
+                                    int j = 0;
+                                }
+
                             }
 
                             if(stringsMatchNullN("model", token.at, token.size)) {

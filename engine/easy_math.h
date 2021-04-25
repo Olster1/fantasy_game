@@ -185,6 +185,12 @@ V3 v3(float x, float y, float z) {
     return result;
 }
 
+bool v3Equal(V3 a, V3 b) {
+    bool result = (a.x == b.x && a.y == b.y &&  a.z == b.z);
+    return result;
+}
+
+
 bool v4Equal(V4 a, V4 b) {
     bool result = (a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w);
     return result;

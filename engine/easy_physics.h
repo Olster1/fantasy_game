@@ -185,6 +185,7 @@ typedef struct {
 	float gravityFactor;
 
 	bool updated;
+	bool hasRigidCollider;
 
 	u32 isGrounded; //flag where grounded is 1 << 0 & done this frame is 1 << 1 
 
@@ -253,6 +254,7 @@ typedef struct {
 	Array_Dynamic colliders;
 	Array_Dynamic rigidBodies;
 	float physicsTime;
+
 } EasyPhysics_World;
 
 static void EasyPhysics_emptyPhysicsWorld(EasyPhysics_World *world) {
@@ -553,15 +555,27 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 
 		testEnt->dP.xy = v2_plus(testEnt->dP.xy, v2_scale(r1*dotV2(testEnt->dP.xy, N), N));
 
+		float dotProd = dotV2(*deltaPos, N);
 
-		// char string[512];
+		assert(dotProd <= 0.0f);
+
+		char string[512];
+		// sprintf(string, "dotProd: %f", dotProd);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+
+		V2 alterP = v2_scale(-dotProd, N);
+
 		// sprintf(string, "dP 0: %f %f", deltaPos->x, deltaPos->y);
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+		
+		*deltaPos = v2_plus(*deltaPos, alterP);
 
-		*deltaPos = v2_minus(*deltaPos, v2_scale(dotV2(*deltaPos, N), N));
-
+		// sprintf(string, "dalter: %f %f", alterP.x, alterP.y);
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+		
 		// sprintf(string, "dP 1: %f %f", deltaPos->x, deltaPos->y);
 		// easyConsole_addToStream(DEBUG_globalEasyConsole, string);
+			
 		
 	}
 }
@@ -589,6 +603,7 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     rb->isGrounded = 0;
     rb->reboundFactor = 0.0f;
     rb->updated = false;
+    rb->hasRigidCollider = false;
 
     return rb;
 }
@@ -614,6 +629,10 @@ static EasyCollider *EasyPhysics_AddCollider(EasyPhysics_World *world, EasyTrans
 	col->offset = offset;
 
 	col->isTrigger = isTrigger;
+
+	if(!isTrigger) {
+		rb->hasRigidCollider = true;
+	}
 
 
 	switch (type) {
@@ -692,7 +711,9 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
         	Quaternion lastQ = a->T->Q;
         ///////////////////////************* Integrate the physics ************////////////////////
 
-	        if(a->rb && !a->rb->updated) {
+
+        	//Since nonTriggers have to update first, we have to check if it's been updated or not by the rigid collider
+	        if(a->rb && !a->rb->updated && (!a->isTrigger || !a->rb->hasRigidCollider)) {
 	        	EasyRigidBody *rb = a->rb;
 	        	a->T->pos = v3_plus(v3_scale(dt, rb->dP), a->T->pos);
 
@@ -751,6 +772,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 	                		{	
 	                			bool overlap = false;
 
+	                			// if(false) 
 	                			{
 
 	                				float expandSize = smallestDistance + 0.2f;
@@ -762,9 +784,9 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 		                							v2(-hDim.x, hDim.y),
 		                							v2(hDim.x, hDim.y) };
 
-		                			for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+		                			for(int pointI = 0; pointI < 4 && !overlap; ++pointI) {
 		                				V2 p = v2_plus(points[pointI], bPos.xy);
-		                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x*scaleA.x, a->dim2f.y*scaleA.y), BOUNDS_RECT)) {
+		                				if(inBounds(p, rect2fCenterDim(aPos.x, aPos.y, a->dim2f.x*scaleA.x + 2*expandSize, a->dim2f.y*scaleA.y + 2*expandSize), BOUNDS_RECT)) {
 		                					overlap = true;
 		                				}
 		                			}
@@ -777,9 +799,9 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 		                								v2(-hDim.x, hDim.y),
 		                								v2(hDim.x, hDim.y) };
 
-		                				for(int pointI = 0; pointI < 4 && !hit; ++pointI) {
+		                				for(int pointI = 0; pointI < 4 && !overlap; ++pointI) {
 		                					V2 p = v2_plus(points2[pointI], aPos.xy);
-		                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x*scaleB.x, b->dim2f.y*scaleB.y), BOUNDS_RECT)) {
+		                					if(inBounds(p, rect2fCenterDim(bPos.x, bPos.y, b->dim2f.x*scaleB.x + 2*expandSize, b->dim2f.y*scaleB.y + 2*expandSize), BOUNDS_RECT)) {
 		                						overlap = true;
 		                					}
 		                				}
@@ -799,11 +821,10 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 		                		    
 
 		                		    if(out.distance <= smallestDistance && dotV2(out.normal.xy, rb_a->dP.xy) < 0.0f) {
-		                		    	if(hitEntCount < arrayCount(hitEnts)) {
-											EasyPhysics_HitBundle *bundle = &hitEnts[hitEntCount++];
-			                		        bundle->hitEnt = b;
-			                		        bundle->outputInfo = out;
-		                		    	}
+		                		    	assert(hitEntCount < arrayCount(hitEnts));
+										EasyPhysics_HitBundle *bundle = &hitEnts[hitEntCount++];
+		                		        bundle->hitEnt = b;
+		                		        bundle->outputInfo = out;
 		                		    }	
 	                			}
 	                		    
@@ -914,8 +935,8 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 static void EasyPhysics_UpdateWorld(EasyPhysics_World *world, float dt) {
 	DEBUG_TIME_BLOCK()
+
 	world->physicsTime += dt;
-	int dividend = world->physicsTime / PHYSICS_TIME_STEP;
 	float timeInterval = PHYSICS_TIME_STEP; 
 	while(world->physicsTime >= timeInterval) {
 

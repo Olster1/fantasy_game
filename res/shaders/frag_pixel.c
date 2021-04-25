@@ -65,7 +65,7 @@ void main (void) {
             float attenuate = 1.0 - ((dist - innerRadius) / (outerRadius - innerRadius));
             lightInfluence += diff*attenuate*l.color;
 
-            specFactor += spec;     
+            // specFactor += spec;     
 
         }
     }
@@ -91,7 +91,7 @@ void main (void) {
 	c *= alpha;
 
 
-	// if(c.a == 0.0) discard; 
+	if(c.a == 0.0) discard; 
 
     color = c;
 }

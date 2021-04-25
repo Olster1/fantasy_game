@@ -683,3 +683,321 @@ Rect2f getBoundsRectf(char *string, float xAt, float yAt, Rect2f margin, EasyFon
     return bounds;
 }
 
+///////////////////////////////////////////////  NEW FONT API trying to be better with ability to customize the output strings and speed ////////////////////////////////////////////////////////////////
+
+typedef struct {
+    float totalTime;
+
+    InfiniteAlloc alphaValues;
+
+    float maxWidth;
+
+    EasyFont_Font *font;
+
+    float speed;
+    int optionIdAt; //options id to tell if we should adjust the speed
+
+    WavFile *textSound;
+
+    float pauseTimer;
+    int periodCount;
+} EasyFontWriter;
+
+static void easyFont_initFontWriter(EasyFontWriter *w, EasyFont_Font *font, float maxWidth, WavFile *textSound) {
+    w->totalTime = 0;
+    w->maxWidth = maxWidth;;
+
+    w->alphaValues = initInfinteAlloc(float);
+
+    w->font = font;
+
+    w->speed = 1;
+
+    w->optionIdAt = 0;
+
+    w->textSound = textSound;
+    w->pauseTimer = -1;
+    w->periodCount = 0;
+}
+
+static bool easyFontWriter_isFontWriterFinished(EasyFontWriter *w, char *str) {
+    bool result = false;
+    int strLength = easyString_getStringLength_utf8(str);
+    if((int)w->totalTime >= strLength) {
+        result = true;
+    }
+    return result;
+}
+
+static void easyFontWriter_resetFontWriter(EasyFontWriter *w) {
+    w->alphaValues.count = 0;
+    w->speed = 1;
+    w->optionIdAt = 0;
+    w->totalTime = 0;   
+    w->pauseTimer = -1;
+    w->periodCount = 0;
+}
+
+static void easyFontWriter_finishFontWriter(EasyFontWriter *w, char *str) {
+    w->totalTime = easyString_getStringLength_utf8(str);
+    w->pauseTimer = -1;
+}
+
+static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float dt, EasyTransform *T, V3 startP, bool worldSpace) {
+
+    bool isFinished = false;
+
+    if(w->pauseTimer >= 0.0f) {
+
+        w->pauseTimer += dt;
+
+        float spaceWaitPeriod = 0.5f;
+
+        float canVal = w->pauseTimer / spaceWaitPeriod;
+
+        if(canVal >= 1.0f) {
+            w->pauseTimer = -1.0f;
+        }
+    } else {
+        //not paused
+        w->totalTime += dt*w->speed*12;    
+    }
+    
+
+    int strCount = (int)w->totalTime;
+
+    if(strCount >= easyString_getStringLength_utf8(str)) {
+        isFinished = true;
+    }
+
+    char *at = str;
+
+    float xAt = 0; 
+    float yAt = 0;
+
+    float fontSize_to_worldSize = 1.0f;
+
+    if(worldSpace) {
+        fontSize_to_worldSize = 1.3f / (float)w->font->fontHeight;
+    }
+
+    int glyphCount = 0;
+    bool printing = true;
+
+    V4 color = COLOR_BLACK;
+
+    int optionIdAt = 0;
+
+    bool swiggly = false;
+
+    bool seenSpace = false;
+
+    int periodCount = 0;
+
+    bool playedThisFrame = false;
+
+    while(*at && (glyphCount <= strCount || *at == ' ' || *at == '{') && (dt > 0 || strCount > 0)) {
+
+
+        ////// Find how big the word will be to see if we should go to a new line
+        if(seenSpace) {
+            char *temp = at;
+
+            float wordLength = 0;
+
+            while(*temp && *temp != ' ') {
+                unsigned int unicodePoint = easyUnicode_utf8_codepoint_To_Utf32_codepoint((char **)&temp, true);
+
+                EasyFont_Glyph *g = easyFont_findGlyph(w->font, unicodePoint); 
+                assert(g->codepoint == unicodePoint);
+
+                wordLength += (g->texture.width + g->xOffset)*fontSize_to_worldSize;
+            }
+
+            if((wordLength + xAt) > w->maxWidth) {
+                yAt -= 1.2f*w->font->fontHeight;
+                xAt = 0;
+            }
+
+            seenSpace = false;
+        }
+        ////////////////////////
+
+        if(*at == ' ') {
+            seenSpace = true;
+        }
+
+        unsigned int unicodePoint = easyUnicode_utf8_codepoint_To_Utf32_codepoint((char **)&at, true);
+
+
+        if(unicodePoint == '.') {
+            periodCount++;
+            if(w->periodCount <= periodCount) {
+                w->periodCount++;
+                w->pauseTimer = 0;  
+            } 
+        }
+
+        if(unicodePoint == (int)'{') {
+            //parse the info out of it
+            EasyTokenizer tokenizer = lexBeginParsing((char *)at, EASY_LEX_OPTION_EAT_WHITE_SPACE);
+            
+
+            bool parsing = true;
+            while(parsing) {
+                EasyToken token = lexGetNextToken(&tokenizer);
+
+                //only look at speed values if it is a new token
+                if(token.at[0] == 's' && token.size == 1 && w->optionIdAt <= optionIdAt) {
+                    //parse size
+                    token = lexGetNextToken(&tokenizer);
+                    assert(token.at[0] == ':');
+                    token = lexGetNextToken(&tokenizer);
+                    assert(token.type == TOKEN_FLOAT || token.type == TOKEN_INTEGER);
+
+                    if(token.type == TOKEN_FLOAT) {
+                        w->speed = token.floatVal;
+                    } else if(token.type == TOKEN_INTEGER) {
+                        w->speed = (float)token.intVal;
+                    }
+
+                    w->optionIdAt++;
+
+                } else if(token.at[0] == 'c' && token.size == 1) {
+                    //parse size
+                    token = lexGetNextToken(&tokenizer);
+                    assert(token.at[0] == ':');
+
+                    for(int i = 0; i < 4; ++i) {
+                        token = lexGetNextToken(&tokenizer);
+                        assert(token.type == TOKEN_FLOAT || token.type == TOKEN_INTEGER);
+
+                        if(token.type == TOKEN_FLOAT) {
+                            color.E[i] = token.floatVal;
+                        } else if(token.type == TOKEN_INTEGER) {
+                            color.E[i] = (float)token.intVal;
+                        }
+                    }
+                } else if(stringsMatchNullN("swiggly",  token.at, token.size)) {
+                    swiggly = true;
+                } else if(token.at[0] == '}') {
+                    parsing = false; //stop parsing
+                    at = token.at + 1;
+                } else if(token.at[0] == '\0') {
+                    parsing = false; //stop parsing
+                    at = token.at;
+                } 
+            }
+
+            optionIdAt++;
+             
+        } else {
+
+            EasyFont_Glyph *g = easyFont_findGlyph(w->font, unicodePoint); 
+            assert(g->codepoint == unicodePoint);
+
+
+            float alphaVal = 1.0f;
+            if(unicodePoint != ' ') {
+                if(w->alphaValues.count <= glyphCount) {
+                    float defaultVal = 0;
+                    addElementInfinteAlloc_notPointer(&w->alphaValues, defaultVal);
+
+                    if(!playedThisFrame) {
+                        // playGameSound(&globalLongTermArena, w->textSound, 0, AUDIO_FOREGROUND);
+                        playedThisFrame = true;    
+                    }
+                    
+                } 
+
+                float *alpha = getElementFromAlloc(&w->alphaValues, glyphCount, float);
+
+                *alpha = clamp01(*alpha + 8*dt);
+                alphaVal = *alpha;
+            }
+
+            if(g->hasTexture) {
+
+                float width = g->texture.width*fontSize_to_worldSize;
+                float height = g->texture.height*fontSize_to_worldSize;
+
+                float offsetY = -0.5f*height;
+
+                if(swiggly) {
+                    EasyFont_Glyph *g = easyFont_findGlyph(w->font, 'M');
+
+                    offsetY += randomBetween(-5, 5);
+                }
+
+                V3 position = v3_plus(startP, v3(xAt, yAt + -fontSize_to_worldSize*g->yOffset + offsetY, 0.0f));
+
+                T->pos = position;
+
+                T->scale.xy = v2(width, height);
+
+                color.w = alphaVal;
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(T));
+                renderdrawGlyph(globalRenderGroup, &g->texture, color);
+                
+                glyphCount++;
+                
+            }
+            xAt += (g->texture.width + g->xOffset)*fontSize_to_worldSize;
+            
+            
+        }
+    }
+
+    return isFinished;
+}
+
+static void easyFont_drawString(char *str, EasyTransform *T, V3 startP, EasyFont_Font *font, bool worldSpace, V4 color) {
+
+
+    char *at = str;
+
+    float xAt = 0; 
+    float yAt = 0;
+
+    float fontSize_to_worldSize = 1.0f;
+
+    if(worldSpace) {
+        fontSize_to_worldSize = 1.3f / (float)font->fontHeight;
+    }
+
+
+
+    while(*at) {
+        
+        unsigned int unicodePoint = easyUnicode_utf8_codepoint_To_Utf32_codepoint((char **)&at, true);
+
+        EasyFont_Glyph *g = easyFont_findGlyph(font, unicodePoint); 
+        assert(g->codepoint == unicodePoint);
+
+
+        if(g->hasTexture) {
+
+            float width = g->texture.width*fontSize_to_worldSize;
+            float height = g->texture.height*fontSize_to_worldSize;
+
+            float offsetY = -0.5f*height;
+
+
+            V3 position = v3_plus(startP, v3(xAt, yAt + -fontSize_to_worldSize*g->yOffset + offsetY, 0.0f));
+
+            T->pos = position;
+
+            T->scale.xy = v2(width, height);
+
+            setModelTransform(globalRenderGroup, easyTransform_getTransform(T));
+            renderdrawGlyph(globalRenderGroup, &g->texture, color);
+            
+            
+        }
+        xAt += (g->texture.width + g->xOffset)*fontSize_to_worldSize;
+            
+    }
+
+}
+

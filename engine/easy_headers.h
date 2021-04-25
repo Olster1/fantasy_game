@@ -96,13 +96,14 @@ static char* globalExeBasePath;
 #include "easy_string_compile.h"
 #include "easy_skeleton.h"
 
-#include "easy_transition.h"
-
 #include "easy_asset_loader.h"
 
 
 #include "easy_keyState.h"
 #include "easy_console.h"
+
+#include "easy_transition.h"
+
 #include "easy_flash_text.h"
 #include "easy_editor.h"
 #include "easy_profiler_draw.h"

@@ -49,6 +49,8 @@ typedef struct {
 	char *fileName;
 	int lineNumber;
 	int index;
+	int id1;
+	char *id2;
 } EasyEditorId;
 
 typedef enum  {
@@ -206,15 +208,15 @@ static inline void easyEditor_startInteracting(EasyEditor *e, EasyEditorState *i
 	e->interactingWith.type = type;
 }
 
-static inline bool easyEditor_idEqual(EasyEditorId id, int lineNumber, char *fileName, int index) {
-	return (lineNumber == id.lineNumber && cmpStrNull(fileName, id.fileName) && id.index == index);
+static inline bool easyEditor_idEqual(EasyEditorId id, int lineNumber, char *fileName, int index, int id1 = 0, char *id2 = 0) {
+	return (lineNumber == id.lineNumber && cmpStrNull(fileName, id.fileName) && id.index == index && id1 == id.id1 && cmpStrNull(id2, id.id2));
 }
 
-static inline EasyEditorState *easyEditor_hasState(EasyEditor *e, int lineNumber, char *fileName, int index, EasyEditorInteractType type) {
+static inline EasyEditorState *easyEditor_hasState(EasyEditor *e, int lineNumber, char *fileName, int index, EasyEditorInteractType type, int id1 = 0, char *id2 = 0) {
 	EasyEditorState *result = 0;
 	for(int i = 0; i < e->stateCount && !result; ++i) {
 		EasyEditorState *w = e->states + i;
-		if(easyEditor_idEqual(w->id, lineNumber, fileName, index)) {
+		if(easyEditor_idEqual(w->id, lineNumber, fileName, index, id1, id2)) {
 			result = w;
 			assert(result->type == type);
 			break;
@@ -223,21 +225,24 @@ static inline EasyEditorState *easyEditor_hasState(EasyEditor *e, int lineNumber
 	return result;
 }
 
-static inline EasyEditorState *addState(EasyEditor *e, int lineNumber, char *fileName, int index, EasyEditorInteractType type) {
+static inline EasyEditorState *addState(EasyEditor *e, int lineNumber, char *fileName, int index, EasyEditorInteractType type, int id1 = 0, char *id2 = 0) {
 	assert(e->stateCount < arrayCount(e->states));
 	EasyEditorState *t = &e->states[e->stateCount++];
 	t->id.lineNumber = lineNumber;
 	t->id.fileName = fileName;
 	t->id.index = index;
+	t->id.id1 = id1;
+	t->id.id2 = id2;
+	
 	t->type = type;
 
 	return t;
 }
 
-static inline EasyEditorState *easyEditor_addTextField(EasyEditor *e, int lineNumber, char *fileName, int index) {
-	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD);
+static inline EasyEditorState *easyEditor_addTextField(EasyEditor *e, int lineNumber, char *fileName, int index, int id1, char *id2) {
+	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD, id1, id2);
 	if(!t) {
-		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD);
+		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD, id1, id2);
 
 		t->buffer.length = 0;
 		t->buffer.cursorAt = 0;
@@ -266,10 +271,10 @@ static inline EasyEditorState *easyEditor_addColorSelector(EasyEditor *e, V4 col
 
 
 
-static inline EasyEditorState *easyEditor_addDropDownSpriteList(EasyEditor *e, int lineNumber, char *fileName, int index) {
-	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+static inline EasyEditorState *easyEditor_addDropDownSpriteList(EasyEditor *e, int lineNumber, char *fileName, int index, int id1, char *id2) {
+	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST, id1, id2);
 	if(!t) {
-		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST, id1, id2);
 
 		t->isOpen = false;
 		t->dropDownIndex = 0;
@@ -280,10 +285,10 @@ static inline EasyEditorState *easyEditor_addDropDownSpriteList(EasyEditor *e, i
 }
 
 
-static inline EasyEditorState *easyEditor_addDropDownList(EasyEditor *e, int lineNumber, char *fileName, int index) {
-	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+static inline EasyEditorState *easyEditor_addDropDownList(EasyEditor *e, int lineNumber, char *fileName, int index, int id1, char *id2) {
+	EasyEditorState *t = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST, id1, id2);
 	if(!t) {
-		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST);
+		t = addState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_DROP_DOWN_LIST, id1, id2);
 
 		t->isOpen = false;
 		t->dropDownIndex = 0;
@@ -478,18 +483,20 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 	//Clear depth buffer aswell 
 }
 
-#define easyEditor_alterListIndex(e, newIndex) easyEditor_alterListIndex_(e, newIndex, __LINE__, __FILE__)
-static inline void easyEditor_alterListIndex_(EasyEditor *e, int newIndex, int lineNumber, char *fileName) {
+#define easyEditor_alterListIndex(e, newIndex) easyEditor_alterListIndex_(e, newIndex, __LINE__, __FILE__, __LINE__, __FILE__)
+#define easyEditor_alterListIndex_withIds(e, newIndex, id1, id2) easyEditor_alterListIndex_(e,  newIndex, __LINE__, __FILE__, id1, id2)
+static inline void easyEditor_alterListIndex_(EasyEditor *e, int newIndex, int lineNumber, char *fileName, int id1, char *id2) {
 	assert(e->currentWindow);
 	EasyEditorState *w = e->currentWindow;
-	EasyEditorState *state = easyEditor_addDropDownList(e, lineNumber, fileName, 0);
+	EasyEditorState *state = easyEditor_addDropDownList(e, lineNumber, fileName, 0, id1, id2);
 
 	state->dropDownIndex = newIndex;
 }
 
 
-#define easyEditor_pushList(e, name, options, optionLength) easyEditor_pushList_(e, name, options, optionLength, __LINE__, __FILE__)
-static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options, int optionLength, int lineNumber, char *fileName) {
+#define easyEditor_pushList(e, name, options, optionLength) easyEditor_pushList_(e, name, options, optionLength, __LINE__, __FILE__, __LINE__, __FILE__)
+#define easyEditor_pushList_withIds(e, name, options, optionLength, id1, id2) easyEditor_pushList_(e, name, options, optionLength, __LINE__, __FILE__, id1, id2)
+static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options, int optionLength, int lineNumber, char *fileName, int id1, char *id2) {
 	assert(e->currentWindow);
 	EasyEditorState *w = e->currentWindow;
 
@@ -497,7 +504,7 @@ static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options
 
 	V4 color = COLOR_WHITE;
 
-	EasyEditorState *state = easyEditor_addDropDownList(e, lineNumber, fileName, 0);
+	EasyEditorState *state = easyEditor_addDropDownList(e, lineNumber, fileName, 0, id1, id2);
 
 	assert(optionLength > 0);
 
@@ -720,8 +727,9 @@ static inline int easyEditor_pushList_(EasyEditor *e, char *name, char **options
 
 ///////////////////////// LIST TEXTURES /////////////////////////////////////
 
-#define easyEditor_pushSpriteList(e, name, options, optionLength) easyEditor_pushSpriteList_(e, name, options, optionLength, __LINE__, __FILE__)
-static inline int easyEditor_pushSpriteList_(EasyEditor *e, char *name, Texture **options, int optionLength, int lineNumber, char *fileName) {
+#define easyEditor_pushSpriteList(e, name, options, optionLength) easyEditor_pushSpriteList_(e, name, options, optionLength, __LINE__, __FILE__, __LINE__, __FILE__)
+#define easyEditor_pushSpriteList_withIds(e, name, options, optionLength, id1, id2) easyEditor_pushSpriteList_(e, name, options, optionLength, __LINE__, __FILE__, id1, id2)
+static inline int easyEditor_pushSpriteList_(EasyEditor *e, char *name, Texture **options, int optionLength, int lineNumber, char *fileName, int id1, char *id2) {
 	assert(e->currentWindow);
 	EasyEditorState *w = e->currentWindow;
 
@@ -731,7 +739,7 @@ static inline int easyEditor_pushSpriteList_(EasyEditor *e, char *name, Texture 
 
 	Rect2f spriteTotalBounds = {};
 
-	EasyEditorState *state = easyEditor_addDropDownSpriteList(e, lineNumber, fileName, 0);
+	EasyEditorState *state = easyEditor_addDropDownSpriteList(e, lineNumber, fileName, 0, id1, id2);
 
 	assert(optionLength > 0);
 
@@ -1042,7 +1050,7 @@ typedef struct {
 	char *string;
 } EasyEditor_TextBoxEditInfo;
 
-static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(EasyEditor *e, float *f, int *intVal, char *startStr, int lineNumber, char *fileName, int index, EasyEditor_TextBoxType boxType) {
+static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(EasyEditor *e, float *f, int *intVal, char *startStr, int lineNumber, char *fileName, int index, EasyEditor_TextBoxType boxType, int id1 = 0, char *id2 = 0) {
 	EasyEditor_TextBoxEditInfo result = {};
 
 	assert(e->currentWindow);
@@ -1052,8 +1060,8 @@ static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(Eas
 
 		V4 color = COLOR_WHITE;
 
-		EasyEditorState *hasState = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD);
-		EasyEditorState *field = easyEditor_addTextField(e, lineNumber, fileName, index);
+		EasyEditorState *hasState = easyEditor_hasState(e, lineNumber, fileName, index, EASY_EDITOR_INTERACT_TEXT_FIELD, id1, id2);
+		EasyEditorState *field = easyEditor_addTextField(e, lineNumber, fileName, index, id1, id2);
 
 		if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, index)) {
 			e->interactingWith.visitedThisFrame = true;
@@ -1160,17 +1168,15 @@ static inline EasyEditor_TextBoxEditInfo easyEditor_renderBoxWithCharacters_(Eas
 }
 
 
-#define easyEditor_preloadName(e, str) easyEditor_preloadName_(e, str, __LINE__, __FILE__)
-static inline void easyEditor_preloadName_(EasyEditor *e, char *str, int lineNumber, char *fileName) {
+#define easyEditor_preloadName(e, str) easyEditor_preloadName_(e, str, __LINE__, __FILE__, __LINE__, __FILE__)
+static inline void easyEditor_preloadName_(EasyEditor *e, char *str, int lineNumber, char *fileName, int id1, char *id2) {
 
-	
-
-	if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
+	if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0, id1, id2)) {
 
 	} else {
 		EasyEditorState *hasState = easyEditor_hasState(e, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_TEXT_FIELD);
 		if(hasState) {
-			EasyEditorState *field = easyEditor_addTextField(e, lineNumber, fileName, 0);
+			EasyEditorState *field = easyEditor_addTextField(e, lineNumber, fileName, 0, id1, id2);
 			field->buffer.length = 0;
 			field->buffer.cursorAt = 0;
 			splice(&field->buffer, str, true);
@@ -1179,8 +1185,9 @@ static inline void easyEditor_preloadName_(EasyEditor *e, char *str, int lineNum
 	}
 }
 
-#define easyEditor_pushTextBox(e, name, startStr) easyEditor_pushTextBox_(e, name, startStr, __LINE__, __FILE__)
-static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *startStr, int lineNumber, char *fileName) {
+#define easyEditor_pushTextBox(e, name, startStr) easyEditor_pushTextBox_(e, name, startStr, __LINE__, __FILE__, __LINE__, __FILE__)
+#define easyEditor_pushTextBox_withIds(e, name, startStr, id1, id2) easyEditor_pushTextBox_(e, name, startStr, __LINE__, __FILE__, id1, id2)
+static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *startStr, int lineNumber, char *fileName, int id1, char *id2) {
 	EasyEditorState *w = e->currentWindow;
 	char *result = "empty";
 	assert(w);
@@ -1190,7 +1197,7 @@ static inline char *easyEditor_pushTextBox_(EasyEditor *e, char *name, char *sta
 			w->at.x += getDim(rect).x + 3*EASY_EDITOR_MARGIN;
 		}
 
-		EasyEditor_TextBoxEditInfo textInfo = easyEditor_renderBoxWithCharacters_(e, 0, 0, startStr, lineNumber, fileName, 0, EASY_EDITOR_TEXT_BOX);
+		EasyEditor_TextBoxEditInfo textInfo = easyEditor_renderBoxWithCharacters_(e, 0, 0, startStr, lineNumber, fileName, 0, EASY_EDITOR_TEXT_BOX, id1, id2);
 		Rect2f bounds = textInfo.bounds;
 		w->at.x += getDim(bounds).x + EASY_EDITOR_MARGIN;
 

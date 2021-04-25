@@ -39,7 +39,8 @@ void easyMemory_zeroSize(void *memory, size_t bytes) {
 
 bool stringsMatchN(char *a, int aLength, char *b, int bLength) {
     bool result = true;
-    
+    // assert(a && b);
+
     int indexCount = 0;
     while(indexCount < aLength && indexCount < bLength) {
         indexCount++;
@@ -54,11 +55,31 @@ bool stringsMatchN(char *a, int aLength, char *b, int bLength) {
 
 
 bool stringsMatchNullN(char *a, char *b, int bLen) {
-    bool result = stringsMatchN(a, strlen(a), b, bLen);
+    bool result = true;
+
+    if(!a || !b) { //one of the strings are null
+        if(a || b) { 
+            result = false;
+        } else {
+            //both null, so do match
+        }
+    } else {
+        result = stringsMatchN(a, strlen(a), b, bLen);    
+    }
+    
     return result;
 }
 
 bool cmpStrNull(char *a, char *b) {
-    bool result = stringsMatchN(a, strlen(a), b, strlen(b));
+    bool result = true;
+    if(!a || !b) { //one of the strings are null
+        if(a || b) { 
+            result = false;
+        } else {
+            //both null, so do match
+        }
+    } else {
+        result = stringsMatchN(a, strlen(a), b, strlen(b));
+    }
     return result;
 }
