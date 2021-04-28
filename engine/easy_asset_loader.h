@@ -42,11 +42,13 @@ void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolu
     	while(byteLeft > 0) {
     		if(at[byteLeft - 1] >= '0' && at[byteLeft - 1] <= '9') {
     			result = &at[byteLeft - 1];
+    			assert(result >= at);
     		} else {
     			break;
     		}
     		byteLeft--;
     	}
+    	assert(easyString_getSizeInBytes_utf8(result) <= strLength);
     	assert(result);
     	int frameCount = atoi(result); //get the number of frames from the end of the filename
     	assert(frameCount > 0);

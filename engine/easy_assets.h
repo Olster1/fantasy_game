@@ -287,7 +287,9 @@ Asset *loadImageAsset(char *fileName, bool premultiplyAlpha, bool loadImmediate)
 
 Asset *loadSoundAsset(char *fileName, SDL_AudioSpec *audioSpec) {
     DEBUG_TIME_BLOCK()
-    WavFile *sound = (WavFile *)calloc(sizeof(WavFile), 1);
+    WavFile *sound = pushStruct(&globalLongTermArena, WavFile);
+    easyMemory_zeroStruct(sound, WavFile);
+
     loadWavFile(sound, fileName, audioSpec);
     Asset *result = addAssetSound(fileName, fileName, sound);
     assert(result);

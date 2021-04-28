@@ -557,7 +557,7 @@ void EasyPhysics_ResolveCollisions(EasyRigidBody *ent, EasyRigidBody *testEnt, E
 
 		float dotProd = dotV2(*deltaPos, N);
 
-		assert(dotProd <= 0.0f);
+		// assert(dotProd <= 0.0f);
 
 		char string[512];
 		// sprintf(string, "dotProd: %f", dotProd);
@@ -585,9 +585,8 @@ static EasyRigidBody *EasyPhysics_AddRigidBody(EasyPhysics_World *world, float i
     ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&world->rigidBodies);
 
     EasyRigidBody *rb = (EasyRigidBody *)arrayInfo.elm;
-    memset(rb, 0, sizeof(EasyRigidBody));
+    easyMemory_zeroStruct(rb, EasyRigidBody);
 
-    // memset(rb, 0, sizeof(EasyRigidBody));
     rb->arrayIndex = arrayInfo.absIndex;
 
     rb->dP = v3(0, 0, 0);
@@ -614,7 +613,7 @@ static EasyCollider *EasyPhysics_AddCollider(EasyPhysics_World *world, EasyTrans
 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&world->colliders);
 
 	EasyCollider *col = (EasyCollider *)arrayInfo.elm;
-	memset(col, 0, sizeof(EasyCollider));
+	easyMemory_zeroStruct(col, EasyCollider);
 	
 	col->arrayIndex = arrayInfo.absIndex;
 

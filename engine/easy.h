@@ -7,7 +7,7 @@
 #endif
 
 #if DEVELOPER_MODE
-#define calloc(size, item) malloc(size)
+// #define calloc(size, item) malloc(size)
 #endif
 
 #ifdef max

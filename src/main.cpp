@@ -606,7 +606,7 @@ int main(int argc, char *args[]) {
 
         EasyFont_Font *gameFont = globalDebugFont;//easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
 
-        easyFont_initFontWriter(&gameState->fontWriter, gameFont, 870, easyAudio_findSound("text.wav"));
+        easyFont_initFontWriter(&gameState->fontWriter, gameFont, 870, easyAudio_findSound("ui_soft.wav"));
 
         float tweakWidth;
         float tweakY;
@@ -1831,7 +1831,7 @@ int main(int argc, char *args[]) {
 
 
                 int animationOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY) {
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN) {
                     animationOn = easyEditor_pushList(appInfo->editor, "Animations: ", (char **)gameState->splatListAnimations.memory, gameState->splatListAnimations.count); 
                 }   
 
@@ -2123,6 +2123,16 @@ int main(int argc, char *args[]) {
                             if(pressed) {
                                 editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
+
+                                if(animationOn > 0) {
+                                    Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
+
+                                    Entity *e = (Entity *)(editorState->entitySelected);
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+
+                                    e->sprite = 0;
+                                }
+
                                 justCreatedEntity = true;
 
                             }
@@ -3640,6 +3650,7 @@ int main(int argc, char *args[]) {
             }
             
         }
+        
         easyOS_endProgram(appInfo);
     }
     return(0);

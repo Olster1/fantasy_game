@@ -4,6 +4,7 @@ typedef enum {
 	ENTITY_SHOW_HEALTH_BAR = 1 << 0,
 	ENTITY_SHOULD_SAVE = 1 << 1,
 	ENTITY_SHOULD_NOT_RENDER = 1 << 2,
+	ENTITY_SHOULD_SAVE_ANIMATION = 1 << 3,
 } EntityFlags;
 
 typedef enum {
@@ -132,6 +133,12 @@ typedef struct {
 
 	//For the audio checklist
 	char *audioFile;
+
+	//For the push block
+	float moveTimer;
+	V3 startMovePos;
+	V3 endMovePos;
+	////////////////////
 
 
 } Entity;
@@ -507,6 +514,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	float height = dim.y;
 
 	entity->colorTint = colorTint;
+
+	entity->moveTimer = -1;
 
 	easyTransform_initTransform_withScale(&entity->T, pos, v3(width, height, 1), EASY_TRANSFORM_STATIC_ID);
 	easyAnimation_initController(&entity->animationController);
@@ -1367,38 +1376,94 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		float speedFactor = 1.1f;
 
+		//////////////////////////////////////////
+
+		V3 playerInWorldP = roundToGridBoard(easyTransform_getWorldPos(&player->T), 1);
+		V3 entP_inWorld = roundToGridBoard(easyTransform_getWorldPos(&entity->T), 1);
+
+		entP_inWorld.z = 0;
+
+
+		if(!entity->aiController) {
+			entity->aiController = easyAi_initController(&globalLongTermArena);
+		}	
+		
+
+
+		/////////////////////////////////
+
 		//left collider
 		MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
-		if(info.found) {
+		if(info.found && entity->moveTimer < 0) {
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Left");
-			if(info.e->rb->dP.x > margin_dP) {
-				entity->rb->dP.x = speedFactor*info.e->rb->dP.x;
+			V3 moveDirection = v3(1, 0, 0);
+			V3 targetP = v3_plus(entP_inWorld, moveDirection);
+			if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && easyAi_hasNode(entity->aiController, targetP, entity->aiController->boardHash, true)) {
+				//push left
+				entity->moveTimer = 0;
+				entity->startMovePos = entP_inWorld;
+				entity->endMovePos = targetP;
+				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
 			}
 		}
 
 		//right collider
 		info = MyEntity_hadCollisionWithType(manager, entity->collider2, ENTITY_WIZARD, EASY_COLLISION_STAY);	
-		if(info.found) {
+		if(info.found && entity->moveTimer < 0) {
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Right");
-			if(info.e->rb->dP.x < margin_dP) {
-				entity->rb->dP.x = speedFactor*info.e->rb->dP.x;
+			V3 moveDirection = v3(-1, 0, 0);
+			V3 targetP = v3_plus(entP_inWorld, moveDirection);
+			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && easyAi_hasNode(entity->aiController, targetP, entity->aiController->boardHash, true)) {
+				//push right
+				entity->moveTimer = 0;
+				entity->startMovePos = entP_inWorld;
+				entity->endMovePos = targetP;
+				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
 			}
 		}
 
 		//Top collider
 		info = MyEntity_hadCollisionWithType(manager, entity->collider3, ENTITY_WIZARD, EASY_COLLISION_STAY);	
-		if(info.found) {
-			if(info.e->rb->dP.y < -margin_dP) {
-				entity->rb->dP.y = speedFactor*info.e->rb->dP.y;
+		if(info.found && entity->moveTimer < 0) {
+			V3 moveDirection = v3(0, -1, 0);
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Top");
+			V3 targetP = v3_plus(entP_inWorld, moveDirection);
+			if(isDown(keyStates->gameButtons, BUTTON_DOWN) && easyAi_hasNode(entity->aiController, targetP, entity->aiController->boardHash, true)) {
+				//push up
+				entity->moveTimer = 0;
+				entity->startMovePos = entP_inWorld;
+				entity->endMovePos = targetP;
+				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
 			}
 		}
 
 		//bottom collider
 		info = MyEntity_hadCollisionWithType(manager, entity->collider4, ENTITY_WIZARD, EASY_COLLISION_STAY);	
-		if(info.found) {
+		if(info.found && entity->moveTimer < 0) {
+			V3 moveDirection = v3(0, 1, 0);
+			V3 targetP = v3_plus(entP_inWorld, moveDirection);
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Bottom");
-			if(info.e->rb->dP.y > margin_dP) {
-				entity->rb->dP.y = speedFactor*info.e->rb->dP.y;
+			if(isDown(keyStates->gameButtons, BUTTON_UP) && easyAi_hasNode(entity->aiController, targetP, entity->aiController->boardHash, true)) {
+				//push bottom
+				entity->moveTimer = 0;
+				entity->startMovePos = entP_inWorld;
+				entity->endMovePos = targetP;
+				playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
+			}
+		}
+
+
+		if(entity->moveTimer >= 0) {
+			entity->moveTimer += dt;
+
+			float canVal = entity->moveTimer / 0.5f;
+
+			V2 position =  lerpV3(entity->startMovePos, smoothStep01(0, canVal, 1), entity->endMovePos).xy;
+
+			entity->T.pos.xy = position;
+
+			if(canVal >= 1.f) {
+				entity->moveTimer = -1;				
 			}
 		}
 
@@ -1605,6 +1670,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	if(!sprite && !entity->model && entity->type != ENTITY_TERRAIN && entity->type != ENTITY_SWORD && entity->type != ENTITY_SHEILD) {
 		//NOTE: If the program is crashing here, it most likely could find a model or sprite on load time that it was looking for 
 
+		assert(&entity->animationController.parent != entity->animationController.parent.next);
+
 		char *animationFileName = easyAnimation_updateAnimation(&entity->animationController, &gameState->animationFreeList, dt);
 		sprite = findTextureAsset(animationFileName);	
 
@@ -1746,6 +1813,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 static Entity *initScenery_noRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
     Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1,  false);
     e->T.pos.z = -0.5f;
+    e->flags |= ENTITY_SHOULD_SAVE_ANIMATION;
     return e;
 }
 
@@ -1793,7 +1861,9 @@ static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3
 
 
 static Entity *initScenery_withRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
-	return initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, splatTexture, COLOR_WHITE, -1, true);
+	e->flags |= ENTITY_SHOULD_SAVE_ANIMATION;
+	return e;
 }
 
 static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 worldP) {
@@ -1865,6 +1935,7 @@ static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worl
 
 static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, splatTexture, COLOR_WHITE, -1, true);
+	e->flags |= ENTITY_SHOULD_SAVE_ANIMATION;
 	return e;
 }
 
@@ -1933,7 +2004,7 @@ static Entity *initHorse(GameState *gameState, EntityManager *manager, V3 worldP
 
 
 static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 worldP) {
-	float blockDim = 2;
+	float blockDim = 1;
 
 	Entity *e = initEntity(manager, 0, worldP, v2(blockDim, blockDim), v2(1, 1), gameState, ENTITY_BLOCK_TO_PUSH, gameState->inverse_weight, findTextureAsset("crate.jpg"), COLOR_WHITE, -1, true);
 		

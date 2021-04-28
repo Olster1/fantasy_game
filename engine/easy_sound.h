@@ -198,6 +198,7 @@ static EasySound_SoundState *globalSoundState;
 static void easySound_initSoundState(EasySound_SoundState *soundState) {
     easyMemory_zeroStruct(soundState, EasySound_SoundState);
 
+
 }
 
 int getSoundHashKey_(char *at, int maxSize) {
@@ -267,10 +268,12 @@ void addSound_(EasySound_SoundState *state, WavFile *sound) {
     while(!found) {
         WavFilePtr *file = *filePtr;
         if(!file) {
-            file = (WavFilePtr *)calloc(sizeof(WavFilePtr), 1);
+            file = pushStruct(&globalLongTermArena, WavFilePtr);
+            easyMemory_zeroStruct(file, WavFilePtr);
             file->file = sound;
             file->name = truncName;
             *filePtr = file;
+            assert(!file->next);
             found = true;
         } else {
             filePtr = &file->next;
@@ -426,6 +429,8 @@ void loadWavFile(WavFile *result, char *fileName, SDL_AudioSpec *audioSpec) {
         fprintf(stderr, "Couldn't open wav file: %s\n", SDL_GetError());
         assert(!"couldn't open file");
     }
+
+    assert(result->data);
 }
 
 #define initAudioSpec(audioSpec, frequency) initAudioSpec_(audioSpec, frequency, audioCallback)

@@ -699,7 +699,7 @@ typedef struct {
 
     WavFile *textSound;
 
-    float pauseTimer;
+    float timeToWait; //for periods and when you want to pause for dramatic effect
     int periodCount;
 } EasyFontWriter;
 
@@ -716,8 +716,8 @@ static void easyFont_initFontWriter(EasyFontWriter *w, EasyFont_Font *font, floa
     w->optionIdAt = 0;
 
     w->textSound = textSound;
-    w->pauseTimer = -1;
     w->periodCount = 0;
+    w->timeToWait = 0.0f;
 }
 
 static bool easyFontWriter_isFontWriterFinished(EasyFontWriter *w, char *str) {
@@ -734,30 +734,21 @@ static void easyFontWriter_resetFontWriter(EasyFontWriter *w) {
     w->speed = 1;
     w->optionIdAt = 0;
     w->totalTime = 0;   
-    w->pauseTimer = -1;
+    w->timeToWait = 0.0f;
     w->periodCount = 0;
 }
 
 static void easyFontWriter_finishFontWriter(EasyFontWriter *w, char *str) {
     w->totalTime = easyString_getStringLength_utf8(str);
-    w->pauseTimer = -1;
+    w->timeToWait = 0.0f;
 }
 
 static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float dt, EasyTransform *T, V3 startP, bool worldSpace) {
 
     bool isFinished = false;
 
-    if(w->pauseTimer >= 0.0f) {
-
-        w->pauseTimer += dt;
-
-        float spaceWaitPeriod = 0.5f;
-
-        float canVal = w->pauseTimer / spaceWaitPeriod;
-
-        if(canVal >= 1.0f) {
-            w->pauseTimer = -1.0f;
-        }
+    if(w->timeToWait >= 0.0f) {
+        w->timeToWait -= dt;
     } else {
         //not paused
         w->totalTime += dt*w->speed*12;    
@@ -834,7 +825,8 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
             periodCount++;
             if(w->periodCount <= periodCount) {
                 w->periodCount++;
-                w->pauseTimer = 0;  
+                float timePerPeriod = 0.5f;
+                w->timeToWait += timePerPeriod;
             } 
         }
 
@@ -842,6 +834,7 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
             //parse the info out of it
             EasyTokenizer tokenizer = lexBeginParsing((char *)at, EASY_LEX_OPTION_EAT_WHITE_SPACE);
             
+            bool updateOptionAt = false;
 
             bool parsing = true;
             while(parsing) {
@@ -861,7 +854,24 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
                         w->speed = (float)token.intVal;
                     }
 
-                    w->optionIdAt++;
+                    updateOptionAt = true;
+                    
+
+                } else if(token.at[0] == 'p' && token.size == 1 && w->optionIdAt <= optionIdAt) {
+                    //parse size
+                    token = lexGetNextToken(&tokenizer);
+                    assert(token.at[0] == ':');
+                    token = lexGetNextToken(&tokenizer);
+                    assert(token.type == TOKEN_FLOAT || token.type == TOKEN_INTEGER);
+
+                    if(token.type == TOKEN_FLOAT) {
+                        w->timeToWait += token.floatVal;
+                    } else if(token.type == TOKEN_INTEGER) {
+                        w->timeToWait += (float)token.intVal;
+                    }
+
+                    updateOptionAt = true;
+                    
 
                 } else if(token.at[0] == 'c' && token.size == 1) {
                     //parse size
@@ -889,6 +899,11 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
                 } 
             }
 
+            if(updateOptionAt) {
+                w->optionIdAt++;    
+            }
+            
+
             optionIdAt++;
              
         } else {
@@ -904,7 +919,7 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
                     addElementInfinteAlloc_notPointer(&w->alphaValues, defaultVal);
 
                     if(!playedThisFrame) {
-                        // playGameSound(&globalLongTermArena, w->textSound, 0, AUDIO_FOREGROUND);
+                        playGameSound(&globalLongTermArena, w->textSound, 0, AUDIO_FOREGROUND);
                         playedThisFrame = true;    
                     }
                     

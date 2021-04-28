@@ -1,12 +1,3 @@
- 
-char *ah_adventurerText[] = { "Ah an adventuer?", "It\'s not often we see your kind through these parts...", "Go on, go into the forest...", "You might not like what you find there...", "Heh heh heh heh heh...." };
-char *ah_adventurerAudio[] = { "ah an adventurer.wav", "its not often.wav", "go on then.wav", "might not like.wav", "heheheh.wav" };
-
-
-char *werewolfSign[] = { "Werewolfs seen here. BEWARE! "};
-
-
-char *welcomeSign[] = { "{s: 1}Welcome to Illoway. Town of exceptional beauty. {s: 2.0}This is a faster sentence. {s: 0.5 c: 1 0 0 1}This is red and slow. "};
 
 #define MY_DIALOG_TYPE(FUNC) \
 FUNC(ENTITY_DIALOG_NULL)\
@@ -64,11 +55,9 @@ static void initDialogTrees(GameDialogs *gd) {
 		EntityDialogNode *n = pushStruct(&globalLongTermArena, EntityDialogNode);	
 		gd->houseDialog = n;
 
-		pushTextToNode(n, "{s: 2}Welcome to Illoway. Town of exceptional beauty.");
-		pushTextToNode(n, "Where are you from?");
-		pushChoiceToNode(n, "The greater upland region.");
-		pushChoiceToNode(n, "None of your business.");
-		pushChoiceToNode(n, "The highlands.");
+		pushTextToNode(n, "{s: 1}Hi, can you.{s: 1}.. {p: 1} can you do something for me?");
+		pushChoiceToNode(n, "No way.");
+		pushChoiceToNode(n, "What is it?");
 
 		EntityDialogNode *n1 = pushStruct(&globalLongTermArena, EntityDialogNode);	
 		pushTextToNode(n1, "{s: 2}You know what. There's some secrets up there.");
@@ -92,6 +81,43 @@ static void initDialogTrees(GameDialogs *gd) {
 		pushConnectionNode(n1, n2, 2);
 
 	}
+
+
+	//Philosophy dialog
+	{
+
+		// EntityDialogNode *n = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		// gd->houseDialog = n;
+
+		// pushTextToNode(n, "{s: 2}How do you know what's real?.");
+		// pushChoiceToNode(n, "I can see it, measure it and tomorrow I'll get the same result.");
+		// pushChoiceToNode(n, "I don't know.");
+		// pushChoiceToNode(n, "It just is");
+
+		// EntityDialogNode *n1 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		// pushTextToNode(n1, "{s: 2}It's.");
+		// pushTextToNode(n1, "{s: 2}Hidden deep in the caves of Moria you'll find something.");
+		// pushChoiceToNode(n1, "Wow, tell me more.");
+		// pushChoiceToNode(n1, "That doesn't sound great at all.");
+		// pushChoiceToNode(n1, "I need some dough. Can we do this together?");
+
+		// EntityDialogNode *n3 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		// pushTextToNode(n3, "{s: 2}Ok, forget I asked. Suit yourself.");
+
+		// pushConnectionNode(n, n1, 0);
+		// pushConnectionNode(n, n3, 1);
+		// pushConnectionNode(n, n1, 2);
+
+		// EntityDialogNode *n2 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		// pushTextToNode(n2, "{s: 2}I've got nothing else to say.");
+
+		// pushConnectionNode(n1, n2, 0);
+		// pushConnectionNode(n1, n2, 1);
+		// pushConnectionNode(n1, n2, 2);
+
+	}
+
+
 	
 }
 

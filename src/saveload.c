@@ -106,7 +106,7 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
             addVar(&fileContents, MyEntity_EntityTypeStrings[(int)e->typeToCreate], "typeToCreate", VAR_CHAR_STAR);
             
 
-            if(e->type == ENTITY_SCENERY && !easyAnimation_isControllerEmpty(&e->animationController)) {
+            if((e->flags & ENTITY_SHOULD_SAVE_ANIMATION) && !easyAnimation_isControllerEmpty(&e->animationController)) {
                    
                 char *animationName = e->animationController.parent.next->animation->name;
                 addVar(&fileContents, animationName, "animationName", VAR_CHAR_STAR);  
