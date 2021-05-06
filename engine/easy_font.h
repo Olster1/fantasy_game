@@ -826,7 +826,7 @@ static bool easyFontWriter_updateFontWriter(EasyFontWriter *w, char *str, float 
             if(w->periodCount <= periodCount) {
                 w->periodCount++;
                 float timePerPeriod = 0.5f;
-                w->timeToWait += timePerPeriod;
+                w->timeToWait += (float)timePerPeriod/(float)w->speed;
             } 
         }
 

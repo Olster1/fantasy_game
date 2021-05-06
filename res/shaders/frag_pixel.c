@@ -1,4 +1,8 @@
 uniform sampler2D tex;
+
+uniform sampler2D shadowMapSampler; //for the sun
+uniform mat4 worldToSunSpace; 
+
 uniform vec4 timeOfDayColor;
 
 uniform sampler2D normal_tex;
@@ -15,13 +19,12 @@ out vec4 color;
 struct Light {
     vec3 pos;
     vec3 color;
+    float innerRadius;
+    float outerRadius;
 };
 
 uniform int lightCount;
 uniform Light lights[16];
-
-float outerRadius = 9.0f;
-float innerRadius = 0.2f;
 
 float specularConstant = 256;
 
@@ -49,7 +52,7 @@ void main (void) {
         Light l = lights[i];
 
         float dist = length(fragPos - l.pos);
-        if(dist < outerRadius) {
+        if(dist < l.outerRadius) {
 
             vec3 lightDir = vec3(normalize(fragPos - l.pos));
             float diff = max(dot(normalInWorldSpace, lightDir), 0.0);
@@ -62,15 +65,37 @@ void main (void) {
 
             //////////////////
 
-            float attenuate = 1.0 - ((dist - innerRadius) / (outerRadius - innerRadius));
+            float attenuate = 1.0 - ((dist - l.innerRadius) / (l.outerRadius - l.innerRadius));
             lightInfluence += diff*attenuate*l.color;
 
             // specFactor += spec;     
 
         }
     }
-    
-    
+
+
+
+
+    shadowMapSampler; //for the sun
+    vec4 clipSpace = worldToSunSpace * vec4(fragPos, 1.0);
+
+    //divide by z to convert from clip space to NDC space
+    vec3 ndcSpace = clipSpace.xyz / clipSpace.w;
+
+    //convert from ndc space to texture uv space -1 - 1 -> 0 - 1
+    vec3 uv_shadowSpace = 0.5*ndcSpace + 0.5;
+
+    //the closest thing in in view
+    float closestDepth = texture(shadowMapSampler, uv_shadowSpace.xy).r;
+
+    float shadowFactor = 1.0;
+
+    vec4 timeOfDayColor_ = timeOfDayColor;
+    float bias = 0;//0.005;
+    if((uv_shadowSpace.z - bias) > closestDepth) {
+        shadowFactor = 0;
+        timeOfDayColor_ = vec4(0.4, 0.4, 0.4, 1);
+    }  
 
     vec4 texColor = texture(tex, uv);
 
@@ -82,16 +107,16 @@ void main (void) {
     preMultAlphaColor.w = 1;
 
     vec4 sampleColor = preMultAlphaColor*texColor;
-    vec4 ambientColor = timeOfDayColor*sampleColor;
-    vec4 specularColor = specFactor*vec4(1, 1, 1, 0);
-    vec4 diffuseColor = vec4(lightInfluence, 0)*sampleColor;
+    vec4 ambientColor = timeOfDayColor_*sampleColor;
+    vec4 specularColor = shadowFactor*specFactor*vec4(1, 1, 1, 0);
+    vec4 diffuseColor = shadowFactor*vec4(lightInfluence, 0)*sampleColor;
 
-	vec4 c = vec4(ambientColor + diffuseColor + specularColor);;//timeOfDayColor*preMultAlphaColor*texColor + specFactor*vec4(1, 1, 1, 1) + diff*preMultAlphaColor*texColor;
+	vec4 c = vec4(ambientColor + diffuseColor + specularColor);//timeOfDayColor*preMultAlphaColor*texColor + specFactor*vec4(1, 1, 1, 1) + diff*preMultAlphaColor*texColor;
 
 	c *= alpha;
 
 
-	if(c.a == 0.0) discard; 
+	// if(c.a == 0.0) discard; 
 
     color = c;
 }

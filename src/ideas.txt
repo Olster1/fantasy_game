@@ -1,0 +1,5 @@
+- enemies that move towards you but you can hit off an edge and they fall down
+- constantly moving entities that are on fire or something and move towards points on the ai board
+- sokobon bord resests when you go and comeback from that area
+- sokobon puzzles to get an importnat item like chest
+- everything more on a grid

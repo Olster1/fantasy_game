@@ -113,8 +113,8 @@ static inline void easy3d_updateCamera(EasyCamera *cam, AppKeyStates *keyStates,
 		if(cam->zoom > 89.0f) {
 			cam->zoom = 89.0f;
 		}
-		if(cam->zoom < 20.0f) {
-			cam->zoom = 20.0f;
+		if(cam->zoom < 3.0f) {
+			cam->zoom = 3.0f;
 		}
 	}
 	
@@ -187,6 +187,24 @@ static inline V3 EasyCamera_getZAxis(EasyCamera *cam) {
 	V3 zAxis = normalizeV3(easyMath_getZAxis(camOrientation));
 
 	return zAxis;
+}
+
+static inline V3 EasyCamera_getXAxis(EasyCamera *cam) {
+	DEBUG_TIME_BLOCK()
+	Matrix4 camOrientation = quaternionToMatrix(cam->orientation);
+
+	V3 xAxis = normalizeV3(easyMath_getXAxis(camOrientation));
+
+	return xAxis;
+}
+
+static inline V3 EasyCamera_getYAxis(EasyCamera *cam) {
+	DEBUG_TIME_BLOCK()
+	Matrix4 camOrientation = quaternionToMatrix(cam->orientation);
+
+	V3 yAxis = normalizeV3(easyMath_getYAxis(camOrientation));
+
+	return yAxis;
 }
 
 static inline EasyCamera_MoveType easyCamera_addFlag(EasyCamera_MoveType camMove, EasyCamera_MoveType flag) {
@@ -262,6 +280,25 @@ Matrix4 easy3d_lookAt(V3 cameraPos, V3 targetPos, V3 upVec) {
 	Matrix4 cameraTrans = Matrix4_translate(mat4(), v3_negate(cameraPos));
 
 	result = Mat4Mult(result, cameraTrans);
+
+	return result;
+}
+
+//this function makes a world -> view matrix for a camera looking at a position
+Matrix4 easy3d_lookAt_noPosition(V3 cameraPos, V3 targetPos, V3 upVec) {
+	DEBUG_TIME_BLOCK()
+	Matrix4 result = mat4();
+	V3 direction = v3_minus(targetPos, cameraPos); //assuming we are in left handed coordinate system
+	direction = normalizeV3(direction);
+
+	V3 rightVec = normalizeV3(v3_crossProduct(upVec, direction));
+	if(getLengthV3(rightVec) == 0) {
+		rightVec = v3(1, 0, 0);
+	}
+	V3 yAxis = normalizeV3(v3_crossProduct(direction, rightVec));
+	assert(getLengthV3(yAxis) != 0);
+	
+	result = mat4_xyzAxis(rightVec, yAxis, direction);
 
 	return result;
 }

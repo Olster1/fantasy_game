@@ -63,6 +63,7 @@ float min(float a, float b) {
 #define COLOR_LIGHT_GREY v4(0.8f, 0.8f, 0.8f, 1)
 #define COLOR_GOLD v4(1.0f, 0.8f, 0.0f, 1)
 #define COLOR_ORANGE v4(1.0f, 0.5f, 0.0f, 1)
+#define COLOR_BROWN v4(0.4f, 0.26f, 0.13f, 1)
 
 #define Kilobytes(size) (size*1024)
 #define Megabytes(size) (Kilobytes(size)*1024) 
@@ -159,6 +160,10 @@ Arena createArena(size_t size) {
     return result;
 }
 
+// Arena easyArena_subDivideArena(Arena *parentArena, size_t size) {
+    
+// }
+
 typedef struct { 
     int id;
     Arena *arena;
@@ -211,7 +216,9 @@ void releaseMemoryMark(MemoryArenaMark *mark) {
 static Arena globalLongTermArena;
 static Arena globalPerFrameArena;
 static Arena globalScratchArena;
+static Arena globalPerSceneArena;
 static MemoryArenaMark perFrameArenaMark;
+static MemoryArenaMark perSceneArenaMark;
 
 
 char *nullTerminateBuffer(char *result, char *string, int length) {
@@ -295,6 +302,7 @@ typedef enum {
     BUTTON_7,
     BUTTON_8,
     BUTTON_9,
+    BUTTON_0,
     BUTTON_F1,
     BUTTON_F2,
     BUTTON_F3,
@@ -486,7 +494,7 @@ inline char *easy_createString_printf(Arena *arena, char *formatString, ...) {
     
     char *strArray = pushArray(arena, stringLengthToAlloc, char);
 
-    vsnprintf(strArray, stringLengthToAlloc, formatString, args); //for null terminator, just to be sure
+    vsnprintf(strArray, stringLengthToAlloc, formatString, args); 
 
     va_end(args);
 

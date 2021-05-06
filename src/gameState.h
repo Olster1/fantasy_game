@@ -25,8 +25,10 @@ FUNC(ENTITY_SEAGULL)\
 FUNC(ENTITY_ENTITY_CREATOR)\
 FUNC(ENTITY_AI_ANIMATION)\
 FUNC(ENTITY_FOG)\
-
-
+FUNC(ENTITY_SHOOT_TRIGGER)\
+FUNC(ENTITY_ENEMY_PROJECTILE)\
+FUNC(ENTITY_TRIGGER_WITH_RIGID_BODY)\
+FUNC(ENTITY_KEY)\
 
 
 typedef enum {
@@ -62,6 +64,7 @@ FUNC(ENTITY_TRIGGER_NULL)\
 FUNC(ENTITY_TRIGGER_START_SWIM)\
 FUNC(ENTITY_TRIGGER_LOCATION_SOUND)\
 FUNC(ENTITY_TRIGGER_LOAD_SCENE)\
+FUNC(ENTITY_TRIGGER_SAVE_BY_FIRE)\
 
 
 typedef enum {
@@ -71,6 +74,21 @@ typedef enum {
 static char *MyEntity_TriggerTypeStrings[] = { MY_TRIGGER_TYPE(STRING) };
 
 /////////////////////////////////////////////////////////////////
+
+//// Entity Trigger Types ////////////
+#define MY_CHEST_TYPE(FUNC) \
+FUNC(CHEST_TYPE_HEALTH_POTION)\
+FUNC(CHEST_TYPE_STAMINA_POTION)\
+FUNC(CHEST_TYPE_KEY)\
+
+
+typedef enum {
+    MY_CHEST_TYPE(ENUM)
+} ChestType;
+
+static char *MyEntity_ChestTypeStrings[] = { MY_CHEST_TYPE(STRING) };
+
+//////////////////////////////////////////////////////////////////////
 
 //// Entity Sound Types ////////////
 #define MY_LOCATION_SOUND_TYPE(FUNC) \
@@ -248,6 +266,8 @@ typedef struct {
 
 	Texture *playerTexture;
 
+	V3 blockP;
+
 	GameModeType gameModeType;
 	GameModeSubType gameModeSubType;
 
@@ -256,8 +276,13 @@ typedef struct {
 
 	///////////
 
+	V4 playerPotionParticleSystemColor;
 	char *emptyString;
 
+	int lastCheckPointId;
+	char *lastCheckPointSceneName;
+
+	float gameOverHoverScale;
 	
 
 	///// INVENTORY MENU attributes ///////
@@ -308,6 +333,8 @@ typedef struct {
 	WavFile *doorSound;
 	WavFile *waterInSound;
 	WavFile *seagullsSound;
+	WavFile *blockSlideSound;
+	WavFile *dartSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -329,11 +356,13 @@ typedef struct {
 	float inverse_weight;
 
 	////For when collecting item in the Gamestate = GAME_MODE_ITEM_COLLECT
-	EntityType itemCollectType;
+	
 	void *entityChestToDisplay;
-	int itemCollectCount;
-
+	EntityType itemCollectType;
+	
 	particle_system collectParticleSystem;
+
+	
 	/////////////////////////
 
 	//
@@ -403,6 +432,7 @@ typedef struct {
 
 
 	WavFile *successSound;
+	WavFile *gongSound;
 	bool gameIsPaused;
 
 } GameState; 
@@ -443,6 +473,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->doorSound = findSoundAsset("door_close.wav");
 	state->waterInSound = findSoundAsset("waterIn.wav");
 	state->seagullsSound = findSoundAsset("seaside.wav");
+	state->blockSlideSound = findSoundAsset("slideBlock.wav");
+	state->dartSound = findSoundAsset("dart.wav");
+
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -507,9 +540,11 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->playerAttackSounds[2] = easyAudio_findSound("player_attack3.wav");
 
 	state->successSound = findSoundAsset("success.wav");
+	state->gongSound = findSoundAsset("success_gong.wav");
 
-
-
+	state->lastCheckPointId = -1;
+	state->lastCheckPointSceneName = 0;
+	state->gameOverHoverScale = 0;
 
 	state->terrainPacket.textureCount = 4;;
 	state->terrainPacket.textures[0] = findTextureAsset("blend_mud.png");
@@ -557,10 +592,10 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
     particle_system_settings ps_set1 = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 0.2f);
 
-    ps_set1.VelBias = rect3f(-1, -1, -2, 1, 1, -8);
-    ps_set.posBias = rect3f(-1, -1, 0, 1, 1, 0);
+    ps_set1.VelBias = rect3f(-0.3, -0.3, -0.3, 0.3, 0.3, -4);
+    ps_set1.posBias = rect3f(-1, -1, 0, 1, 1, 0);
 
-    ps_set1.bitmapScale = 0.3f;
+    ps_set1.bitmapScale = 0.1f;
 
     pushParticleBitmap(&ps_set1, findTextureAsset("light_03.png"), "particle1");
     pushParticleBitmap(&ps_set1, findTextureAsset("light_01.png"), "particle2");
@@ -575,6 +610,29 @@ static GameState *initGameState(float yOverX_aspectRatio) {
     // prewarmParticleSystem(&state->playerUseItemParticleSystem, v3(0, 0, -1));
 
     ////////////////////////////////////////////////////////////////////////////
+
+	/////////////////// USE ITEM PARTICLE SYSTEM//////////////////////////////
+
+    // particle_system_settings ps_set1 = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 0.2f);
+
+    // ps_set1.VelBias = rect3f(-1, -1, -2, 1, 1, -8);
+    // ps_set.posBias = rect3f(-1, -1, 0, 1, 1, 0);
+
+    // ps_set1.bitmapScale = 0.3f;
+
+    // pushParticleBitmap(&ps_set1, findTextureAsset("light_03.png"), "particle1");
+    // pushParticleBitmap(&ps_set1, findTextureAsset("light_01.png"), "particle2");
+
+    // InitParticleSystem(&state->pushBlockParticleSystem, &ps_set1, 16);
+
+    // setParticleLifeSpan(&state->pushBlockParticleSystem, 0.6f);
+
+    // state->pushBlockParticleSystem.Active = false;
+    // state->pushBlockParticleSystem.Set.Loop = false;
+
+
+
+    //////////////////////////////////////////////////////////////////////////////
 
     state->emptyString = "emptyString"; //string used for entities that the string is altered using textboxes in editor, but just need it to not be null to preload the textbox
     

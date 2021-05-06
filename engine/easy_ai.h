@@ -14,6 +14,14 @@ EasyAi_Node *easyAi_removeNode(EasyAiController *controller, V3 pos);
 
 typedef struct  EasyAi_Node EasyAi_Node;
 
+
+typedef enum {
+	EASY_AI_IDLE,
+	EASY_AI_MOVE_TOWARDS,
+	EASY_AI_ATTACK,
+	EASY_AI_COOL_DOWN,
+} EasyAi_Mode;
+
 typedef struct EasyAi_Node {
 	V3 pos;
 	bool canSeePlayerFrom; //wether on this node the entity can see the player
@@ -36,6 +44,8 @@ typedef struct {
 	EasyAi_Node *boardHash[EASY_AI_NODE_COUNT]; //this is the state of the ai board
 
 	EasyAi_Node *freeList;
+
+	EasyAi_Mode aiMode;
 } EasyAiController;
 
 static EasyAiController *easyAi_initController(Arena *allocationArena) {
@@ -45,6 +55,7 @@ static EasyAiController *easyAi_initController(Arena *allocationArena) {
 
 	result->freeList = 0;
 	result->allocationArena = allocationArena;
+	result->aiMode = EASY_AI_IDLE;
 
 	return result;
 }
@@ -69,6 +80,7 @@ static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **
 
 		if(x == pos.x && y == pos.y && z == pos.z) {
 			shouldAdd = false;
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Node already exists");
 		} else {
 			node = &((*node)->next);	
 		}
@@ -129,8 +141,6 @@ static EasyAi_Node *easyAi_removeNode(EasyAiController *controller, V3 pos, Easy
 
 	EasyAi_Node **node = &boardHash[hashKey];
 
-	bool shouldAdd = true;
-
 	EasyAi_Node *found = 0;
 
 	while(*node && !found) {
@@ -147,7 +157,7 @@ static EasyAi_Node *easyAi_removeNode(EasyAiController *controller, V3 pos, Easy
 	}
 
 	if(found) {
-		(*node)->next = found->next;
+		*node = found->next;
 
 		found->next = controller->freeList;
 		controller->freeList = found->next;

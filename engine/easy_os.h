@@ -120,9 +120,11 @@ OSAppInfo *easyOS_createApp(char *windowName, V2 *screenDim, bool fullscreen) {
 	globalLongTermArena = createArena(Kilobytes(200));
 	globalPerFrameArena = createArena(Kilobytes(100));
 	globalScratchArena = createArena(Kilobytes(100));
+	globalPerSceneArena = createArena(Kilobytes(100));
 	////////////////////////////////////////////////////////////////////
 
 	perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
+	perSceneArenaMark = takeMemoryMark(&globalPerSceneArena);
 	
 	OSAppInfo *result = pushStruct(&globalLongTermArena, OSAppInfo);
 	
@@ -691,6 +693,9 @@ static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *sta
 	            } break;
 	            case SDLK_9: {
 	                buttonType = BUTTON_9;
+	            } break;
+	            case SDLK_0: {
+	                buttonType = BUTTON_0;
 	            } break;
 	            case SDLK_BACKQUOTE: {
 	                buttonType = BUTTON_TILDE;

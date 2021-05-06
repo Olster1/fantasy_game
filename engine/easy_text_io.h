@@ -15,19 +15,20 @@ typedef enum {
 //TODO(ollie): Get rid of using infinte allocs from the code base, i think this would be a good idea & less error prone
 
 void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType type) {
-    char data[1028];
-    sprintf(data, "\t%s: ", varName);
+    char *data;
+    data = easy_createString_printf(&globalPerFrameArena, "\t%s: ", varName);
     addElementInifinteAllocWithCount_(mem, data, strlen(data));
+    data = 0;
     
     if(count > 0) {
-        if(count > 1 && !(type == VAR_CHAR_STAR || type == VAR_INT || type == VAR_FLOAT)) {
+        if(count > 1 && !(type == VAR_CHAR_STAR || type == VAR_INT || type == VAR_FLOAT || type == VAR_V3)) {
             assert(!"array not handled yet");
         }
         switch(type) {
             case VAR_CHAR_STAR: {
                 if(count == 1) {
                     char *val = (char *)val_;
-                    sprintf(data, "\"%s\"", val);
+                    data = easy_createString_printf(&globalPerFrameArena, "\"%s\"", val);
                 } else {
                     assert(count > 1);
                     printf("isArray\n");
@@ -37,7 +38,7 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
                     for(int i = 0; i < count; ++i) {
                         printf("%s\n", val[i]);
-                        sprintf(data, "\"%s\"", val[i]);    
+                        data = easy_createString_printf(&globalPerFrameArena, "\"%s\"", val[i]);    
                         addElementInifinteAllocWithCount_(mem, data, strlen(data));
                         if(i != count - 1) {
                             char *commaString = ", ";
@@ -46,22 +47,22 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     }
                     bracket = "]";
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
-                    data[0] = 0; //clear data
+                    data = 0; //clear data
                     
                 }
             } break;
             case VAR_LONG_UNSIGNED_INT: {
                 unsigned long *val = (unsigned long *)val_;
-                sprintf(data, "%lu", val[0]);
+                data = easy_createString_printf(&globalPerFrameArena, "%lu", val[0]);
             } break;
             case VAR_LONG_INT: {
                 long *val = (long *)val_;
-                sprintf(data, "%ld", val[0]);
+                data = easy_createString_printf(&globalPerFrameArena, "%ld", val[0]);
             } break;
             case VAR_INT: {
                 if(count == 1) {
                     int *val = (int *)val_;
-                    sprintf(data, "%d", val[0]);
+                    data = easy_createString_printf(&globalPerFrameArena, "%d", val[0]);
                 } else {
                     assert(count > 1);
                     
@@ -69,7 +70,7 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     char *bracket = "[";
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
                     for(int i = 0; i < count; ++i) {
-                        sprintf(data, "%d", val[i]);    
+                        data = easy_createString_printf(&globalPerFrameArena, "%d", val[i]);    
                         addElementInifinteAllocWithCount_(mem, data, strlen(data));
                         if(i != count - 1) {
                             char *commaString = ", ";
@@ -78,13 +79,13 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     }
                     bracket = "]";
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
-                    data[0] = 0; //clear data
+                    data = 0; //clear data
                 }
             } break;
             case VAR_FLOAT: {
                 if(count == 1) {
                     float *val = (float *)val_;
-                    sprintf(data, "%f", val[0]);
+                    data = easy_createString_printf(&globalPerFrameArena, "%f", val[0]);
                 } else {
                     assert(count > 1);
                     
@@ -92,7 +93,7 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     char *bracket = "[";
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
                     for(int i = 0; i < count; ++i) {
-                        sprintf(data, "%f", val[i]);    
+                        data = easy_createString_printf(&globalPerFrameArena, "%f", val[i]);    
                         addElementInifinteAllocWithCount_(mem, data, strlen(data));
                         if(i != count - 1) {
                             char *commaString = ", ";
@@ -101,34 +102,59 @@ void addVar_(InfiniteAlloc *mem, void *val_, int count, char *varName, VarType t
                     }
                     bracket = "]";
                     addElementInifinteAllocWithCount_(mem, bracket, 1);
-                    data[0] = 0; //clear data
+                    data = 0; //clear data
                 }
             } break;
             case VAR_V2: {
                 float *val = (float *)val_;
-                sprintf(data, "%f %f", val[0], val[1]);
+                data = easy_createString_printf(&globalPerFrameArena, "%f %f", val[0], val[1]);
             } break;
             case VAR_V3: {
-                float *val = (float *)val_;
-                sprintf(data, "%f %f %f", val[0], val[1], val[2]);
+                if(count == 1) {
+                    float *val = (float *)val_;
+                    data = easy_createString_printf(&globalPerFrameArena, "%f %f %f", val[0], val[1], val[2]);
+                } else {
+                    assert(count > 1);
+                    
+                    V3 *val = (V3 *)val_;
+                    char *bracket = "[";
+                    addElementInifinteAllocWithCount_(mem, bracket, 1);
+                    for(int i = 0; i < count; ++i) {
+                        V3 val1 = val[i];
+                        data = easy_createString_printf(&globalPerFrameArena, "%f %f %f", val1.E[0], val1.E[1], val1.E[2]);
+
+                        addElementInifinteAllocWithCount_(mem, data, strlen(data));
+                        if(i != count - 1) {
+                            char *commaString = ", ";
+                            addElementInifinteAllocWithCount_(mem, commaString, 2);
+                        }
+                    }
+                    bracket = "]";
+                    addElementInifinteAllocWithCount_(mem, bracket, 1);
+                    data = 0; //clear data
+                }
+               
             } break;
             case VAR_V4: {
                 float *val = (float *)val_;
-                sprintf(data, "%f %f %f %f", val[0], val[1], val[2], val[3]);
+                data = easy_createString_printf(&globalPerFrameArena, "%f %f %f %f", val[0], val[1], val[2], val[3]);
             } break;
             case VAR_BOOL: {
                 bool *val = (bool *)val_;
                 const char *boolVal = val[0] ? "true" : "false";
-                sprintf(data, "%s", boolVal);
+                data = easy_createString_printf(&globalPerFrameArena, "%s", boolVal);
             } break;
             default: {
                 printf("%s\n", "Error: case not handled in saving");
             }
         }
     }
-    addElementInifinteAllocWithCount_(mem, data, strlen(data));
-    
-    sprintf(data, ";\n");
+
+    if(data) {
+        addElementInifinteAllocWithCount_(mem, data, strlen(data));
+    }
+
+    data = easy_createString_printf(&globalPerFrameArena, ";\n");
     addElementInifinteAllocWithCount_(mem, data, strlen(data));
 }
 
@@ -278,6 +304,20 @@ V3 buildV3FromDataObjects(EasyTokenizer *tokenizer) {
     return result;
 }
 
+V3 makeV3FromDataObjects_notClearObjects(EasyTokenizer *tokenizer, int offset) {
+    DataObject *objs = (DataObject *)tokenizer->typesArray.memory;
+    assert(objs[0 + offset].type == VAR_FLOAT || objs[0 + offset].type == VAR_INT);
+    assert(objs[1 + offset].type == VAR_FLOAT || objs[1 + offset].type == VAR_INT);
+    assert(objs[2 + offset].type == VAR_FLOAT || objs[2 + offset].type == VAR_INT);
+
+    
+    V3 result = v3(easyText_getIntOrFloat(objs[0 + offset]), easyText_getIntOrFloat(objs[1 + offset]), easyText_getIntOrFloat(objs[2 + offset]));
+
+    return result;
+}
+
+
+
 V4 buildV4FromDataObjects(EasyTokenizer *tokenizer) {
     InfiniteAlloc *data = getDataObjects(tokenizer);
     DataObject *objs = (DataObject *)data->memory;
@@ -317,6 +357,15 @@ unsigned long getIntFromDataObjects_(EasyTokenizer *tokenizer) {
     unsigned long result = objs[0].intVal;
 
     data->count = 0; //release the memoy
+    
+    return result;
+}
+
+int getIntFromDataObjects_notClearObjects(EasyTokenizer *tokenizer, int offset) {
+    DataObject *objs = (DataObject *)tokenizer->typesArray.memory;
+    assert(objs[offset].type == VAR_INT || objs[offset].type == VAR_FLOAT);
+    
+    int result = (int)easyText_getIntOrFloat(objs[offset]);
     
     return result;
 }

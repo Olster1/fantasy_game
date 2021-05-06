@@ -20,17 +20,16 @@ static bool DEBUG_LOCK_POSITION_TO_GRID = true;
 static bool DEBUG_ANGLE_ENTITY_ON_CREATION = true;
 static bool DEBUG_DRAW_COLLISION_BOUNDS = false; 
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
-static bool DEBUG_USE_ORTHO_MATRIX = true;
+static bool DEBUG_USE_ORTHO_MATRIX = false;
 static bool DEBUG_AI_BOARD_FOR_ENTITY = true;
 
-static int GLOBAL_WORLD_TILE_SIZE = 8;
+static int GLOBAL_WORLD_TILE_SIZE = 1;
 
 #include "npc_dialog.h"
 #include "gameState.h"
-#include "gameScene.c"
 #include "editor.h"
-#include "enemy_ai.c"
 #include "game_weather.c"
+
 
 static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
@@ -41,6 +40,10 @@ static Texture *getInvetoryTexture(EntityType type) {
         } break;
         case ENTITY_STAMINA_POTION_1: {
             t = findTextureAsset("potionyelow.png");
+            // assert(false);
+        } break;
+        case ENTITY_KEY: {
+            t = findTextureAsset("keyGolden.png");
             // assert(false);
         } break;
         case ENTITY_SWORD: {
@@ -56,29 +59,271 @@ static Texture *getInvetoryTexture(EntityType type) {
     return t;
 }
 
-//For when you collect your item
-static char *getInventoryCollectString(EntityType type, int count) {
-    char *result = "Empty";
-    switch(type) {
-        case ENTITY_HEALTH_POTION_1: {
-            result = easy_createString_printf(&globalPerFrameArena, "You found %d health potions. It looks like it might be good to replenish health.", count);
-            // assert(false);
-        } break;
-        case ENTITY_STAMINA_POTION_1: {
-            result = easy_createString_printf(&globalPerFrameArena, "You found %d potions. It looks like it might be good to replenish stamina.", count);
-            // assert(false);
-        } break;
-        case ENTITY_SWORD: {
-            result = "Sharp sword";
-        } break;
-        case ENTITY_SHEILD: {
-            result = "Protective shield";
-        } break;
-        default: {
+static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
+    bool isCompletelyFinished = false;
 
-        }
+    EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+    char *currentTalkText = gameState->currentTalkText->texts[gameState->messageIndex];
+
+    float fuaxWidth = 1920.0f;
+    float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+    float xOffset_leftColumn = 0;
+    float xOffset_rightColumn = 0;
+
+    float alpha = 0.0f;
+
+    EntityDialogNode *nextTalkNode = 0;
+
+    float revealChoicePeriod = 0.6f;
+
+    //update Timer
+    if(gameState->dialogChoiceTimer >= 0.0f) {
+     gameState->dialogChoiceTimer += appInfo->dt;
+
+     float canVal = clamp01(gameState->dialogChoiceTimer / revealChoicePeriod);
+
+     alpha = canVal; 
+
+     xOffset_leftColumn = smoothStep01(0, canVal, -400);                
+     xOffset_rightColumn = smoothStep01(0, canVal, 150);                
+
+    }    
+
+    float returnToCenterPeriod = 0.3f;
+
+    //update Timer
+    if(gameState->dialogChoiceTimerReturn >= 0.0f) {
+     gameState->dialogChoiceTimerReturn += appInfo->dt;
+
+     float canVal = clamp01(gameState->dialogChoiceTimerReturn / returnToCenterPeriod);
+
+     alpha = 1.0f - canVal; 
+
+     xOffset_leftColumn = smoothStep01(-400, canVal, 0);                
+     xOffset_rightColumn = smoothStep01(150, canVal, 0);
+
+     if(canVal >= 1.0f) {
+         gameState->dialogChoiceTimerReturn = -1.0f;
+     }                
     }
-    return result;
+
+    bool isFontWriterFinished = false;
+
+    setViewTransform(globalRenderGroup, mat4());
+    Matrix4 projection = OrthoMatrixToScreen(fuaxWidth, fuaxHeight);
+    setProjectionTransform(globalRenderGroup, projection);
+
+    //draw the font writer
+    {
+
+        EasyTransform T;
+        easyTransform_initTransform_withScale(&T, v3(xOffset_leftColumn, -300, 0.4f), v3(1000, 400, 1), EASY_TRANSFORM_NO_ID); 
+
+        setModelTransform(globalRenderGroup, easyTransform_getTransform(&T));
+        
+        renderSetShader(globalRenderGroup, &textureProgram);
+        renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), COLOR_WHITE);
+
+        renderSetShader(globalRenderGroup, &fontProgram);
+
+        //if we're returning back to center we don't start writing 
+        float tUpdate = appInfo->dt;
+
+        if(gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod) {
+           tUpdate = 0;
+        }
+
+        isFontWriterFinished = easyFontWriter_updateFontWriter(&gameState->fontWriter, currentTalkText, tUpdate, &T, v3(xOffset_leftColumn + -400, -200, 0.1f), false); 
+
+    }
+
+    //Since we advance from the current node when we animate back in, we keep the last available node around to draw the right options. 
+     bool drawOptions = false;
+
+     EntityDialogNode *nodeToDrawOptionsFrom = gameState->currentTalkText;
+
+    if(gameState->dialogChoiceTimerReturn >= 0.0f) {
+      drawOptions = true;
+      nodeToDrawOptionsFrom = gameState->prevTalkNode;
+    }
+
+    if(isFontWriterFinished && gameState->messageIndex >= (gameState->currentTalkText->textCount - 1) && gameState->currentTalkText->choiceCount > 0) {
+
+     if(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION) {
+         gameState->dialogChoiceTimer = 0;
+         gameState->choiceOptionIndex = 0;
+     }
+
+     drawOptions = true;
+
+     //Check if there are any resposes
+       gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION; 
+
+
+       //don't let the player choose while is still animating (up until 90% through animation)
+       if((gameState->dialogChoiceTimer / revealChoicePeriod) > 0.9f) {
+           //Choose the option 
+           if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
+             gameState->choiceOptionIndex++;
+           }
+
+           if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
+             gameState->choiceOptionIndex--;
+           }
+
+           gameState->choiceOptionIndex = clamp(0, gameState->choiceOptionIndex, gameState->currentTalkText->choiceCount - 1);
+           ////////////////////////////////////////////////////////////
+
+           if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
+             nextTalkNode = gameState->currentTalkText->next[gameState->choiceOptionIndex];
+             // assert(nextTalkNode);
+
+           }
+       }
+
+
+       
+    }
+
+
+    if(drawOptions) {
+     EasyTransform T;
+     easyTransform_initTransform_withScale(&T, v3(0, tweakY, 0), v3(1, 1, 1), EASY_TRANSFORM_NO_ID); 
+     
+
+     EasyTransform quillT;
+     easyTransform_initTransform_withScale(&quillT, v3(0, tweakY, 0.7f), v3(tweakWidth, 100, 1), EASY_TRANSFORM_NO_ID); 
+
+     //Draw the options
+     for(int i = 0; i < nodeToDrawOptionsFrom->choiceCount; ++i) {
+           char *str = nodeToDrawOptionsFrom->choices[i];
+
+           T.pos.y -= tweakSpacing;
+
+           quillT.pos.x = xOffset_rightColumn + 300;
+           quillT.pos.y = T.pos.y;
+           
+
+           setModelTransform(globalRenderGroup, easyTransform_getTransform(&quillT));
+           renderSetShader(globalRenderGroup, &textureProgram);
+
+           V4 c = COLOR_WHITE;
+
+           if(gameState->choiceOptionIndex == i) {
+               c = COLOR_GOLD;
+           }
+           
+           c.w = alpha;
+           renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), c);
+
+           renderSetShader(globalRenderGroup, &fontProgram);
+          
+           easyFont_drawString(str, &T, v3(xOffset_rightColumn, T.pos.y, 0.6f), gameFont, false, v4(0, 0, 0, alpha));
+         }
+    }
+
+    // float fontx = 0.2f*gameState->fuaxResolution.x;
+
+    // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
+     
+
+    // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
+    // float fonty = fuaxHeight - 0.3f*textBg_height;
+
+    // outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
+
+    renderSetShader(globalRenderGroup, &textureProgram);
+    //Draw prompt button to continue
+    Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
+    setModelTransform(globalRenderGroup, T);
+    renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+    ///////
+
+    drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+    renderClearDepthBuffer(mainFrameBuffer->bufferId);
+
+    easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+     bool returningToCenter = (gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod);
+
+    //Exit back to game
+    if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING && !gameState->enteredTalkModeThisFrame && !returningToCenter) {
+         // if(gameState->talkingNPC) {
+         //     easySound_endSound(gameState->talkingNPC);
+         // }
+
+         bool writerFinished = easyFontWriter_isFontWriterFinished(&gameState->fontWriter, currentTalkText);
+
+         //still messages
+         if(gameState->messageIndex < (gameState->currentTalkText->textCount - 1) || (gameState->messageIndex == (gameState->currentTalkText->textCount - 1) && !writerFinished)) {
+             assert(gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING);
+
+             if(!writerFinished) {
+                 easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
+             } else {
+                 //still messages left in array
+                 gameState->messageIndex++;
+
+                 easyFontWriter_resetFontWriter(&gameState->fontWriter);
+
+                 WavFile *sound = 0;
+                 // if(gameState->currentTalkText.audioArray) {
+                 //     Asset *asset = findAsset(gameState->currentTalkText.audioArray[gameState->messageIndex]);
+                 //     if(asset) {
+                 //         sound = (WavFile *)asset->file;
+                 //     }
+                 //     if(sound) {
+                 //         gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
+                 //         gameState->talkingNPC->volume = 3.0f;
+                 //     }
+                 // }    
+             }
+
+         } else if(gameState->currentTalkText->choiceCount > 0) {
+             //go to choices
+             assert(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION);
+
+             gameState->dialogChoiceTimer = 0;
+             gameState->choiceOptionIndex = 0;
+             gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION;
+             easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
+         } else {
+             //finished
+             gameState->gameModeType = GAME_MODE_PLAY;
+             gameState->gameIsPaused = false;
+             // gameState->talkingNPC = 0;
+             //go back to start just to make sure the next time someone else tries to play it
+             gameState->messageIndex = 0;
+             isCompletelyFinished = true;
+             assert(!nextTalkNode);
+
+             if(gameState->gameDialogs.perDialogArenaMark.arena) {
+                releaseMemoryMark(&gameState->gameDialogs.perDialogArenaMark);
+                //clear the arena to make sure we don't enter here again if user hasn't specifically set memory mark
+                easyMemory_zeroStruct(&gameState->gameDialogs.perDialogArenaMark, MemoryArenaMark);
+             }
+             
+         }
+     }
+
+     if(nextTalkNode) {
+         //Store the previous node   
+         gameState->prevTalkNode = gameState->currentTalkText;
+
+         gameState->currentTalkText = nextTalkNode;
+         gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
+         easyFontWriter_resetFontWriter(&gameState->fontWriter);
+         gameState->dialogChoiceTimer = -1;
+         gameState->messageIndex = 0;
+         gameState->dialogChoiceTimerReturn = 0;
+     }
+     
+     gameState->enteredTalkModeThisFrame = false;
+
+     return isCompletelyFinished;
 }
 
 
@@ -106,6 +351,13 @@ static char *getInventoryString(EntityType type) {
     return result;
 }
 
+struct ParticleSystemListItem {
+    particle_system ps;
+    V3 *position; //pointing to position in Entity Transform
+    V3 offset;
+    V4 color;
+};
+
 typedef struct {
     Array_Dynamic entities;
 
@@ -113,9 +365,9 @@ typedef struct {
     Array_Dynamic entitiesToDeleteForFrame;
 
     Array_Dynamic damageNumbers;
+    Array_Dynamic activeParticleSystems;
 
     int lastEntityIndex;
-
     void *player;
 } EntityManager;    
 
@@ -223,6 +475,7 @@ int main(int argc, char *args[]) {
         FrameBuffer toneMappedBuffer;
         FrameBuffer bloomFrameBuffer;
         FrameBuffer cachedFrameBuffer;
+        FrameBuffer shadowMapBuffer;
 
         {
             DEBUG_TIME_BLOCK_NAMED("Create frame buffers");
@@ -233,14 +486,25 @@ int main(int argc, char *args[]) {
             toneMappedBuffer = createFrameBuffer(resolution.x, resolution.y, FRAMEBUFFER_COLOR | FRAMEBUFFER_DEPTH | FRAMEBUFFER_STENCIL, 1);
             
             bloomFrameBuffer = createFrameBuffer(resolution.x, resolution.y, FRAMEBUFFER_COLOR | FRAMEBUFFER_HDR, 1);
+
+            shadowMapBuffer = createFrameBuffer(resolution.x, resolution.y, FRAMEBUFFER_DEPTH, 0);
             
             cachedFrameBuffer = createFrameBuffer(resolution.x, resolution.y, FRAMEBUFFER_COLOR | FRAMEBUFFER_HDR, 1);
             //////////////////////////////////////////////////
         
         }
 
+        RenderGroup *shadowMapRenderGroup = pushStruct(&globalLongTermArena, RenderGroup);
+        initRenderGroup(shadowMapRenderGroup, resolution.x, resolution.y);
+
+        //used to store entities in so we can draw them after the terrain, 
+        RenderGroup *entitiesRenderGroup = pushStruct(&globalLongTermArena, RenderGroup);
+        initRenderGroup(entitiesRenderGroup, resolution.x, resolution.y);
+        
+
         loadAndAddImagesToAssets("img/engine_icons/", false);
         loadAndAddImagesToAssets("img/temp_images/", false);
+        loadAndAddImagesToAssets("img/loadOnStart/", true);
         loadAndAddImagesToAssets("img/inventory/", true);
         loadAndAddImagesToAssets("img/tilesets/", true);
 
@@ -277,16 +541,22 @@ int main(int argc, char *args[]) {
         
         EasyCamera camera;
         easy3d_initCamera(&camera, v3(0, 0, -40));
+        camera.zoom = 6.0f;
 
         camera.orientation = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
         EasyTransform sunTransform;
-        easyTransform_initTransform(&sunTransform, v3(0, -10, 0), EASY_TRANSFORM_TRANSIENT_ID);
+        easyTransform_initTransform(&sunTransform, v3(0, 0, -40), EASY_TRANSFORM_TRANSIENT_ID);
 
         sunTransform.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
         EasyLight *light = easy_makeLight(&sunTransform, EASY_LIGHT_DIRECTIONAL, 1.0f, v3(1, 1, 1));
         easy_addLight(globalRenderGroup, light); //ignore first light in rendergroup for pixel art programs? 
+        light->shadowMapId = shadowMapBuffer.depthId;
+        easy_addLight(shadowMapRenderGroup, light);
+        easy_addLight(entitiesRenderGroup, light);
+            
+        easyRender_setDepthFuncType(shadowMapRenderGroup, RENDER_DEPTH_FUNC_LESS);
         
         GameState *gameState = initGameState((resolution.y / resolution.x));
 
@@ -568,7 +838,7 @@ int main(int argc, char *args[]) {
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "town");
+                gameScene_loadScene(gameState, manager, "new");
                 
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
@@ -606,7 +876,11 @@ int main(int argc, char *args[]) {
 
         EasyFont_Font *gameFont = globalDebugFont;//easyFont_loadFontAtlas(concatInArena(globalExeBasePath, "fontAtlas_BebasNeue-Regular", &globalPerFrameArena), &globalLongTermArena);
 
-        easyFont_initFontWriter(&gameState->fontWriter, gameFont, 870, easyAudio_findSound("ui_soft.wav"));
+        easyFont_initFontWriter(&gameState->fontWriter, gameFont, 840, easyAudio_findSound("ui_soft.wav"));
+
+        //Fade in for player
+        EasySceneTransition *transition = EasyTransition_PushTransition(appInfo->transitionState, 0, 0, EASY_TRANSITION_FADE);
+        transition->direction = false;
 
         float tweakWidth;
         float tweakY;
@@ -645,8 +919,8 @@ int main(int argc, char *args[]) {
             easyOS_processKeyStates(appInfo, &appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
             easyOS_beginFrame(resolution, appInfo);
             
-            beginRenderGroupForFrame(globalRenderGroup);
             
+            clearBufferAndBind(shadowMapBuffer.bufferId, COLOR_BLACK, shadowMapBuffer.flags, shadowMapRenderGroup);
             clearBufferAndBind(appInfo->frameBackBufferId, COLOR_BLACK, FRAMEBUFFER_COLOR, 0);
             clearBufferAndBind(mainFrameBuffer.bufferId, COLOR_BLACK, mainFrameBuffer.flags, globalRenderGroup);
             
@@ -654,6 +928,21 @@ int main(int argc, char *args[]) {
             renderEnableCulling(globalRenderGroup);
             setBlendFuncType(globalRenderGroup, BLEND_FUNC_STANDARD_PREMULTIPLED_ALPHA);
             renderSetViewport(globalRenderGroup, 0, 0, resolution.x, resolution.y);
+
+
+            renderEnableDepthTest(entitiesRenderGroup);
+            renderEnableCulling(entitiesRenderGroup);
+            setBlendFuncType(entitiesRenderGroup, BLEND_FUNC_STANDARD_PREMULTIPLED_ALPHA);
+            renderSetViewport(entitiesRenderGroup, 0, 0, resolution.x, resolution.y);
+            
+
+            renderEnableDepthTest(shadowMapRenderGroup);
+            renderEnableCulling(shadowMapRenderGroup);
+            setBlendFuncType(shadowMapRenderGroup, BLEND_FUNC_STANDARD_PREMULTIPLED_ALPHA);
+            renderSetViewport(shadowMapRenderGroup, 0, 0, resolution.x, resolution.y);
+
+            renderSetFrameBuffer(shadowMapBuffer.bufferId, shadowMapRenderGroup);
+            renderSetFrameBuffer(mainFrameBuffer.bufferId, entitiesRenderGroup);
 
             ////////////////////////////////////////////////////////////////////
             
@@ -691,16 +980,33 @@ int main(int argc, char *args[]) {
             }
             easy3d_updateCamera(&camera, &cameraKeyStates, 1, 1000.0f, appInfo->dt, camMove);
 
-
             easy_setEyePosition(globalRenderGroup, camera.pos);
-            
+                
+
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
+
+            sunTransform.pos = camera.pos;
+            // static float v = 0;
+            // v += 2*appInfo->dt;
+            // sunTransform.Q = eulerAnglesToQuaternion(0, smoothStep00(-0.1f*PI32, sin(v), PI32), 0);
+            sunTransform.Q = eulerAnglesToQuaternion(0, -0.28f*PI32, 0);
+            Matrix4 lightViewMatrix = mat4_transpose(easyTransform_getTransform_withoutScale(&sunTransform));
+
+            lightViewMatrix = Mat4Mult(lightViewMatrix, Matrix4_translate(mat4(), v3_negate(sunTransform.pos)));
+
+            //the sun is just the same position of the camera for now
+            light->worldToLightSpace = Mat4Mult(OrthoMatrixToScreen(20, 20*appInfo->aspectRatio_yOverX), lightViewMatrix);
+
+            setViewTransform(shadowMapRenderGroup, mat4());
+            setProjectionTransform(shadowMapRenderGroup, light->worldToLightSpace);
+
             float zoom = 50.0f*(camera.zoom / 90.0f);
             Matrix4 perspectiveMatrix = projectionMatrixFOV(camera.zoom, resolution.x/resolution.y);
 
+            V2 orthoResolution = v2(zoom, zoom*(resolution.y/resolution.x));
             if(DEBUG_USE_ORTHO_MATRIX) {
-                perspectiveMatrix = OrthoMatrixToScreen(zoom, zoom*(resolution.y/resolution.x));//
+                perspectiveMatrix = OrthoMatrixToScreen(orthoResolution.x, orthoResolution.y);
             }
 
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_1) && !gameState->isEditorOpen) {
@@ -865,11 +1171,9 @@ int main(int argc, char *args[]) {
             setViewTransform(globalRenderGroup, viewMatrix);
             setProjectionTransform(globalRenderGroup, perspectiveMatrix);
 
+            setViewTransform(entitiesRenderGroup, viewMatrix);
+            setProjectionTransform(entitiesRenderGroup, perspectiveMatrix);
 
-            renderSetShader(globalRenderGroup, &phongProgram);
-            // setModelTransform(globalRenderGroup, easyTransform_getTransform(&treeT));
-
-            // renderModel(globalRenderGroup, findModelAsset_Safe("tree.obj"), v4(1, 1, 1, 1));
 
             RenderProgram *mainShader = &glossProgram;
             renderSetShader(globalRenderGroup, mainShader);
@@ -904,6 +1208,8 @@ int main(int argc, char *args[]) {
             dayColor = v4_scale(time, dayColor);
             dayColor.w = 1;
             globalRenderGroup->timeOfDayColor = dayColor;
+            entitiesRenderGroup->timeOfDayColor = dayColor;
+
 
             ///////////////////////////////////////////////
            
@@ -911,6 +1217,11 @@ int main(int argc, char *args[]) {
            EasyRay mouseP_worldRay = {};
            mouseP_worldRay.origin = camera.pos;
            mouseP_worldRay.direction = v3_minus(mouseP_inWorldP, camera.pos);
+
+           if(DEBUG_USE_ORTHO_MATRIX) {
+                mouseP_worldRay.origin = screenSpaceToWorldSpace_orthographicView(gameKeyStates.mouseP_left_up, resolution, orthoResolution, EasyCamera_getXAxis(&camera), EasyCamera_getYAxis(&camera), camera.pos);
+                mouseP_worldRay.direction = EasyCamera_getZAxis(&camera);
+           }
 
            gameState->rotationUpdate += appInfo->dt;
 
@@ -955,16 +1266,13 @@ int main(int argc, char *args[]) {
                                         editorState->entitySelected = e;
                                         editorState->entityIndex = i;
 
-
-
-                                        editorState->grabOffset = v3_scale(-1, castInfo.hitP);
-                                        editorState->grabOffset.z = 0;
+                                        editorState->grabOffset = v3_minus(position, castInfo.hitP);
 
                                         if(!editorState_addToEndOfList(editorState, e->T.id)) { easyFlashText_addText(&globalFlashTextManager, "Ran out of room in editor selected list"); }
 
                                         found = true;
                                         idCount = 0;
-                                        // easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->grabOffset);
+                                        easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->grabOffset);
                                     } else {
                                         assert(!found);
                                         //Keep looking for one with haven't selected recently. BUt add to list just in case
@@ -976,6 +1284,7 @@ int main(int argc, char *args[]) {
                                         info->hitP = castInfo.hitP;
                                         info->id = e->T.id;
                                         info->index = i;
+                                        info->entP = position;
                                     }
                                 }    
                             }
@@ -1072,8 +1381,7 @@ int main(int argc, char *args[]) {
                     editorState->entitySelected = info->e;
                     editorState->entityIndex = info->index;
 
-                    editorState->grabOffset = v3_scale(-1, info->hitP);
-                    editorState->grabOffset.z = 0;
+                    editorState->grabOffset = v3_minus(info->entP, info->hitP);
                 }
 
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
@@ -1127,19 +1435,43 @@ int main(int argc, char *args[]) {
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   if(e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) {
+                   if((e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) || (e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE && e->chestIsOpen)) {
                        float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
-                       easyRender_push2dLight(globalRenderGroup, v3_plus(easyTransform_getWorldPos(&e->T), v3(0, 0, -1.5f)), e->lightColor, e->lightIntensity*perlinFactor);
+
+                       float extraIntensity = 1;
+                       if(e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+                            float diff_from_12 = absVal(12 - t_24hr);
+                            extraIntensity = clamp01(diff_from_12 / 6);
+                       }
+
+                       V3 lightPos = v3_plus(easyTransform_getWorldPos(&e->T), v3(0, 0, -1.5f));
+                       easyRender_push2dLight(globalRenderGroup, lightPos, e->lightColor, extraIntensity*e->lightIntensity*perlinFactor, e->innerRadius, e->outerRadius);
+                       easyRender_push2dLight(entitiesRenderGroup, lightPos, e->lightColor, extraIntensity*e->lightIntensity*perlinFactor, e->innerRadius, e->outerRadius);
                    }    
+
                }
                
            }
            ////////////////////////
 
+           for(int i = 0; i < manager->entities.count; ++i) {
+               Entity *e = (Entity *)getElement(&manager->entities, i);
+               if(e) {
+                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup);        
+               
+                   if(e->isDead) {
+                       ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
+                       int *indexToAdd = (int *)arrayInfo.elm;
+                       *indexToAdd = i;
+                   }
+               }
+           }
+
+           drawRenderGroup(shadowMapRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+           /////////////////////////////////////////////////////////////////////
 
 
            renderDisableBatchOnZ(globalRenderGroup);
-
 
            //  //DRAW THE TERRATIN FIRST
             if(gameState->currentTerrainEntity && DEBUG_DRAW_TERRAIN) {
@@ -1149,12 +1481,8 @@ int main(int argc, char *args[]) {
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             }
 
-
-
             if(DEBUG_DRAW_TERRAIN) {
                 Texture *sprite = 0;
-
-                
                 
                 gameState->tempTransform.Q = identityQuaternion();
 
@@ -1252,172 +1580,6 @@ int main(int argc, char *args[]) {
             }
 
    
-            ////////////////////////////
-
-            for(int i = 0; i < manager->entities.count; ++i) {
-                Entity *e = (Entity *)getElement(&manager->entities, i);
-                if(e) {
-                    if(e->model) {
-                        Quaternion Q = e->T.Q;
-                        V3 rotation = v3(0, 0, 0);
-
-                        if(e->type == ENTITY_SHEILD) {
-                            rotation.z = e->rotation;
-                            // rotation.y = 0.5f*PI32;
-
-                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
-                            e->T.Q = quaternion_mult(Q1, Q);
-
-                        } else {
-                            rotation.z = e->rotation;
-                            Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
-
-                            e->T.Q = quaternion_mult(Q, Q1);
-                        }
-                        
-
-                        Matrix4 T = easyTransform_getTransform(&e->T);
-
-                        e->T.Q = Q;
-                        setModelTransform(globalRenderGroup, T);
-                        renderSetShader(globalRenderGroup, &phongProgram);
-                        renderModel(globalRenderGroup, e->model, e->colorTint);
-                    }    
-                }
-                
-            }
-
-            //Render the 3d objects the player got from the chest
-            if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
-
-                gameState->tempTransform_model.pos = v3_plus(easyTransform_getWorldPos(&((Entity *)(manager->player))->T), v3(0, 0, -2.5f));
-                float scale = 3.0f;
-                gameState->tempTransform_model.scale = v3(scale, scale, scale);
-                gameState->tempTransform_model.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
-
-                gameState->tempTransform_model.Q = quaternion_mult(gameState->tempTransform_model.Q, eulerAnglesToQuaternion(gameState->rotationUpdate, 0, 0));
-                // 
-
-                setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform_model));
-                renderSetShader(globalRenderGroup, &phongProgram);
-                renderModel(globalRenderGroup, gameState->potionModel, COLOR_WHITE);
-            }
-            ///////////////////////////////////
-
-            //Render Player holding inventory item
-            {
-                for(int i = 0; i < arrayCount(gameState->playerHolding); ++i) {
-                    ItemInfo *info = gameState->playerHolding[i];
-
-                    if(info && info->type != ENTITY_NULL) {
-                        
-                        EntityType type = info->type;
-
-                        Entity *p = ((Entity *)(manager->player));
-                        EasyTransform T = p->T;
-
-                        V3 rotation = v3(0, 0, 0);
-
-                        Matrix4 offsetMatrix = mat4();
-
-                        T.scale = v3(2, 2, 2);
-
-                        EasyModel *model = 0;
-
-                        V3 offset = v3(0, 0, 0);
-
-                        if(i == 0) { //left hand
-                            offset.x = -0.5f;
-                        } else { //right hand
-                            offset.x = 0.5f;
-                        }
-
-                        offset.y += 0.5f;
-
-                        offset.z = -1;
-
-                        switch(type) {
-                            case ENTITY_SWORD: {
-                                model = findModelAsset_Safe("sword.obj"); 
-                                offset.y += 1.0f;
-                                T.scale = v3(5, 5, 5);
-                                rotation.y = 0.5*PI32;
-
-                                // rotation.x = -0.5f*PI32;
-
-                                if(gameState->swordSwingTimer >= 0.0f) {
-
-                                    gameState->swordSwingTimer += appInfo->dt;
-
-                                    float sideFactor = -1;
-
-                                    if(i == 1) {
-                                        sideFactor = 1;
-                                    }
-
-                                    float swordLifeLeft = (float)gameState->swordSwingTimer / (float)0.3f;
-                                    float lerpT = smoothStep00(0, swordLifeLeft, sideFactor*0.25f*PI32);
-                                    // easyConsole_pushFloat(DEBUG_globalEasyConsole, swordLifeLeft);
-
-                                    rotation.x = lerpT;
-
-                                    
-
-                                    offsetMatrix = Matrix4_translate(offsetMatrix, v3(0, 0.15f, 0));
-                                    offset.y -= 0.15f;
-
-                                    if(swordLifeLeft >= 1.0f) {
-                                        gameState->swordSwingTimer = -1.0f;
-                                    }
-                                }
-                                
-
-                            } break;
-                            case ENTITY_SHEILD: {
-                                model = findModelAsset_Safe("shield.obj"); 
-                                offset.y += 0.5f;
-                                offset.z = -0.5f;
-
-                                float sideFactor = 1;
-                                 if(i == 1) { //right
-                                    sideFactor = -1;
-                                }
-
-                                if(p->shieldInUse) {
-                                    offset.z -= 0.5f;
-                                    offset.x += sideFactor*0.5f;                                    
-                                }
-
-                                rotation.x = 0.5f*PI32;
-                            } break;
-                            default: {
-
-                            }
-                        }
-
-                        Quaternion Q1 = eulerAnglesToQuaternion(rotation.y, rotation.x, rotation.z);
-
-                        T.Q = Q1;
-
-                        Matrix4 Tm = Mat4Mult(easyTransform_getTransform(&T), offsetMatrix);
-
-                        Tm = Mat4Mult(Matrix4_translate(mat4(), offset), Tm);
-
-                        if(model) {
-                            setModelTransform(globalRenderGroup, Tm);
-                            renderSetShader(globalRenderGroup, &phongProgram);
-                            // renderModel(globalRenderGroup, model, COLOR_WHITE);
-                        }
-                    }
-
-                }
-            }
-            
-
-
-           //  ////
-
-
             {
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -1431,46 +1593,33 @@ int main(int argc, char *args[]) {
             }
 
 
-            /////////////// SHADOW UNDER PLAYER //////////////////////////
-            #if 0
-            if(DEBUG_DRAW_SCENERY_TEXTURES) {
-                Texture *shadowSprite = findTextureAsset("shadow.png");
-                
-                EasyTransform trans = ((Entity *)manager->player)->T;
-                trans.Q = identityQuaternion();
-                float w = 1.5f;
+            if(DEBUG_AI_BOARD_FOR_ENTITY && editorState->entitySelected) {
+                Entity *e = (Entity *)editorState->entitySelected;
 
-                trans.scale = v3(w, w*shadowSprite->aspectRatio_h_over_w, 1);
-                trans.pos.z = -0.1f;
-                trans.pos.y -= 0.6f;
+                if(e->aiController) {
+                    //Draw the ai board
+                    EasyAiController *aiController = e->aiController;
+                    for(int i = 0; i < arrayCount(aiController->boardHash); ++i) {
+                        EasyAi_Node *n = aiController->boardHash[i];
 
-                setModelTransform(globalRenderGroup, easyTransform_getTransform(&trans));
+                        while(n) {
 
-                renderDrawSprite(globalRenderGroup, shadowSprite, COLOR_WHITE);
+                            Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, -0.)); 
+                            setModelTransform(globalRenderGroup, T);
+                            renderDrawQuad(globalRenderGroup, n->canSeePlayerFrom ? COLOR_GOLD : COLOR_AQUA);
 
+                            n = n->next;
+                        }
+                    }
+                }
             }
-            #endif
-            ///////////////////////////////////////////////////////////////
+
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_DEFAULT));
 
             renderEnableBatchOnZ(globalRenderGroup);
             
-            for(int i = 0; i < manager->entities.count; ++i) {
-                Entity *e = (Entity *)getElement(&manager->entities, i);
-                if(e) {
-                    updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState);        
-                
-                    if(e->isDead) {
-                        ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
-                        int *indexToAdd = (int *)arrayInfo.elm;
-                        *indexToAdd = i;
-                    }
-                }
-            }
-
-            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-
+            drawRenderGroup(entitiesRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             
 
             //////////////////// DRAW ALPHA ENTITIES //////////////////////////////////////////
@@ -1486,6 +1635,23 @@ int main(int argc, char *args[]) {
             gameState->alphaSpritesToRender.count = 0;
             /////////////////////////////////////////////////
 
+            //Render the object the player got from a chest
+            if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
+
+                gameState->tempTransform_model.pos = v3_plus(easyTransform_getWorldPos(&((Entity *)(manager->player))->T), v3(0, 0, -1.0f));
+                float scale = 0.4f;
+                gameState->tempTransform_model.scale = v3(scale, scale, scale);
+                gameState->tempTransform_model.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
+
+                gameState->tempTransform_model.Q = quaternion_mult(gameState->tempTransform_model.Q, eulerAnglesToQuaternion(gameState->rotationUpdate, 0, 0));
+                // 
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform_model));
+                renderSetShader(globalRenderGroup, &pixelArtProgram);
+                renderDrawSprite(globalRenderGroup, getInvetoryTexture(gameState->itemCollectType), COLOR_WHITE);
+            }
+            ///////////////////////////////////
+
 
             //Draw any particle systems
             {   
@@ -1493,8 +1659,24 @@ int main(int argc, char *args[]) {
                     //DRAW THE PARTICLE SYSTEM
                     renderSetShader(globalRenderGroup, &textureProgram);
                     V3 worldP = v3_plus(easyTransform_getWorldPos(&((Entity *)(manager->player))->T), v3(0, 0, -1.5f));
-                    drawAndUpdateParticleSystem(globalRenderGroup, &gameState->playerUseItemParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GREEN, true);
+                    drawAndUpdateParticleSystem(globalRenderGroup, &gameState->playerUseItemParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), gameState->playerPotionParticleSystemColor, true);
                     ///////////////////////////////////////////
+
+                    //////////////////////////////////////////////////////
+                    // easyConsole_pushInt(DEBUG_globalEasyConsole, manager->activeParticleSystems.count);
+                    for(int i = 0; i < manager->activeParticleSystems.count; ++i) {
+                        ParticleSystemListItem *ps = (ParticleSystemListItem *)getElement(&manager->activeParticleSystems, i);
+                        if(ps) {
+                            V3 worldP = v3_plus(*ps->position, ps->offset);
+                            drawAndUpdateParticleSystem(globalRenderGroup, &ps->ps, worldP, appInfo->dt, v3(0, 0, 0), ps->color, true);
+
+                            if(!ps->ps.Active) {
+                                removeElement_ordered(&manager->activeParticleSystems, i);
+                            }
+                        }
+                    }
+                    /////////////////////////////////////////////////////////
+
             }
 
 
@@ -1511,7 +1693,8 @@ int main(int argc, char *args[]) {
 
                         float xAt = 0; 
 
-                        float fontSize_to_worldSize = 1.3f / (float)gameFont->fontHeight;
+                        float defaultMetersPerLetter = 0.5f;
+                        float fontSize_to_worldSize = defaultMetersPerLetter / (float)gameFont->fontHeight;
 
                         num->pos = v3_plus(num->pos, v3_scale(appInfo->dt, v3(0, 0, -3)));  
 
@@ -1619,7 +1802,12 @@ int main(int argc, char *args[]) {
 
                             
                         } else {
-                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType , false, ENTITY_TRIGGER_NULL, 0);
+                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0);
+                           if(e1->rb) {
+                                e1->rb->dP = e->dP;
+
+                                
+                           }
                         }
 
                        e1->T.parent = e->parentT;
@@ -1819,11 +2007,57 @@ int main(int argc, char *args[]) {
                 
                 // easyEditor_pushFloat1(appInfo->editor, "first float: ", &v.x);
                 // easyEditor_pushSlider(appInfo->editor, "value slider: ", &v.x, -10, 10);
+                {
+                    bool numberKeyWasPressed = false;
+                    int newValue = 0;
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_1)) {
+                        numberKeyWasPressed = true;
+                        newValue = 0;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_2)) {
+                        numberKeyWasPressed = true;
+                        newValue = 1;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_3)) {
+                        numberKeyWasPressed = true;
+                        newValue = 2;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_4)) {
+                        numberKeyWasPressed = true;
+                        newValue = 3;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_5)) {
+                        numberKeyWasPressed = true;
+                        newValue = 4;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_6)) {
+                        numberKeyWasPressed = true;
+                        newValue = 5;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_7)) {
+                        numberKeyWasPressed = true;
+                        newValue = 6;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_8)) {
+                        numberKeyWasPressed = true;
+                        newValue = 7;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_9)) {
+                        numberKeyWasPressed = true;
+                        newValue = 8;                    
+                    }
+                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_0)) {
+                        numberKeyWasPressed = true;
+                        newValue = 9;                    
+                    }
 
-                editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
+                    if(numberKeyWasPressed && !easyEditor_isInteracting(appInfo->editor)) { easyEditor_alterListIndex(appInfo->editor, (int)newValue); } editorState->createMode = (EditorCreateMode)easyEditor_pushList(appInfo->editor, "Editor Mode: ", EditorCreateModesStrings, arrayCount(EditorCreateModesStrings));
+                
+                }
 
                 int splatIndexOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
+                // if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST)
+                 {
                     splatIndexOn = easyEditor_pushSpriteList(appInfo->editor, "Sprites: ", (Texture **)gameState->splatTextures.memory, gameState->splatTextures.count);
                     // splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
@@ -1844,7 +2078,8 @@ int main(int argc, char *args[]) {
                 EntityTriggerType triggerType;
                 
 
-                if(editorState->createMode == EDITOR_CREATE_EMPTY_TRIGGER) {
+                if(editorState->createMode == EDITOR_CREATE_EMPTY_TRIGGER) 
+                {
                     
                     triggerType = (EntityTriggerType)easyEditor_pushList(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
 
@@ -1906,7 +2141,6 @@ int main(int argc, char *args[]) {
                         }
                     }
 
-                    editorState->grabOffset = v3(0, 0, 0);
                     switch(editorState->createMode) {
                         case EDITOR_CREATE_SELECT_MODE: {
                             //do nothing
@@ -1923,17 +2157,19 @@ int main(int argc, char *args[]) {
                             if(editorState->entitySelected) {
                                 Entity *e = (Entity *)editorState->entitySelected;
                                 if(!e->aiController) {
-                                    e->aiController = easyAi_initController(&globalPerFrameArena);    
+                                    e->aiController = easyAi_initController(&globalPerSceneArena);    
                                 }
                                 
 
-                                if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
                                     bool shiftDown = isDown(gameKeyStates.gameButtons, BUTTON_SHIFT);
-                                    if(easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash, !shiftDown)) {
-                                        // easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
+                                    bool addedNewNode = easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash, !shiftDown);
+                                    if(addedNewNode) {
+                                        easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
                                     } else {
-                                        easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
-                                        // easyFlashText_addText(&globalFlashTextManager, "Removed Ai Tile");
+                                        EasyAi_Node *found = easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
+                                        assert(found);
+                                        easyFlashText_addText(&globalFlashTextManager, "Removed Ai Tile");
                                     }
                                 }
                             }
@@ -2031,6 +2267,14 @@ int main(int argc, char *args[]) {
                                 justCreatedEntity = true;
                             }
                         } break;
+                        case EDITOR_CREATE_SHOOT_TRIGGER: {
+                            if(pressed) {
+                                editorState->entitySelected = initShootTrigger(gameState, manager, hitP, splatTexture);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                                justCreatedEntity = true;
+                            }
+                        } break;
                         case EDITOR_CREATE_ENTITY_FOG: {
                             if(pressed) {
                                 editorState->entitySelected = initFog(gameState, manager, hitP, splatTexture);
@@ -2056,10 +2300,11 @@ int main(int argc, char *args[]) {
                             }
 
                         } break;
-                        case EDITOR_CREATE_ONE_WAY_PLATFORM: {
+                        case EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY: {
                             if(pressed) {
-                                initOneWayPlatform(gameState, manager, hitP, splatTexture);
+                                editorState->entitySelected = initEmptyTriggerWithRigidBody(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
                                 justCreatedEntity = true;
                             }
                         } break;
@@ -2203,6 +2448,16 @@ int main(int argc, char *args[]) {
                     // manager->player->collider1->offset.y = 0;
                 }
 
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
+                    DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = !DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS;
+                }
+
+
+                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_TERRAIN) ? "Terrain Off" : "Terrain On")) {
+                    DEBUG_DRAW_TERRAIN = !DEBUG_DRAW_TERRAIN;
+                }
+
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_USE_ORTHO_MATRIX) ? "Ortho Off" : "Ortho On")) {
                     DEBUG_USE_ORTHO_MATRIX = !DEBUG_USE_ORTHO_MATRIX;
                 }
@@ -2211,14 +2466,6 @@ int main(int argc, char *args[]) {
                     DEBUG_AI_BOARD_FOR_ENTITY = !DEBUG_AI_BOARD_FOR_ENTITY;
                 }
                 
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
-                    DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = !DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS;
-                }
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_TERRAIN) ? "Terrain Off" : "Terrain On")) {
-                    DEBUG_DRAW_TERRAIN = !DEBUG_DRAW_TERRAIN;
-                }
 
                 if(easyEditor_pushButton(appInfo->editor, (DEBUG_LOCK_POSITION_TO_GRID) ? "Lock Pos Off" : "Lock Pos On")) {
                     DEBUG_LOCK_POSITION_TO_GRID = !DEBUG_LOCK_POSITION_TO_GRID;
@@ -2410,28 +2657,16 @@ int main(int argc, char *args[]) {
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
                     if(e->type == ENTITY_ENTITY_CREATOR) {
-                        e->typeToCreate = (EntityType)easyEditor_pushList_withIds(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->typeToCreate, e->T.id, gameState->currentSceneName); e->typeToCreate = (EntityType)easyEditor_pushList_withIds(appInfo->editor, "Create Entity Type: ", MyEntity_EntityTypeStrings, arrayCount(MyEntity_EntityTypeStrings), e->T.id, gameState->currentSceneName);
                         easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
                     }
 
-
-                    if(e->aiController && DEBUG_AI_BOARD_FOR_ENTITY) {
-                        //Draw the ai board
-                        EasyAiController *aiController = e->aiController;
-                        for(int i = 0; i < arrayCount(aiController->boardHash); ++i) {
-                            EasyAi_Node *n = aiController->boardHash[i];
-
-                            while(n) {
-
-                                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, 0)); 
-                                setModelTransform(globalRenderGroup, T);
-                                renderDrawQuad(globalRenderGroup, n->canSeePlayerFrom ? COLOR_GOLD : COLOR_AQUA);
-
-                                n = n->next;
-                            }
-                        }
+                    if(e->type == ENTITY_CHEST) {
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->chestType, e->T.id, gameState->currentSceneName); e->chestType = (ChestType)easyEditor_pushList_withIds(appInfo->editor, "Chest Type: ", MyEntity_ChestTypeStrings, arrayCount(MyEntity_ChestTypeStrings), e->T.id, gameState->currentSceneName);
                     }
 
+
+                    
                     if(e->type == ENTITY_LAMP_POST) {
                         V4 lColor = {};
                         lColor.xyz = e->lightColor;
@@ -2447,13 +2682,15 @@ int main(int argc, char *args[]) {
                     }
 
 
-                    if(e->type == ENTITY_TRIGGER) {
-                         e->triggerType = (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
+                    if(e->type == ENTITY_TRIGGER || e->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
+                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->triggerType, e->T.id, gameState->currentSceneName); (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
                         
-                        e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList_withIds(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings), e->T.id, gameState->currentSceneName);
-                   
-                        e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
-                   }
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->locationSoundType, e->T.id, gameState->currentSceneName); e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList_withIds(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings), e->T.id, gameState->currentSceneName);
+                    
+                        if(e->levelToLoad) {
+                            e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
+                        }
+                    }
 
                    if(e->type == ENTITY_HOUSE) {
                        e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
@@ -2500,10 +2737,10 @@ int main(int argc, char *args[]) {
                     easyEditor_pushInt1(appInfo->editor, "MaxHealth: ", &e->maxHealth);
                     easyEditor_pushFloat1(appInfo->editor, "MaxStamina: ", &e->maxStamina);
 
-                    if(easyEditor_pushButton(appInfo->editor, e->renderFirstPass ? "first pass Off" : "first pass Off")) {
-                        e->renderFirstPass = !e->renderFirstPass;
-                        // manager->player->collider1->offset.y = 0;
-                    }
+                    // if(easyEditor_pushButton(appInfo->editor, e->renderFirstPass ? "first pass Off" : "first pass Off")) {
+                    //     e->renderFirstPass = !e->renderFirstPass;
+                    //     // manager->player->collider1->offset.y = 0;
+                    // }
 
 
                     if(e->collider) {
@@ -2535,7 +2772,7 @@ int main(int argc, char *args[]) {
                     // easyEditor_pushInt1(appInfo->editor, "Max Health: ", &e->maxHealth);
 
                     //wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE)
-                    if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity"))) {
+                    if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity") || (wasPressed(gameKeyStates.gameButtons, BUTTON_BACKSPACE) && !easyEditor_isInteracting(appInfo->editor)))) {
 
                         ////////////////NOTE: Will want to remove when we do undo
                         char *allScenesFolderName = getAllScenesFolderName();
@@ -2618,6 +2855,13 @@ int main(int argc, char *args[]) {
                             case ENTITY_SIGN: {
                                 newEntity = initSign(gameState, manager, position, e->sprite);
                             } break;
+                            case ENTITY_SHOOT_TRIGGER: {
+                                newEntity = initShootTrigger(gameState, manager, position, e->sprite);
+                            } break;
+                            case ENTITY_CHEST: {
+                                newEntity = initChest(gameState, manager, position);
+                                newEntity->chestType = e->chestType;
+                            } break;
                             case ENITY_CHECKPOINT: {
                                 newEntity = initCheckPoint(gameState, manager, position);
                             } break;
@@ -2673,7 +2917,7 @@ int main(int argc, char *args[]) {
                             
                             hitP.z = 0;
 
-                            e->T.pos.xy = v3_plus(hitP, editorState->grabOffset).xy;
+                            e->T.pos.xy = hitP.xy;//v3_plus(hitP, editorState->grabOffset).xy;
 
                             //NOTE: Lock entities to integer coordinates - grid base gameplay
                             if(DEBUG_LOCK_POSITION_TO_GRID) {
@@ -2681,11 +2925,7 @@ int main(int argc, char *args[]) {
                             }
                         }
                     }
-
-
                 }
-
-                
             }
 
 
@@ -2929,82 +3169,32 @@ int main(int argc, char *args[]) {
                //DRAW THE PLAYER HUD
 
                //DRAW THE PARTICLE SYSTEM
-               renderSetShader(globalRenderGroup, &textureProgram);
+               {
+                 renderSetShader(globalRenderGroup, &textureProgram);
 
-               Entity *collectChest = (Entity *)gameState->entityChestToDisplay; 
-               V3 worldP = easyTransform_getWorldPos(&collectChest->T);
-               drawAndUpdateParticleSystem(globalRenderGroup, &gameState->collectParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GOLD, true);
+                 Entity *collectChest = (Entity *)gameState->entityChestToDisplay; 
+                 V3 worldP = easyTransform_getWorldPos(&collectChest->T);
+                 drawAndUpdateParticleSystem(globalRenderGroup, &gameState->collectParticleSystem, worldP, appInfo->dt, v3(0, 0, 0), COLOR_GOLD, true); 
+               }
                ///////////////////////////////////////////
 
-              EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+              bool finished = drawAndUpdateMessageSystem(appInfo, gameState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
 
-              float fuaxWidth = 1920.0f;
-              float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
-
-              setViewTransform(globalRenderGroup, mat4());
-              setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxHeight));
-
-              float textBg_height = 0.5f*fuaxHeight;
-
-              float textureY = -0.5f*fuaxHeight + 0.5f*textBg_height;
-
-              //Stamina points backing
-              Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, textBg_height, 0)), v3(0, textureY, 0.4f));
-              setModelTransform(globalRenderGroup, T);
-              renderDrawSprite(globalRenderGroup, fadeBlackTexture, COLOR_WHITE);
-
-
-
-              
-
-              Texture *itemTex = getInvetoryTexture(gameState->itemCollectType);
-
-              float fontx = 0.2f*gameState->fuaxResolution.x;
-
-              // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
-               
-
-              // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
-              float fonty = fuaxHeight - 0.3f*textBg_height;
-
-              outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), getInventoryCollectString(gameState->itemCollectType, gameState->itemCollectCount), rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
-
-
-              //Draw prompt button to continue
-              T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
-              setModelTransform(globalRenderGroup, T);
-              renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
-              ///////
-
-              T = Matrix4_translate(Matrix4_scale(mat4(), v3(300, 300*itemTex->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
-              setModelTransform(globalRenderGroup, T);
-              renderDrawSprite(globalRenderGroup, itemTex, COLOR_WHITE);
-
-              drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-
-              renderClearDepthBuffer(mainFrameBuffer.bufferId);
-
-              easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
               //Exit back to game
-              if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+              if(finished) {
                    
-                   gameState->gameModeType = GAME_MODE_PLAY;
+                   assert(gameState->gameModeType == GAME_MODE_PLAY);
                    gameState->gameIsPaused = false;
-                   gameState->itemCollectType = ENTITY_NULL;
                    gameState->entityChestToDisplay = 0;
 
                    easyAnimation_emptyAnimationContoller(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList);
                    easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
-
-                   // easyPlatform_freeMemory(gameState->inventoryString_mustFree);
                    
                }
             }
 
             if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
-
-                
 
                 //Make sure game is paused
                 gameState->gameIsPaused = true;
@@ -3016,259 +3206,7 @@ int main(int argc, char *args[]) {
                 // renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
                 ////////////////////////////
 
-               EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
-
-               char *currentTalkText = gameState->currentTalkText->texts[gameState->messageIndex];
-
-               float fuaxWidth = 1920.0f;
-               float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
-
-               float xOffset_leftColumn = 0;
-               float xOffset_rightColumn = 0;
-
-               float alpha = 0.0f;
-
-               EntityDialogNode *nextTalkNode = 0;
-
-               float revealChoicePeriod = 0.6f;
-
-               //update Timer
-               if(gameState->dialogChoiceTimer >= 0.0f) {
-                gameState->dialogChoiceTimer += appInfo->dt;
-
-                float canVal = clamp01(gameState->dialogChoiceTimer / revealChoicePeriod);
-
-                alpha = canVal; 
-
-                xOffset_leftColumn = smoothStep01(0, canVal, -400);                
-                xOffset_rightColumn = smoothStep01(0, canVal, 150);                
-
-               }    
-
-               float returnToCenterPeriod = 0.3f;
-
-               //update Timer
-               if(gameState->dialogChoiceTimerReturn >= 0.0f) {
-                gameState->dialogChoiceTimerReturn += appInfo->dt;
-
-                float canVal = clamp01(gameState->dialogChoiceTimerReturn / returnToCenterPeriod);
-
-                alpha = 1.0f - canVal; 
-
-                xOffset_leftColumn = smoothStep01(-400, canVal, 0);                
-                xOffset_rightColumn = smoothStep01(150, canVal, 0);
-
-                if(canVal >= 1.0f) {
-                    gameState->dialogChoiceTimerReturn = -1.0f;
-                }                
-               }
-
-               bool isFontWriterFinished = false;
-
-               setViewTransform(globalRenderGroup, mat4());
-               Matrix4 projection = OrthoMatrixToScreen(fuaxWidth, fuaxHeight);
-               setProjectionTransform(globalRenderGroup, projection);
-
-               {
-                   // EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
-
-                   EasyTransform T;
-                   easyTransform_initTransform_withScale(&T, v3(xOffset_leftColumn, -300, 0.4f), v3(1000, 400, 1), EASY_TRANSFORM_NO_ID); 
-
-                   setModelTransform(globalRenderGroup, easyTransform_getTransform(&T));
-                   
-                   renderSetShader(globalRenderGroup, &textureProgram);
-                   renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), COLOR_WHITE);
-
-                   renderSetShader(globalRenderGroup, &fontProgram);
-
-                   //if we're returning back to center we don't start writing 
-                   float tUpdate = appInfo->dt;
-
-                   if(gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod) {
-                      tUpdate = 0;
-                   }
-
-                   isFontWriterFinished = easyFontWriter_updateFontWriter(&gameState->fontWriter, currentTalkText, tUpdate, &T, v3(xOffset_leftColumn + -400, -200, 0.1f), false); 
-
-                   // easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
-               }
-
-               //Since we advance from the current node when we animate back in, we keep the last available node around to draw the right options. 
-                bool drawOptions = false;
-
-                EntityDialogNode *nodeToDrawOptionsFrom = gameState->currentTalkText;
-
-               if(gameState->dialogChoiceTimerReturn >= 0.0f) {
-                 drawOptions = true;
-                 nodeToDrawOptionsFrom = gameState->prevTalkNode;
-               }
-
-               if(isFontWriterFinished && gameState->messageIndex >= (gameState->currentTalkText->textCount - 1) && gameState->currentTalkText->choiceCount > 0) {
-
-                if(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION) {
-                    gameState->dialogChoiceTimer = 0;
-                    gameState->choiceOptionIndex = 0;
-                }
-
-                drawOptions = true;
-
-                //Check if there are any resposes
-                  gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION; 
-
-
-                  //don't let the player choose while is still animating (up until 90% through animation)
-                  if((gameState->dialogChoiceTimer / revealChoicePeriod) > 0.9f) {
-                      //Choose the option 
-                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
-                        gameState->choiceOptionIndex++;
-                      }
-
-                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP)) {
-                        gameState->choiceOptionIndex--;
-                      }
-
-                      gameState->choiceOptionIndex = clamp(0, gameState->choiceOptionIndex, gameState->currentTalkText->choiceCount - 1);
-                      ////////////////////////////////////////////////////////////
-
-                      if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
-                        nextTalkNode = gameState->currentTalkText->next[gameState->choiceOptionIndex];
-                        // assert(nextTalkNode);
-
-                      }
-                  }
-
-
-                  
-               }
-
-
-               if(drawOptions) {
-                EasyTransform T;
-                easyTransform_initTransform_withScale(&T, v3(0, tweakY, 0), v3(1, 1, 1), EASY_TRANSFORM_NO_ID); 
-                
-
-                EasyTransform quillT;
-                easyTransform_initTransform_withScale(&quillT, v3(0, tweakY, 0.7f), v3(tweakWidth, 100, 1), EASY_TRANSFORM_NO_ID); 
-
-                //Draw the options
-                for(int i = 0; i < nodeToDrawOptionsFrom->choiceCount; ++i) {
-                      char *str = nodeToDrawOptionsFrom->choices[i];
-
-                      T.pos.y -= tweakSpacing;
-
-                      quillT.pos.x = xOffset_rightColumn + 300;
-                      quillT.pos.y = T.pos.y;
-                      
-
-                      setModelTransform(globalRenderGroup, easyTransform_getTransform(&quillT));
-                      renderSetShader(globalRenderGroup, &textureProgram);
-
-                      V4 c = COLOR_WHITE;
-
-                      if(gameState->choiceOptionIndex == i) {
-                          c = COLOR_GOLD;
-                      }
-                      
-                      c.w = alpha;
-                      renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), c);
-
-                      renderSetShader(globalRenderGroup, &fontProgram);
-                     
-                      easyFont_drawString(str, &T, v3(xOffset_rightColumn, T.pos.y, 0.6f), gameFont, false, v4(0, 0, 0, alpha));
-                    }
-               }
-
-               // float fontx = 0.2f*gameState->fuaxResolution.x;
-
-               // V2 size = getBounds(currentTalkText, rect2fMinMax(fontx, 0, 0.9f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 1.5f, gameState->fuaxResolution, 1);
-                
-
-               // float fontx = -0.5f*size.x + 0.5f*fuaxWidth; 
-               // float fonty = fuaxHeight - 0.3f*textBg_height;
-
-               // outputTextNoBacking(gameFont, fontx, fonty, 0.1f, v2(fuaxWidth, fuaxHeight), currentTalkText, rect2fMinMax(0.2f*gameState->fuaxResolution.x, 0, 1.0f*gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 1.5f, true, 1);
-
-               renderSetShader(globalRenderGroup, &textureProgram);
-               //Draw prompt button to continue
-               Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0.4f*fuaxWidth, -0.35f*fuaxHeight, 0.4f));
-               setModelTransform(globalRenderGroup, T);
-               renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
-               ///////
-
-               drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
-
-               renderClearDepthBuffer(mainFrameBuffer.bufferId);
-
-               easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
-
-                bool returningToCenter = (gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod);
-
-               //Exit back to game
-               if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING && !gameState->enteredTalkModeThisFrame && !returningToCenter) {
-                    // if(gameState->talkingNPC) {
-                    //     easySound_endSound(gameState->talkingNPC);
-                    // }
-
-                    bool writerFinished = easyFontWriter_isFontWriterFinished(&gameState->fontWriter, currentTalkText);
-
-                    //still messages
-                    if(gameState->messageIndex < (gameState->currentTalkText->textCount - 1) || (gameState->messageIndex == (gameState->currentTalkText->textCount - 1) && !writerFinished)) {
-                        assert(gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING);
-
-                        if(!writerFinished) {
-                            easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
-                        } else {
-                            //still messages left in array
-                            gameState->messageIndex++;
-
-                            easyFontWriter_resetFontWriter(&gameState->fontWriter);
-
-                            WavFile *sound = 0;
-                            // if(gameState->currentTalkText.audioArray) {
-                            //     Asset *asset = findAsset(gameState->currentTalkText.audioArray[gameState->messageIndex]);
-                            //     if(asset) {
-                            //         sound = (WavFile *)asset->file;
-                            //     }
-                            //     if(sound) {
-                            //         gameState->talkingNPC = playGameSound(&globalLongTermArena, sound, 0, AUDIO_FOREGROUND);
-                            //         gameState->talkingNPC->volume = 3.0f;
-                            //     }
-                            // }    
-                        }
-
-                    } else if(gameState->currentTalkText->choiceCount > 0) {
-                        //go to choices
-                        assert(gameState->gameModeSubType != GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION);
-
-                        gameState->dialogChoiceTimer = 0;
-                        gameState->choiceOptionIndex = 0;
-                        gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION;
-                        easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
-                    } else {
-                        //finished
-                        gameState->gameModeType = GAME_MODE_PLAY;
-                        gameState->gameIsPaused = false;
-                        // gameState->talkingNPC = 0;
-                        //go back to start just to make sure the next time someone else tries to play it
-                        gameState->messageIndex = 0;
-                        
-                    }
-                }
-
-                if(nextTalkNode) {
-                    //Store the previous node   
-                    gameState->prevTalkNode = gameState->currentTalkText;
-
-                    gameState->currentTalkText = nextTalkNode;
-                    gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
-                    easyFontWriter_resetFontWriter(&gameState->fontWriter);
-                    gameState->dialogChoiceTimer = -1;
-                    gameState->messageIndex = 0;
-                    gameState->dialogChoiceTimerReturn = 0;
-                }
-                
-                gameState->enteredTalkModeThisFrame = false;
+               drawAndUpdateMessageSystem(appInfo, gameState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
             }
            //  ///////////////////////////
 
@@ -3419,10 +3357,11 @@ int main(int argc, char *args[]) {
 
                            
                             if(itemI->type != ENTITY_NULL) {
-                                renderSetShader(globalRenderGroup, &pixelArtProgram);
-                                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, circleSize, 0)), v3(x, y, 0.2f));
+                                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+                                Texture *inventoryTexture = getInvetoryTexture(itemI->type);
+                                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, inventoryTexture->aspectRatio_h_over_w*circleSize, 0)), v3(x, y, 0.2f));
                                  setModelTransform(globalRenderGroup, T);
-                                renderDrawSprite(globalRenderGroup, getInvetoryTexture(itemI->type), COLOR_WHITE);
+                                renderDrawSprite(globalRenderGroup, inventoryTexture, COLOR_WHITE);
                                 renderSetShader(globalRenderGroup, mainShader);
 
                                 if(itemI->isDisposable) {
@@ -3485,21 +3424,73 @@ int main(int argc, char *args[]) {
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
             } else if(gameState->gameModeType == GAME_MODE_GAME_OVER) {
+                
+
+                gameState->gameIsPaused = true;
                 easyRender_blurBuffer_cachedBuffer(&mainFrameBuffer, &bloomFrameBuffer, &cachedFrameBuffer, 0);
                 endBuffer = &bloomFrameBuffer;
                 renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
-
                 setViewTransform(globalRenderGroup, cameraLookAt_straight);
 
 
                 V2 size = getBounds("GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), gameFont, 2, gameState->fuaxResolution, 1);
-                outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(1, 1, 1, 1), 2, true, 1);
- 
+                outputTextNoBacking(gameFont, 0.5f*gameState->fuaxResolution.x - 0.5f*size.x, 0.5*gameState->fuaxResolution.y, 0.1f, gameState->fuaxResolution, "GAME OVER", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), v4(0, 0, 0, 1), 2, true, 1);
+    
+                
+                //Draw prompt button to continue
+                {
+
+                    EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+                    float fuaxWidth = 1920.0f;
+                    float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+                   
+                    setViewTransform(globalRenderGroup, mat4());
+                    Matrix4 projection = OrthoMatrixToScreen(fuaxWidth, fuaxHeight);
+                    setProjectionTransform(globalRenderGroup, projection);
+
+                    renderSetShader(globalRenderGroup, &textureProgram);
+                    gameState->gameOverHoverScale += 0.3f*appInfo->dt;
+
+                    if(gameState->gameOverHoverScale > 1.0f) {
+                        gameState->gameOverHoverScale = 1.0f - gameState->gameOverHoverScale;
+                    }
+
+                    float hoverScale = smoothStep00(1.3f, gameState->gameOverHoverScale, 1.5f);
+
+
+                    //draw backing
+                    Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(800, 500, 0)), v3(0, 0, 0.5f));
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, findTextureAsset("quill.png"), COLOR_WHITE);
+
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(hoverScale*100, hoverScale*100*gameState->spacePrompt->aspectRatio_h_over_w, 0)), v3(0, -100, 0.4f));
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, gameState->spacePrompt, COLOR_WHITE);
+
+
+                    easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+                }
+                ///////////////////////////////////////////////
+
                 drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
-                    gameState->gameModeType = GAME_MODE_PLAY;
-                    ((Entity *)(manager->player))->health = ((Entity *)(manager->player))->maxHealth;
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
+                    EntityResetOnDieData *playerResetData = (EntityResetOnDieData *)easyPlatform_allocateMemory(sizeof(EntityResetOnDieData), EASY_PLATFORM_MEMORY_ZERO);;
+
+                    playerResetData->gameState = gameState;
+
+                    Entity *fireEntity = findEntityById(manager, gameState->lastCheckPointId);
+
+                    assert(fireEntity);
+
+                    playerResetData->playerStartP = v3_plus(fireEntity->T.pos, v3(0, -0.5, 0));
+                    playerResetData->player = (Entity *)manager->player;
+
+                    //Add transition 
+                    EasySceneTransition *transition = EasyTransition_PushTransition(appInfo->transitionState, playerDiedReset, playerResetData, EASY_TRANSITION_FADE);
                 }
             }
 
@@ -3620,6 +3611,36 @@ int main(int argc, char *args[]) {
 
             //clear 2d lights from render group
             globalRenderGroup->light2dCountForFrame = 0;
+
+            {
+
+                EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+                Texture shadowTex = {};
+                shadowTex.width = resolution.x;
+                shadowTex.height = resolution.y;
+                shadowTex.uvCoords = rect2f(0, 0, 1, 1);
+                shadowTex.aspectRatio_h_over_w = easyRender_getTextureAspectRatio_HOverW(&shadowTex);
+                shadowTex.name = "shadowMap Texture";
+                shadowTex.id = shadowMapBuffer.depthId;
+
+                setViewTransform(globalRenderGroup, mat4());
+                Matrix4 projection = OrthoMatrixToScreen_BottomLeft(resolution.x, resolution.y);
+                setProjectionTransform(globalRenderGroup, projection);
+
+                EasyTransform T;
+                easyTransform_initTransform_withScale(&T, v3(200, 200, 0.4f), v3(400, 400*appInfo->aspectRatio_yOverX, 1), EASY_TRANSFORM_NO_ID); 
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&T));
+                
+                renderSetShader(globalRenderGroup, &displayShadowMapProgram);
+                renderDrawSprite(globalRenderGroup, &shadowTex, COLOR_WHITE);
+
+                drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+
+            }
 
             easyOS_endFrame(resolution, screenDim, endBuffer->bufferId, appInfo, appInfo->hasBlackBars);
             DEBUG_TIME_BLOCK_FOR_FRAME_END(beginFrame, wasPressed(appInfo->keyStates.gameButtons, BUTTON_F4))

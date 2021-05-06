@@ -307,6 +307,19 @@ int easyString_stringsMatch_nullTerminated(char *a, char *b) {
     return result;
 }
 
+// unsigned int easyCRC_CStringCRC32N(char *name, unsigned int n) {
+//     unsigned int crc = 0;
+//     for(unsigned int i = 0; name[i] && i < n; ++i)
+//     {
+//         crc = (crc << 8) ^ global_crc32_table[((crc >> 24) ^ name[i]) & 255];
+//     }
+//     return crc;
+// }
+
+// unsigned int easyCRC_CStringCRC32(char *name) {
+//     return CStringCRC32N(name, (unsigned int)(unsigned int)(-1));
+// }
+
 #endif // END OF IMPLEMENTATION
 #endif // END OF HEADER INCLUDE
 

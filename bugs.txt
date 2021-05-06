@@ -1,0 +1,1 @@
+- werewolf knock back distance needs to be smaller than player - why is this? 

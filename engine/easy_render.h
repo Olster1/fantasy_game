@@ -243,11 +243,16 @@ typedef struct {
             float outerRadius;
         };
     };
+
+    u32 shadowMapId;
+    Matrix4 worldToLightSpace;
 } EasyLight;
 
 typedef struct {
     V3 pos;
     float brightness;
+    float innerRadius;
+    float outerRadius;
     V3 color;
 } EasyLight_2d;
 
@@ -277,8 +282,10 @@ RenderProgram circleProgram;
 RenderProgram model3dTo2dImageProgram;
 RenderProgram fontProgram;
 RenderProgram fogProgram;
+RenderProgram displayShadowMapProgram;
 RenderProgram circleTransitionProgram;
 RenderProgram pixelArtProgram;
+RenderProgram shadowMapProgram;
 RenderProgram pixelArtProgramPlain;
 
 
@@ -964,12 +971,14 @@ typedef struct {
 } RenderGroup;
     
 
-static inline bool easyRender_push2dLight(RenderGroup *g, V3 pos, V3 color, float brightness) {
+static inline bool easyRender_push2dLight(RenderGroup *g, V3 pos, V3 color, float brightness, float innerRadius, float outerRadius) {
     if(g->light2dCountForFrame < arrayCount(g->lights2d)) {
         EasyLight_2d *l =  g->lights2d + g->light2dCountForFrame++;
         l->pos = pos;
         l->color = color;
         l->brightness = brightness;
+        l->innerRadius = innerRadius;
+        l->outerRadius = outerRadius;
     } else {
         return false;
     }
@@ -1634,6 +1643,15 @@ static inline V3 easyRender_worldSpace_To_NDCSpace(V3 worldP, Matrix4 perspectiv
     return ndc_space;
 }
 
+static inline V3 screenSpaceToWorldSpace_orthographicView(V2 mouseP_left_up, V2 resolution, V2 orthoResolution, V3 xAxis_camera, V3 yAxis_camera, V3 cameraPos) {
+    
+    V2 screenP_01 = v2(mouseP_left_up.x / resolution.x, mouseP_left_up.y / resolution.y);
+    V3 positionOnOrthoCanvas = v3(lerp(-0.5f*orthoResolution.x, screenP_01.x, 0.5f*orthoResolution.x), lerp(-0.5f*orthoResolution.y, screenP_01.y, 0.5f*orthoResolution.y), 0);
+    V3 result = v3_plus(cameraPos, v3_plus(v3_scale(positionOnOrthoCanvas.x, xAxis_camera), v3_scale(positionOnOrthoCanvas.y, yAxis_camera)));
+
+    return result;
+}
+
 static inline V3 screenSpaceToWorldSpace(Matrix4 perspectiveMat, V2 screenP, V2 resolution, float zAtInViewSpace, Matrix4 cameraToWorld) {
     DEBUG_TIME_BLOCK()
 
@@ -1732,6 +1750,9 @@ void enableRenderer(int width, int height, Arena *arena) {
     fogProgram = createProgramFromFile(vertex_pixelArt_shader, frag_fog_shader, false);
     renderCheckError(); 
 
+    displayShadowMapProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_shadow_map_display_shader, false);
+    renderCheckError();
+
     textureOutlineProgram = createProgramFromFile(vertex_shader_tex_attrib_shader, fragment_shader_texture_outline_shader, false);
     renderCheckError();
 
@@ -1763,6 +1784,9 @@ void enableRenderer(int width, int height, Arena *arena) {
     pixelArtProgram = createProgramFromFile(vertex_pixelArt_shader, frag_pixel_shader, false);
     renderCheckError();
 
+    shadowMapProgram = createProgramFromFile(vertex_shadow_map_shader, frag_shadow_map_shader, false);
+    renderCheckError();
+    
 
     pixelArtProgramPlain = createProgramFromFile(vertex_shader_tex_attrib_shader, frag_pixel_plain_shader, false);
     renderCheckError();
@@ -1933,11 +1957,30 @@ static FrameBuffer createFrameBuffer(int width, int height, int flags, int numCo
         renderCheckError();
         
         if(!(flags & FRAMEBUFFER_STENCIL)) { //Just depth buffer
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, 0);
-            renderCheckError();
+            if(numColorBuffers == 0) { //make it a float type, not sure we have to do this but it makes sense I guess becuase we want a floating point value for the depth
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+                renderCheckError();
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+                float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+                glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);  
+                
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                
+            } else {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, 0);
+                renderCheckError();
+                    
+            }
             
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthId, 0);
-            renderCheckError();    
+            renderCheckError();  
+
+            if(numColorBuffers == 0) {
+                glDrawBuffer(GL_NONE);
+                glReadBuffer(GL_NONE);
+            }  
         } else {
             //CREATE STENCIL BUFFER ALONG WITH DEPTH BUFFER
             glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0);
@@ -2339,46 +2382,44 @@ static inline void initVao(VaoHandle *bufferHandles, Vertex *triangleData, int t
         glVertexAttribPointer(vertexAttrib, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
         renderCheckError();
 
-        glGenBuffers(1, &bufferHandles->vboInstanceData);
-        renderCheckError();
+        // vbo instance buffer
+        {
+            glGenBuffers(1, &bufferHandles->vboInstanceData);
+            renderCheckError();
 
-        glBindBuffer(GL_ARRAY_BUFFER, bufferHandles->vboInstanceData);
-        renderCheckError();
+            glBindBuffer(GL_ARRAY_BUFFER, bufferHandles->vboInstanceData);
+            renderCheckError();
 
-        GLint mAttrib = MODEL_ATTRIB_LOCATION;
-        renderCheckError();
-        GLint vAttrib = VIEW_ATTRIB_LOCATION;
-        renderCheckError();
-        GLint colorAttrib = COLOR_ATTRIB_LOCATION;
-        renderCheckError();
-        
-        size_t offsetForStruct = sizeof(float)*(16+16+4+4); 
-
-
-        //NOTE(ollie): We preload some data to the buffer so it gets created I guess? I'm not sure but 
-        //NOTE(ollie): this is how Ryan was doing it in Dungeoneer
-        //NOTE(ollie): But didn't work :( 
-        glBufferData(GL_ARRAY_BUFFER, offsetForStruct*EASY_RENDER_MAX_BATCH_COUNT, 0, GL_DYNAMIC_DRAW);
-        
-        //matrix plus vector4 plus vector4
-        addInstancingAttrib (mAttrib, 16, offsetForStruct, 0, 1);
-        // printf("m attrib: %d\n", mAttrib);
-        addInstancingAttrib (vAttrib, 16, offsetForStruct, sizeof(float)*16, 1);
-        // printf("v attrib: %d\n", vAttrib);
-        // addInstancingAttrib (pAttrib, 16, offsetForStruct, sizeof(float)*32, 1);
-        // printf("p attrib: %d\n", pAttrib);
-        addInstancingAttrib (colorAttrib, 4, offsetForStruct, sizeof(float)*32, 1);
-        // printf("color attrib: %d\n", colorAttrib);
-        // if(hasUvs) 
-
-        addInstancingAttrib (UVATLAS_ATTRIB_LOCATION, 4, offsetForStruct, sizeof(float)*36, 1);
-        renderCheckError();
+            GLint mAttrib = MODEL_ATTRIB_LOCATION;
+            renderCheckError();
+            GLint vAttrib = VIEW_ATTRIB_LOCATION;
+            renderCheckError();
+            GLint colorAttrib = COLOR_ATTRIB_LOCATION;
+            renderCheckError();
+            
+            size_t offsetForStruct = sizeof(float)*(16+16+4+4); 
 
 
-        assert(offsetForStruct == sizeof(float)*40);
+            //NOTE(ollie): We preload some data to the buffer so it gets created I guess? I'm not sure but 
+            //NOTE(ollie): this is how Ryan was doing it in Dungeoneer
+            //NOTE(ollie): But didn't work :( 
+            glBufferData(GL_ARRAY_BUFFER, offsetForStruct*EASY_RENDER_MAX_BATCH_COUNT, 0, GL_DYNAMIC_DRAW);
+            
+            //matrix plus vector4 plus vector4
+            addInstancingAttrib (mAttrib, 16, offsetForStruct, 0, 1);
+            addInstancingAttrib (vAttrib, 16, offsetForStruct, sizeof(float)*16, 1);
+            addInstancingAttrib (colorAttrib, 4, offsetForStruct, sizeof(float)*32, 1);
+
+            addInstancingAttrib (UVATLAS_ATTRIB_LOCATION, 4, offsetForStruct, sizeof(float)*36, 1);
+            renderCheckError();
+
+
+            assert(offsetForStruct == sizeof(float)*40);
+        }
         
         glBindVertexArray(0);
-        
+            
+        //we can delete these buffers since they are still referenced by the VAO 
         glDeleteBuffers(1, &vertices);
         glDeleteBuffers(1, &indices);
     }
@@ -2755,6 +2796,10 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
 
 
         }
+
+        if(program == &shadowMapProgram) {
+            
+        }
         
         //bind time of day in uniform
         if(program == &pixelArtProgram) {
@@ -2768,6 +2813,12 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
                 char uniformStr[512];
                 sprintf(uniformStr,  "lights[%d].pos", i);
                 glUniform3f(glGetUniformLocation(program->glProgram, uniformStr), l->pos.x, l->pos.y, l->pos.z);
+
+                sprintf(uniformStr,  "lights[%d].innerRadius", i);
+                glUniform1f(glGetUniformLocation(program->glProgram, uniformStr), l->innerRadius);                
+
+                sprintf(uniformStr,  "lights[%d].outerRadius", i);
+                glUniform1f(glGetUniformLocation(program->glProgram, uniformStr), l->outerRadius);                
 
                 V3 c = v3_scale(l->brightness, l->color);
 
@@ -2789,7 +2840,12 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
             glUniform3f(eyepos, group->eyePos.x, group->eyePos.y, group->eyePos.z);
             renderCheckError();
 
-
+            //add the sun transform
+            if(group->lightCount > 0) {
+                easy_BindTexture("shadowMapSampler", 5, group->lights[0]->shadowMapId, program);   
+                glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "worldToSunSpace"), 1, GL_FALSE, group->lights[0]->worldToLightSpace.E_);
+                renderCheckError();
+            } 
         }
 
         easy_BindTexture("tex", 3, textureId, program); //only one texture per draw call
@@ -3028,9 +3084,6 @@ void sortRenderBatchesOnDepth(InfiniteAlloc *items) {
     }
 }
 
-void beginRenderGroupForFrame(RenderGroup *group) {
-    
-}
 
 static inline void easyRender_DrawBatch(RenderGroup *group, InfiniteAlloc *items) {
     DEBUG_TIME_BLOCK()

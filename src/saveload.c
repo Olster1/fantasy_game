@@ -42,6 +42,8 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 	
     InfiniteAlloc fileContents = initInfinteAlloc(char);
 
+    InfiniteAlloc aiNodeData = initInfinteAlloc(float);
+    
 	for(int i = 0; i < manager->entities.count; ++i) {
 	    Entity *e = (Entity *)getElement(&manager->entities, i);
 	    if(e && (e->flags & ENTITY_SHOULD_SAVE)) {
@@ -71,6 +73,29 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 			}	        
 
 
+            if(e->aiController) {
+                //walk the ai board
+                EasyAiController *aiController = e->aiController;
+                for(int i = 0; i < arrayCount(aiController->boardHash); ++i) {
+                    EasyAi_Node *n = aiController->boardHash[i];
+
+                    while(n) {
+
+                        float canSeePlayerFrom = (n->canSeePlayerFrom) ? 1.0f : 0.0f;
+
+                        addElementInfinteAlloc_notPointer(&aiNodeData, n->pos.x);
+                        addElementInfinteAlloc_notPointer(&aiNodeData, n->pos.y);
+                        addElementInfinteAlloc_notPointer(&aiNodeData, n->pos.z);
+                        addElementInfinteAlloc_notPointer(&aiNodeData, canSeePlayerFrom);
+
+                        n = n->next;
+                    }
+                }
+
+                addVarArray(&fileContents, aiNodeData.memory, aiNodeData.count, "aiNodes", VAR_FLOAT);
+
+            }
+
 	        if(e->collider1) {
 	        	addVar(&fileContents, &e->collider1->dim2f, "colliderScale2", VAR_V2);
                 addVar(&fileContents, &e->collider1->offset, "colliderOffset2", VAR_V3);	
@@ -96,6 +121,10 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             if(e->triggerType != ENTITY_TRIGGER_NULL) {
                 addVar(&fileContents, MyEntity_TriggerTypeStrings[(int)e->triggerType], "triggerType", VAR_CHAR_STAR);
+            }
+
+            if(e->chestType != ENTITY_TRIGGER_NULL) {
+                addVar(&fileContents, MyEntity_ChestTypeStrings[(int)e->chestType], "chestType", VAR_CHAR_STAR);
             }
 
             if(e->locationSoundType != ENTITY_SOUND_NULL) {
@@ -237,6 +266,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
 	//Check that this level exists
 	if(platformDoesDirectoryExist(fullSceneFolderPath)) {
+        //clear per load level arena 
+        releaseMemoryMark(&perSceneArenaMark);
+        perSceneArenaMark = takeMemoryMark(&globalPerSceneArena);
 
         Entity *wizard = 0;
 
@@ -284,6 +316,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 EntityTriggerType triggerType = ENTITY_TRIGGER_NULL;
 
+                ChestType chestType = CHEST_TYPE_HEALTH_POTION;
+
                 EntityLocationSoundType locationSoundType = ENTITY_SOUND_NULL;
 
 
@@ -291,6 +325,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 EntityType entityToCreate;
                 float rateOfCreation;
+
+                EasyAiController *aiController = 0;
 
                 char *sceneToLoad = 0;
 
@@ -340,6 +376,34 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     						if(stringsMatchNullN("subtype", token.at, token.size)) {
     				    		subtype = (SubEntityType)getIntFromDataObjects(&tokenizer);
     						}
+
+
+                            //These are arrays
+                            if(stringsMatchNullN("aiNodes", token.at, token.size)) {
+                                if(!aiController) {
+                                    aiController = easyAi_initController(&globalPerSceneArena);
+                                }
+
+                                InfiniteAlloc *dataObjs = getDataObjects(&tokenizer);
+                                int indexAt = 0;
+                                while(indexAt < dataObjs->count) {
+
+                                    V3 pAt = makeV3FromDataObjects_notClearObjects(&tokenizer, indexAt);
+                                    indexAt += 3;
+
+                                    bool nodeType = (bool)getIntFromDataObjects_notClearObjects(&tokenizer, indexAt);
+                                    indexAt += 1;
+
+                                    easyAi_pushNode(aiController, pAt, aiController->boardHash, nodeType); 
+                                    
+
+                                    assert((dataObjs->count - indexAt) % 4 == 0);
+                                }
+
+                                dataObjs->count = 0;
+                                
+                            }
+
 
                             if(stringsMatchNullN("levelToLoad", token.at, token.size)) {
                                 char *loadString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
@@ -402,6 +466,13 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                                 char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
                                 triggerType = (EntityTriggerType)findEnumValue(typeString, MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
+
+                            }
+
+                            if(stringsMatchNullN("chestType", token.at, token.size)) {
+                                char *chestTypeStr = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                chestType = (ChestType)findEnumValue(chestTypeStr, MyEntity_ChestTypeStrings, arrayCount(MyEntity_ChestTypeStrings));
 
                             }
 
@@ -533,6 +604,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         			//Make the entity
         			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile);
 
+                    newEntity->chestType = chestType;
+
                     newEntity->T.pos = position;
 
                     releaseInfiniteAlloc(&tokenizer.typesArray);
@@ -573,6 +646,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
         			newEntity->layer = layer;
                     newEntity->renderFirstPass = renderFirstPass;
+
+                    newEntity->aiController = aiController;
                     
                     newEntity->dialogType = dialogType;
                     
@@ -625,6 +700,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		splatTexture = 0;
                 animation = 0; 
         		audioFile = 0;
+                aiController = 0;
+                chestType = CHEST_TYPE_HEALTH_POTION;
 
         		subtype = ENTITY_SUB_TYPE_NONE;
         		// if(wasTeleporter) {
