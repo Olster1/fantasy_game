@@ -61,6 +61,7 @@ typedef enum  {
 		EASY_EDITOR_INTERACT_SLIDER,
 		EASY_EDITOR_INTERACT_BUTTON,
 		EASY_EDITOR_INTERACT_DROP_DOWN_LIST,
+		EASY_EDITOR_INTERACT_CHECK_BOX
 } EasyEditorInteractType;
 
 typedef struct {
@@ -974,10 +975,92 @@ static inline int easyEditor_pushSpriteList_(EasyEditor *e, char *name, Texture 
 
 }
 
+//////////////////////////////////////////////////
 
+
+#define easyEditor_pushCheckBox(e, name, value) easyEditor_pushCheckBox_(e, name, value, __LINE__, __FILE__)
+static inline bool easyEditor_pushCheckBox_(EasyEditor *e, char *name, bool *value, int lineNumber, char *fileName) {
+	assert(e->currentWindow);
+	bool result = false;
+
+	EasyEditorState *w = e->currentWindow;
+
+	if(w->isOpen) {
+
+		w->at.y += EASY_EDITOR_MARGIN;
+
+		//Draw the checkbox
+		Rect2f bounds = rect2fMinDim(w->at.x + EASY_EDITOR_MARGIN, w->at.y - 25 - EASY_EDITOR_MARGIN, 50, 50);
+		
+		////// handle the user interaction
+
+		V4 color = COLOR_WHITE;
+
+		bool hover = inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), bounds, BOUNDS_RECT);
+		if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
+			e->interactingWith.visitedThisFrame = true;
+			color = COLOR_GREEN;
+
+			if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+				if(hover) {
+					*value = !(*value);
+				}
+				
+				easyEditor_stopInteracting(e);	
+			}
+		} else if(hover) {
+			if(!e->interactingWith.item) {
+				color = COLOR_YELLOW;	
+			}
+			
+			if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+				if(e->interactingWith.item) {
+					//NOTE: Clicking on a different cell will swap it
+					easyEditor_stopInteracting(e);	
+				}
+				easyEditor_startInteracting(e, &e->bogusItem, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_CHECK_BOX);
+			} 
+		}
+
+		renderDrawRect(bounds, 2, color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+
+		if(*value) {
+			Texture *t = findTextureAsset("easy_engine_tick.png");
+			V2 pos_ = getCenter(bounds);
+			V3 pos = v3(pos_.x, pos_.y, 0.3f); 
+			renderTextureCentreDim(t, pos, getDim(bounds), COLOR_WHITE, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix, mat4());
+		} 
+
+		//NOTE(ollie): Increment the bounds 
+		w->at.x = bounds.minX + getDim(bounds).x + EASY_EDITOR_MARGIN;
+
+
+
+		///////////////////////////////////
+
+		
+
+		bounds = outputTextNoBacking(e->font, w->at.x + EASY_EDITOR_MARGIN, w->at.y, 1, e->fuaxResolution, name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
+		bounds = expandRectf(bounds, v2(EASY_EDITOR_MARGIN, EASY_EDITOR_MARGIN));
+		// bounds.minX = w->topCorner.x + EASY_EDITOR_MARGIN;
+		
+		//NOTE(ollie): Increment the bounds 
+		w->at.x += getDim(bounds).x;
+
+		if(w->maxX < w->at.x) {
+			w->maxX = w->at.x;
+		}
+		w->at.x = w->topCorner.x;
+		w->at.y += getDim(bounds).y + EASY_EDITOR_MARGIN;
+	}
+
+	return result;
+
+}
 
 
 //////////////////////////////////////////////////
+
 
 #define easyEditor_pushButton(e, name) easyEditor_pushButton_(e, name, __LINE__, __FILE__)
 static inline bool easyEditor_pushButton_(EasyEditor *e, char *name, int lineNumber, char *fileName) {
@@ -1353,8 +1436,8 @@ static inline void easyEditor_pushSlider_(EasyEditor *e, char *name, float *valu
 		renderDrawRect(sliderRect, 2, v4(greyValue, greyValue, greyValue, 1.0f), 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
 
 
-		float handleX = 20;
-		float handleY = 20;
+		float handleX = 40;
+		float handleY = 40;
 
 		float percent = ((*value - min) / (max - min));
 		if(percent < 0.0f)  percent = 0; 
@@ -1362,7 +1445,7 @@ static inline void easyEditor_pushSlider_(EasyEditor *e, char *name, float *valu
 
 		float offset = w->at.x + sliderX*percent;
 		
-		Rect2f handleRect = rect2fCenterDim(offset, w->at.y - sliderY, handleX, handleY);
+		Rect2f handleRect = rect2fCenterDim(offset, w->at.y - 0.5f*sliderY, handleX, handleY);
 
 		V4 handleColor = COLOR_WHITE;
 
@@ -1391,8 +1474,11 @@ static inline void easyEditor_pushSlider_(EasyEditor *e, char *name, float *valu
 		}
 
 		
-
-		renderDrawRect(handleRect, 1, handleColor, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+		
+		V3 pos = {};
+		pos.xy = getCenter(handleRect);
+		pos.z = 1;
+		renderTextureCentreDim(findTextureAsset("easy_engine_blank_circle.png"), pos, getDim(handleRect), handleColor, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix, mat4());
 
 	///////////////////////*************advance the cursor ************////////////////////
 

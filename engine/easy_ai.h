@@ -46,6 +46,10 @@ typedef struct {
 	EasyAi_Node *freeList;
 
 	EasyAi_Mode aiMode;
+	
+	V3 searchBouys[8]; 
+	int searchBouysCount;
+	int bouyIndexAt;	
 } EasyAiController;
 
 static EasyAiController *easyAi_initController(Arena *allocationArena) {
@@ -57,7 +61,42 @@ static EasyAiController *easyAi_initController(Arena *allocationArena) {
 	result->allocationArena = allocationArena;
 	result->aiMode = EASY_AI_IDLE;
 
+	result->bouyIndexAt = 0;
+	result->searchBouysCount = 0;
+
 	return result;
+}
+
+static int easyAi_hasSearchBouy(EasyAiController *controller, V3 position) {
+	int result = -1;
+	for(int i = 0; i < controller->searchBouysCount && result < 0; ++i) {
+	    V3 *value = &controller->searchBouys[i];
+		if(value->x == position.x && value->y == position.y && value->z == position.z) {
+			result = i;
+			break;
+		}
+	}
+	return result;
+}
+
+static bool easyAi_pushSearchBouy(EasyAiController *controller, V3 position) {
+	bool result = false;
+	if(controller->searchBouysCount < arrayCount(controller->searchBouys)) {
+		controller->searchBouys[controller->searchBouysCount++] = position;
+		result = true;
+	} 
+	return result;
+}
+
+static void easyAi_removeSearchBouy(EasyAiController *controller, int index) {
+	assert(controller->searchBouysCount > index);
+
+	//move everything down
+	for(int i = index; i < (controller->searchBouysCount - 1); ++i) {
+		controller->searchBouys[i] = controller->searchBouys[i + 1];	
+	}
+	controller->searchBouysCount--;
+
 }
 
 static bool easyAi_pushNode(EasyAiController *controller, V3 pos, EasyAi_Node **boardHash, bool canSeePlayerFrom) {

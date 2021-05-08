@@ -551,8 +551,8 @@ int main(int argc, char *args[]) {
         sunTransform.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
         
         EasyLight *light = easy_makeLight(&sunTransform, EASY_LIGHT_DIRECTIONAL, 1.0f, v3(1, 1, 1));
-        easy_addLight(globalRenderGroup, light); //ignore first light in rendergroup for pixel art programs? 
         light->shadowMapId = shadowMapBuffer.depthId;
+        easy_addLight(globalRenderGroup, light); 
         easy_addLight(shadowMapRenderGroup, light);
         easy_addLight(entitiesRenderGroup, light);
             
@@ -986,17 +986,45 @@ int main(int argc, char *args[]) {
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
 
-            sunTransform.pos = camera.pos;
-            // static float v = 0;
-            // v += 2*appInfo->dt;
-            // sunTransform.Q = eulerAnglesToQuaternion(0, smoothStep00(-0.1f*PI32, sin(v), PI32), 0);
-            sunTransform.Q = eulerAnglesToQuaternion(0, -0.28f*PI32, 0);
-            Matrix4 lightViewMatrix = mat4_transpose(easyTransform_getTransform_withoutScale(&sunTransform));
 
-            lightViewMatrix = Mat4Mult(lightViewMatrix, Matrix4_translate(mat4(), v3_negate(sunTransform.pos)));
 
-            //the sun is just the same position of the camera for now
-            light->worldToLightSpace = Mat4Mult(OrthoMatrixToScreen(20, 20*appInfo->aspectRatio_yOverX), lightViewMatrix);
+            //cast ray against floor to find reference point
+            {
+
+                V3 hitP;
+                float tAt;
+
+                EasyPlane floor = {};
+
+                floor.origin = v3(0, 0, 0);
+                floor.normal = v3(0, 0, -1);
+
+                EasyRay cameraRay = {};
+                cameraRay.origin = camera.pos;
+                cameraRay.direction = EasyCamera_getZAxis(&camera);
+
+
+                if(easyMath_castRayAgainstPlane(cameraRay, floor, &hitP, &tAt)) {
+
+                    float sunX = 80*(2*weatherState->timeOfDay - 1.f);
+                    float sunZ = 20*sin(weatherState->timeOfDay*PI32);
+                    light->T->pos = v3_plus(hitP, v3(sunX, -20, -sunZ));
+                    // easyConsole_pushV3(DEBUG_globalEasyConsole, light->T->pos);
+                    // easyConsole_pushV3(DEBUG_globalEasyConsole, camera.pos);
+
+                    light->rayDirection_towardsLight_inWorldSpace = normalizeV3(v3_minus(light->T->pos, hitP));
+
+
+                    //the sun is just the same position of the camera for now
+                    light->worldToLightSpace = Mat4Mult(OrthoMatrixToScreen(20, 20*appInfo->aspectRatio_yOverX), easy3d_lookAt(light->T->pos, hitP, v3(0, SIN45, -SIN45)));
+                } else {
+                    //Has to hit the ground 
+                    assert(false);
+                }
+
+            }
+           
+
 
             setViewTransform(shadowMapRenderGroup, mat4());
             setProjectionTransform(shadowMapRenderGroup, light->worldToLightSpace);
@@ -1199,6 +1227,11 @@ int main(int argc, char *args[]) {
             //SET DAY TIME COLOR
 
             V4 dayColor = v4(1, 1, 1, 1);
+
+            if(getTimeOfDay(weatherState) > 18) {
+                // dayColor = v4(1, 0.5, 0, 1); 
+            }
+
             float minColor = 0.4f;
 
             float timeDiff = 1.0f - (2*absVal(weatherState->timeOfDay - 0.5f)); //expand from -0.5f - 0.5f to between 0 - 1
@@ -1435,11 +1468,11 @@ int main(int argc, char *args[]) {
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   if((e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) || (e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE && e->chestIsOpen)) {
+                   if((e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) || ((e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) && e->chestIsOpen)) {
                        float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
 
                        float extraIntensity = 1;
-                       if(e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+                       if(e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) {
                             float diff_from_12 = absVal(12 - t_24hr);
                             extraIntensity = clamp01(diff_from_12 / 6);
                        }
@@ -1452,6 +1485,10 @@ int main(int argc, char *args[]) {
                }
                
            }
+
+           // if(isDown(gameKeyStates.gameButtons, BUTTON_CTRL)) {
+                // easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl doen");
+           // }
            ////////////////////////
 
            for(int i = 0; i < manager->entities.count; ++i) {
@@ -1611,6 +1648,16 @@ int main(int argc, char *args[]) {
                             n = n->next;
                         }
                     }
+
+                    for(int i = 0; i < aiController->searchBouysCount; ++i) {
+                        V3 *value = &aiController->searchBouys[i];
+
+                        Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(0.5f, 0.5f, 0)), v3(value->x, value->y, -0.1)); 
+                        setModelTransform(globalRenderGroup, T);
+                        renderDrawQuad(globalRenderGroup, COLOR_BLUE);
+                    }
+
+                    
                 }
             }
 
@@ -2006,7 +2053,7 @@ int main(int argc, char *args[]) {
                 
                 
                 // easyEditor_pushFloat1(appInfo->editor, "first float: ", &v.x);
-                // easyEditor_pushSlider(appInfo->editor, "value slider: ", &v.x, -10, 10);
+                // easyEditor_pushSlider(appInfo->editor, "value slider: ", &globalRenderGroup->shadowBias, 0, 0.005);
                 {
                     bool numberKeyWasPressed = false;
                     int newValue = 0;
@@ -2065,7 +2112,7 @@ int main(int argc, char *args[]) {
 
 
                 int animationOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN) {
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY) {
                     animationOn = easyEditor_pushList(appInfo->editor, "Animations: ", (char **)gameState->splatListAnimations.memory, gameState->splatListAnimations.count); 
                 }   
 
@@ -2159,17 +2206,30 @@ int main(int argc, char *args[]) {
                                 if(!e->aiController) {
                                     e->aiController = easyAi_initController(&globalPerSceneArena);    
                                 }
-                                
-
-                                if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
-                                    bool shiftDown = isDown(gameKeyStates.gameButtons, BUTTON_SHIFT);
-                                    bool addedNewNode = easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash, !shiftDown);
-                                    if(addedNewNode) {
-                                        easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
-                                    } else {
-                                        EasyAi_Node *found = easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
-                                        assert(found);
-                                        easyFlashText_addText(&globalFlashTextManager, "Removed Ai Tile");
+                                    
+                                if(isDown(gameKeyStates.gameButtons, BUTTON_CTRL)) {
+                                    easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl doen");
+                                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                        int bouyIndexAt = easyAi_hasSearchBouy(e->aiController, hitP);
+                                        if(bouyIndexAt >= 0) {
+                                            easyAi_removeSearchBouy(e->aiController, bouyIndexAt);
+                                             easyFlashText_addText(&globalFlashTextManager, "Removed Search Bouy");
+                                         } else {
+                                            easyAi_pushSearchBouy(e->aiController, hitP);  
+                                            easyFlashText_addText(&globalFlashTextManager, "Added Search Bouy");
+                                         }
+                                    }
+                                } else {
+                                    if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
+                                        bool shiftDown = isDown(gameKeyStates.gameButtons, BUTTON_SHIFT);
+                                        bool addedNewNode = easyAi_pushNode(e->aiController, hitP, e->aiController->boardHash, !shiftDown);
+                                        if(addedNewNode) {
+                                            easyFlashText_addText(&globalFlashTextManager, "Added Ai Tile");
+                                        } else {
+                                            EasyAi_Node *found = easyAi_removeNode(e->aiController, hitP, e->aiController->boardHash);
+                                            assert(found);
+                                            easyFlashText_addText(&globalFlashTextManager, "Removed Ai Tile");
+                                        }
                                     }
                                 }
                             }
@@ -2302,9 +2362,19 @@ int main(int argc, char *args[]) {
                         } break;
                         case EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY: {
                             if(pressed) {
-                                editorState->entitySelected = initEmptyTriggerWithRigidBody(gameState, manager, hitP);
+                                editorState->entitySelected = initEmptyTriggerWithRigidBody(gameState, manager, hitP, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
+
+                                if(animationOn > 0) {
+                                    Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
+
+                                    Entity *e = (Entity *)(editorState->entitySelected);
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+
+                                    e->sprite = 0;
+                                }
+
                                 justCreatedEntity = true;
                             }
                         } break;
@@ -2433,52 +2503,14 @@ int main(int argc, char *args[]) {
                     }
                 }
                 
-
-
-
-                // if(easyEditor_pushButton(appInfo->editor, "Save Level")) {
-                    
-                //     // gameScene_saveScene(manager, "scene1/");
-
-                //     easyFlashText_addText(&globalFlashTextManager, "SAVED");
-                // }
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS) ? "Bounds Off" : "Bounds On")) {
-                    DEBUG_DRAW_COLLISION_BOUNDS = !DEBUG_DRAW_COLLISION_BOUNDS;
-                    // manager->player->collider1->offset.y = 0;
-                }
-
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS) ? "Bounds Triggers Off" : "Bounds Triggers On")) {
-                    DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = !DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS;
-                }
-
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_TERRAIN) ? "Terrain Off" : "Terrain On")) {
-                    DEBUG_DRAW_TERRAIN = !DEBUG_DRAW_TERRAIN;
-                }
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_USE_ORTHO_MATRIX) ? "Ortho Off" : "Ortho On")) {
-                    DEBUG_USE_ORTHO_MATRIX = !DEBUG_USE_ORTHO_MATRIX;
-                }
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_AI_BOARD_FOR_ENTITY) ? "Ai Grid Off" : "Ai Grid On")) {
-                    DEBUG_AI_BOARD_FOR_ENTITY = !DEBUG_AI_BOARD_FOR_ENTITY;
-                }
-                
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_LOCK_POSITION_TO_GRID) ? "Lock Pos Off" : "Lock Pos On")) {
-                    DEBUG_LOCK_POSITION_TO_GRID = !DEBUG_LOCK_POSITION_TO_GRID;
-                }
-
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_ANGLE_ENTITY_ON_CREATION) ? "Angle Entity Off" : "Angle Entity On")) {
-                    DEBUG_ANGLE_ENTITY_ON_CREATION = !DEBUG_ANGLE_ENTITY_ON_CREATION;
-                }
-                
-                
-                if(easyEditor_pushButton(appInfo->editor, (DEBUG_DRAW_SCENERY_TEXTURES) ? "Scenery Off" : "Scenery On")) {
-                    DEBUG_DRAW_SCENERY_TEXTURES = !DEBUG_DRAW_SCENERY_TEXTURES;
-                }
+                easyEditor_pushCheckBox(appInfo->editor, "Bounds", &DEBUG_DRAW_COLLISION_BOUNDS);
+                easyEditor_pushCheckBox(appInfo->editor, "Bounds Triggers", &DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS);
+                easyEditor_pushCheckBox(appInfo->editor, "Terrain", &DEBUG_DRAW_TERRAIN);
+                easyEditor_pushCheckBox(appInfo->editor, "Ortho Camera", &DEBUG_USE_ORTHO_MATRIX);
+                easyEditor_pushCheckBox(appInfo->editor, "Ai Grid", &DEBUG_AI_BOARD_FOR_ENTITY);
+                easyEditor_pushCheckBox(appInfo->editor, "Lock position", &DEBUG_LOCK_POSITION_TO_GRID);
+                easyEditor_pushCheckBox(appInfo->editor, "Angle Entity", &DEBUG_ANGLE_ENTITY_ON_CREATION);
+                easyEditor_pushCheckBox(appInfo->editor, "Scenery", &DEBUG_DRAW_SCENERY_TEXTURES);
 
                 if(easyEditor_pushButton(appInfo->editor, "Zero Pos Player")) {
                     ((Entity *)(manager->player))->T.pos.xy = v2(0, 0);
@@ -2665,9 +2697,20 @@ int main(int argc, char *args[]) {
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->chestType, e->T.id, gameState->currentSceneName); e->chestType = (ChestType)easyEditor_pushList_withIds(appInfo->editor, "Chest Type: ", MyEntity_ChestTypeStrings, arrayCount(MyEntity_ChestTypeStrings), e->T.id, gameState->currentSceneName);
                     }
 
+                    if(e->type == ENTITY_WEREWOLF) {
+                        bool value = (bool)(e->subEntityType & ENEMY_IGNORE_PLAYER);
+                        easyEditor_pushCheckBox(appInfo->editor, "Ingore Player", &value);
+
+                        if(!value) {
+                           e->subEntityType &= ~ENEMY_IGNORE_PLAYER;
+                        } else {
+                            e->subEntityType |= ENEMY_IGNORE_PLAYER;
+                        }
+                        
+                    }
 
                     
-                    if(e->type == ENTITY_LAMP_POST) {
+                    if(e->type == ENTITY_LAMP_POST || e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) {
                         V4 lColor = {};
                         lColor.xyz = e->lightColor;
                         lColor.w = 1;
@@ -2683,7 +2726,7 @@ int main(int argc, char *args[]) {
 
 
                     if(e->type == ENTITY_TRIGGER || e->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
-                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->triggerType, e->T.id, gameState->currentSceneName); (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
+                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->triggerType, e->T.id, gameState->currentSceneName); e->triggerType = (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
                         
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->locationSoundType, e->T.id, gameState->currentSceneName); e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList_withIds(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings), e->T.id, gameState->currentSceneName);
                     
@@ -3611,7 +3654,9 @@ int main(int argc, char *args[]) {
 
             //clear 2d lights from render group
             globalRenderGroup->light2dCountForFrame = 0;
+            entitiesRenderGroup->light2dCountForFrame = 0;
 
+            /* //display shadow map 
             {
 
                 EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
@@ -3641,6 +3686,7 @@ int main(int argc, char *args[]) {
                 easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
 
             }
+            */
 
             easyOS_endFrame(resolution, screenDim, endBuffer->bufferId, appInfo, appInfo->hasBlackBars);
             DEBUG_TIME_BLOCK_FOR_FRAME_END(beginFrame, wasPressed(appInfo->keyStates.gameButtons, BUTTON_F4))

@@ -11,7 +11,12 @@ typedef enum {
 	ENTITY_SUB_TYPE_ONE_WAY_UP_PLATFORM = 1 << 1,
 	ENTITY_SUB_TYPE_SWORD = 1 << 2,
 	ENTITY_SUB_TYPE_CAT = 1 << 3,
+	ENEMY_IGNORE_PLAYER = 1 << 4
 } SubEntityType;
+
+typedef enum {
+	ENEMY_FIRE_BALL,
+} EntityEnemyType;
 
 typedef enum {
 	ENTITY_DIRECTION_LEFT,
@@ -1379,6 +1384,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 
 
+
 		if(!isHurt) {
 			// easyConsole_addToStream(DEBUG_globalEasyConsole, "werewolf is not hurt");
 
@@ -1393,9 +1399,22 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				werewolfMoveSpeed = gameState->werewolf_restSpeed;
 			}
 
-			
 			V3 playerInWorldP = roundToGridBoard(worldP, 1);
 			V3 entP_inWorld = roundToGridBoard(entP, 1);
+
+			if(entity->subEntityType & ENEMY_IGNORE_PLAYER) {
+				werewolfMoveSpeed = 1;
+				worldP = playerInWorldP = entity->aiController->searchBouys[entity->aiController->bouyIndexAt];
+				if(getLengthSqrV3(v3_minus(playerInWorldP, entP_inWorld)) < 1.0f) {
+
+					entity->aiController->bouyIndexAt++;
+
+					if(entity->aiController->bouyIndexAt >= entity->aiController->searchBouysCount) {
+						entity->aiController->bouyIndexAt = 0;
+					}
+				}
+			} 
+
 
 			EasyAi_A_Star_Result aiResult = easyAi_update_A_star(entity->aiController, entP_inWorld,  playerInWorldP);
 
@@ -1419,7 +1438,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			} else {
 				animToAdd = gameState_findSplatAnimation(gameState, "SIdle_4.png");
 			}
-
 
 
 			V3 diff = v3_minus(worldP, entP);
@@ -1520,28 +1538,30 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 	if(entity->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
-		if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+		if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || entity->triggerType == ENTITY_TRIGGER_FIRE_POST) {
 
 			if(entity->chestIsOpen) {
 				//do nothing				
 			} else {
 
-				entity->sprite = findTextureAsset("woodFire.png");
+				Animation *fireAnimation = 0;
+				if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+					entity->sprite = findTextureAsset("woodFire.png");
+					fireAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
+				} else {
+					entity->sprite = gameState_findSplatTexture(gameState, "firePost");
+					fireAnimation = gameState_findSplatAnimation(gameState, "firePostAniamted_5.png");
+				}
+				
 
 				if(entity->collider1->collisions.count > 0) {
 					MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
 					if(info.found && gameState->lastCheckPointId != entity->T.id) {
-						//play sound to say saved checkpoint
-						playGameSound(&globalLongTermArena, gameState->gongSound, 0, AUDIO_FOREGROUND);
-
-						//save your checkpoint state
-						gameState->lastCheckPointId = entity->T.id;
-						gameState->lastCheckPointSceneName = gameState->currentSceneName;
-
-						easyConsole_addToStream(DEBUG_globalEasyConsole, "Playing ANimation");
+						
+						// easyConsole_addToStream(DEBUG_globalEasyConsole, "Playing ANimation");
 						//turn fire on
 						entity->sprite = 0;
-						Animation *fireAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
+						
 						easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, fireAnimation, EASY_ANIMATION_PERIOD);	
 						
 						entity->chestIsOpen = true;
@@ -1572,24 +1592,34 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 						entity->currentSound->outerRadius = 1.0f;
 
 
-						///// Show help message
-    					//The dialog options 
-    					// Make the temporary talk node
-    					{
-        					gameState->gameDialogs.perDialogArenaMark = takeMemoryMark(&gameState->gameDialogs.perDialogArena);
+						//extra stuff it is a save fire
+						if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+							//play sound to say saved checkpoint
+							playGameSound(&globalLongTermArena, gameState->gongSound, 0, AUDIO_FOREGROUND);
 
-        					gameState->currentTalkText = constructDialogNode(&gameState->gameDialogs);
-        					pushTextToNode(gameState->currentTalkText, "{s: 3}Sleeping at campfires will save your progress. Once lit, you can navigate back to them.");
+							//save your checkpoint state
+							gameState->lastCheckPointId = entity->T.id;
+							gameState->lastCheckPointSceneName = gameState->currentSceneName;
 
-    					}
+							///// Show help message
+	    					//The dialog options 
+	    					// Make the temporary talk node
+	    					{
+	        					gameState->gameDialogs.perDialogArenaMark = takeMemoryMark(&gameState->gameDialogs.perDialogArena);
 
-    					gameState->gameModeType = GAME_MODE_READING_TEXT;
-    					gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
-    					gameState->enteredTalkModeThisFrame = true;
-    					
-    					gameState->messageIndex = 0; //start at the begining
-    					easyFontWriter_resetFontWriter(&gameState->fontWriter);
-						///////////////////////////////////////////////////////
+	        					gameState->currentTalkText = constructDialogNode(&gameState->gameDialogs);
+	        					pushTextToNode(gameState->currentTalkText, "{s: 3}Sleeping at campfires will save your progress. Once lit, you can navigate back to them.");
+
+	    					}
+
+	    					gameState->gameModeType = GAME_MODE_READING_TEXT;
+	    					gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
+	    					gameState->enteredTalkModeThisFrame = true;
+	    					
+	    					gameState->messageIndex = 0; //start at the begining
+	    					easyFontWriter_resetFontWriter(&gameState->fontWriter);
+							///////////////////////////////////////////////////////
+	    				}
 
 					} 
 				}
@@ -2191,11 +2221,12 @@ static Entity *initSeagull(GameState *gameState, EntityManager *manager, V3 worl
 
 
 
-static Entity *initEmptyTriggerWithRigidBody(GameState *gameState, EntityManager *manager, V3 worldP) {
-    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(0.3f, 0.3f), gameState, ENTITY_TRIGGER_WITH_RIGID_BODY, 0, &globalWhiteTexture, COLOR_WHITE, -1, true);
+static Entity *initEmptyTriggerWithRigidBody(GameState *gameState, EntityManager *manager, V3 worldP, Texture *texture) {
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(0.3f, 0.3f), gameState, ENTITY_TRIGGER_WITH_RIGID_BODY, 0, texture, COLOR_WHITE, -1, true);
     e->triggerType = ENTITY_TRIGGER_NULL;
     e->collider1->dim2f = v2(2, 2);
     e->T.pos.z = -0.5f;
+    e->flags |= (int)ENTITY_SHOULD_SAVE_ANIMATION;
     return e;
 }
 
@@ -2339,7 +2370,7 @@ static Entity *initChest(GameState *gameState, EntityManager *manager, V3 worldP
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_CHEST, 0, findTextureAsset("chest.png"), COLOR_WHITE, -1, true);
 	float w = 0.7f;
 	e->T.scale = v3(w, e->sprite->aspectRatio_h_over_w*w, 1);
-	e->T.pos.z = -0.5;
+	e->T.pos.z = -0.37;
 
 	e->collider->dim2f.x = 0.7f;
 	e->collider->dim2f.y = 0.7f;
@@ -2378,9 +2409,16 @@ static Entity *initShootTrigger(GameState *gameState, EntityManager *manager, V3
 
 
 static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 worldP) {
-	float blockDim = 0.5;
+	float blockDim = 1.0;
 
-	Entity *e = initEntity(manager, 0, worldP, v2(blockDim, blockDim), v2(0.5f, 0.5f), gameState, ENTITY_BLOCK_TO_PUSH, gameState->inverse_weight, findTextureAsset("crate.jpg"), COLOR_WHITE, -1, true);
+	Texture *crateTexture = findTextureAsset("crate1.png");
+
+	if(crateTexture->normalMapId <= 0) {
+		Texture *normalT = findTextureAsset("crate1_n.png");
+		crateTexture->normalMapId = normalT->id;
+	}
+
+	Entity *e = initEntity(manager, 0, worldP, v2(blockDim, blockDim), v2(0.5f, 0.5f), gameState, ENTITY_BLOCK_TO_PUSH, gameState->inverse_weight, crateTexture, COLOR_WHITE, -1, true);
 		
 	e->T.pos.z = -0.2f;
 	//Add triggers to see if player is pushing	
@@ -2439,7 +2477,7 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 			assert(false);
 		} break;
 		case ENTITY_TRIGGER_WITH_RIGID_BODY: {
-			newEntity = initEmptyTriggerWithRigidBody(gameState, manager, position);
+			newEntity = initEmptyTriggerWithRigidBody(gameState, manager, position, splatTexture);
 			newEntity->triggerType = triggerType;
 		} break;
 		case ENTITY_SHOOT_TRIGGER: {

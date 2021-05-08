@@ -29,5 +29,5 @@ void main (void) {
 
 
  //    //do nothing, this is what it's doing but it does this automatically
-    // gl_FragDepth = 0.5;//gl_FragCoord.z;
+    // gl_FragDepth = gl_FragCoord.z;
 }

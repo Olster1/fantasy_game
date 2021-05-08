@@ -47,6 +47,7 @@ float min(float a, float b) {
 #define forN(Count) forN_(Count, Count##Index)
 #define forNs(Count) forN_s(Count, Count##Index)
 
+#define SIN45 0.70710678118
 #define PI32 3.14159265359
 #define TAU32 6.283185307
 #define HALF_PI32 0.5f*PI32
@@ -288,6 +289,7 @@ typedef enum {
     BUTTON_DOWN,
     BUTTON_SPACE,
     BUTTON_SHIFT,
+    BUTTON_CTRL,
     BUTTON_ENTER,
     BUTTON_BACKSPACE,
     BUTTON_ESCAPE,

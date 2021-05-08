@@ -565,6 +565,7 @@ static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *sta
 	bool upArrowWasDown = isDown(state->gameButtons, BUTTON_UP);
 	bool downArrowWasDown = isDown(state->gameButtons, BUTTON_DOWN);
 	bool shiftWasDown = isDown(state->gameButtons, BUTTON_SHIFT);
+	bool ctrlWasDown = isDown(state->gameButtons, BUTTON_CTRL);
 	bool commandWasDown = isDown(state->gameButtons, BUTTON_COMMAND);
 	bool spaceWasDown = isDown(state->gameButtons, BUTTON_SPACE);
 	/////
@@ -788,16 +789,14 @@ static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *sta
     
 	bool shiftIsDown = keystates[SDL_SCANCODE_LSHIFT];
 	bool commandIsDown = keystates[SDL_SCANCODE_LGUI];
+	bool ctrlIsDown = keystates[SDL_SCANCODE_LCTRL];
 
-	if(shiftIsDown) {
-		int u = 0;
-	}
-	
 	sdlProcessGameKey(&state->gameButtons[BUTTON_LEFT], leftArrowIsDown, leftArrowWasDown == leftArrowIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_RIGHT], rightArrowIsDown, rightArrowWasDown == rightArrowIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_DOWN], downArrowIsDown, downArrowWasDown == downArrowIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_UP], upArrowIsDown, upArrowWasDown == upArrowIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_SHIFT], shiftIsDown, shiftWasDown == shiftIsDown);
+	sdlProcessGameKey(&state->gameButtons[BUTTON_CTRL], ctrlIsDown, ctrlWasDown == ctrlIsDown);
 	sdlProcessGameKey(&state->gameButtons[BUTTON_COMMAND], commandIsDown, commandWasDown == commandIsDown);
 
 	if(isDown(state->gameButtons, BUTTON_LEFT)) {

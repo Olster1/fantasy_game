@@ -150,7 +150,7 @@
 #define PI32 3.14159265359
 #define RENDER_HANDNESS 1 //positive is left hand handess -> z going into the screen. 
 #define NEAR_CLIP_PLANE 0.1f
-#define FAR_CLIP_PLANE 1000.0f
+#define FAR_CLIP_PLANE 100.0f
 
 #if !defined EASY_MATH_H
 #include "easy_math.h"
@@ -244,6 +244,7 @@ typedef struct {
         };
     };
 
+    V3 rayDirection_towardsLight_inWorldSpace; //only for directional lights
     u32 shadowMapId;
     Matrix4 worldToLightSpace;
 } EasyLight;
@@ -1965,8 +1966,8 @@ static FrameBuffer createFrameBuffer(int width, int height, int flags, int numCo
                 float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
                 glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);  
                 
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 
             } else {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, 0);
@@ -2833,6 +2834,7 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
                 textureNormalId = textureId_Normal;
             } 
 
+
             easy_BindTexture("normal_tex", 4, textureNormalId, program); //only one texture per draw call            
 
             GLint eyepos = glGetUniformLocation(program->glProgram, "eye_worldspace"); 
@@ -2842,9 +2844,14 @@ void drawVao(VaoHandle *bufferHandles, RenderProgram *program, ShapeType type, u
 
             //add the sun transform
             if(group->lightCount > 0) {
+                EasyLight *sun = group->lights[0];
                 easy_BindTexture("shadowMapSampler", 5, group->lights[0]->shadowMapId, program);   
-                glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "worldToSunSpace"), 1, GL_FALSE, group->lights[0]->worldToLightSpace.E_);
+                glUniformMatrix4fv(glGetUniformLocation(program->glProgram, "worldToSunSpace"), 1, GL_FALSE, sun->worldToLightSpace.E_);
                 renderCheckError();
+
+                glUniform3f(glGetUniformLocation(program->glProgram, "sunDirection"), sun->rayDirection_towardsLight_inWorldSpace.x, sun->rayDirection_towardsLight_inWorldSpace.y, sun->rayDirection_towardsLight_inWorldSpace.z);
+                renderCheckError();
+
             } 
         }
 

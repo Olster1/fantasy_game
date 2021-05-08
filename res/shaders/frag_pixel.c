@@ -2,6 +2,7 @@ uniform sampler2D tex;
 
 uniform sampler2D shadowMapSampler; //for the sun
 uniform mat4 worldToSunSpace; 
+uniform vec3 sunDirection; //moving towards the sun 
 
 uniform vec4 timeOfDayColor;
 
@@ -15,6 +16,7 @@ in vec3 fragPos;
 in mat3 modelToWorldMatrix;
 
 out vec4 color;
+
 
 struct Light {
     vec3 pos;
@@ -91,8 +93,11 @@ void main (void) {
     float shadowFactor = 1.0;
 
     vec4 timeOfDayColor_ = timeOfDayColor;
-    float bias = 0;//0.005;
-    if((uv_shadowSpace.z - bias) > closestDepth) {
+    //the bias is due to shadow acne where more than one texel is mapping to the same spot on the shadow map. This doesn't matter when the light is parrallel to the surface normal, but matters alot when they are perpindicular to the normal - dotProduct approaches 0 
+    
+    float shadowBias = max(0.00005*(1.0f - dot(normalInWorldSpace, sunDirection)), 0.0005);
+    if((uv_shadowSpace.z - shadowBias) > closestDepth) {
+        // //in shadow
         shadowFactor = 0;
         timeOfDayColor_ = vec4(0.4, 0.4, 0.4, 1);
     }  
@@ -108,7 +113,7 @@ void main (void) {
 
     vec4 sampleColor = preMultAlphaColor*texColor;
     vec4 ambientColor = timeOfDayColor_*sampleColor;
-    vec4 specularColor = shadowFactor*specFactor*vec4(1, 1, 1, 0);
+    vec4 specularColor = specFactor*vec4(1, 1, 1, 0);
     vec4 diffuseColor = shadowFactor*vec4(lightInfluence, 0)*sampleColor;
 
 	vec4 c = vec4(ambientColor + diffuseColor + specularColor);//timeOfDayColor*preMultAlphaColor*texColor + specFactor*vec4(1, 1, 1, 1) + diff*preMultAlphaColor*texColor;
