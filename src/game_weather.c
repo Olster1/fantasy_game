@@ -1,3 +1,5 @@
+#define DEFAULT_DAY_NIGHT_SPEED 0.001f
+
 typedef struct {
 	float timeOfDay; //0 - 1,  0.5f being midday
 	float timeOfDaySpeed;
@@ -7,7 +9,7 @@ static inline GameWeatherState *initWeatherState() {
 	GameWeatherState *state = pushStruct(&globalLongTermArena, GameWeatherState);
 
 	state->timeOfDay = 0.5f;
-	state->timeOfDaySpeed= 0.001f;
+	state->timeOfDaySpeed = DEFAULT_DAY_NIGHT_SPEED;
 	return state;
 }
 

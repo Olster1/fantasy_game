@@ -6,12 +6,11 @@ typedef enum {
 	EDITOR_CREATE_SCENERY_RIGID_BODY,
 	EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY,
 	EDITOR_CREATE_CHEST,
-	EDITOR_CREATE_SKELETON,
+	EDITOR_CREATE_ENEMY,
 	EDITOR_CREATE_CHECKPOINT,
 	EDITOR_CREATE_TORCH,
 	EDITOR_CREATE_AUDIO_CHECKPOINT,
 	EDITOR_CREATE_TERRAIN,
-	EDITOR_CREATE_WEREWOLF,
 	EDITOR_CREATE_SWORD,
 	EDITOR_CREATE_SIGN,
 	EDITOR_CREATE_SHEILD,
@@ -47,7 +46,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Board Mode", "Scenery", "Scenery with RB",  "Trigger With Rigid Body", "Chest", "Skeleton", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Werewolf", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "House","Lamp Post", "Empty Trigger", "Seagull", "Entity Creator", "Ai state", "Fog", "Shoot Trigger"};
+char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Board Mode", "Scenery", "Scenery with RB",  "Trigger With Rigid Body", "Chest", "Enemy", "Checkpoint", "Torch", "Audio Checkpoint", "Terrain2d", "Sword", "Sign", "Sheild", "3d model", "push block", "Horse", "House","Lamp Post", "Empty Trigger", "Seagull", "Entity Creator", "Ai state", "Fog", "Shoot Trigger"};
 
 typedef struct {
 	void *entitySelected;
@@ -61,7 +60,8 @@ typedef struct {
 	V2 startMouseP_inWorldP;
 	//
 
-
+	float lerpTowardsTimer;
+	V2 startLerpP;
 
 	Array_Dynamic entitiesDeletedBuffer;
 
@@ -70,6 +70,11 @@ typedef struct {
 	int idsLastSelectedCount;
 	int idsLastSelected[512];
 	//////////////////////////////////
+
+
+	//// For making walls on a vertical plane
+	V3 lastcreatedTileP_onGround;
+
 
 
 	EditorTileOption tileOption;
@@ -110,6 +115,9 @@ static EditorState *initEditorState(Arena *arena) {
 
 	result->gizmoSelect = EDITOR_GIZMO_NONE;
 	result->startMouseP_inWorldP = v2(0, 0);
+
+	result->lerpTowardsTimer = -1;
+	result->startLerpP = v2(0, 0);
 
 	initArray(&result->entitiesDeletedBuffer, EditorUndoState);
 
@@ -174,3 +182,8 @@ typedef struct {
     V3 hitP;
     V3 entP;
 } EditorEntitySelectInfo;
+
+static void lerpToSelectedEntity(EditorState *editorState, V2 pos) {
+	editorState->startLerpP = pos;
+	editorState->lerpTowardsTimer = 0;
+}

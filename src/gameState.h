@@ -8,7 +8,7 @@ FUNC(ENTITY_HEALTH_POTION_1)\
 FUNC(ENITY_AUDIO_CHECKPOINT)\
 FUNC(ENITY_CHECKPOINT)\
 FUNC(ENTITY_TERRAIN)\
-FUNC(ENTITY_WEREWOLF)\
+FUNC(ENTITY_ENEMY)\
 FUNC(ENTITY_SWORD)\
 FUNC(ENTITY_SIGN)\
 FUNC(ENTITY_SHEILD)\
@@ -66,6 +66,7 @@ FUNC(ENTITY_TRIGGER_LOCATION_SOUND)\
 FUNC(ENTITY_TRIGGER_LOAD_SCENE)\
 FUNC(ENTITY_TRIGGER_SAVE_BY_FIRE)\
 FUNC(ENTITY_TRIGGER_FIRE_POST)\
+FUNC(ENTITY_TRIGGER_OPEN_GATE_WITH_KEY)\
 
 
 typedef enum {
@@ -159,6 +160,7 @@ static ItemAnimationInfo items_initItemAnimation(V2 startP, V2 endP, EntityType 
 
 
 #define MY_TILE_TYPE(FUNC) \
+FUNC(WORLD_TILE_NULL)\
 FUNC(WORLD_TILE_GRASS)\
 FUNC(WORLD_TILE_LAVA)\
 FUNC(WORLD_TILE_ROCK)\
@@ -169,6 +171,10 @@ FUNC(WORLD_TILE_PATH2)\
 FUNC(WORLD_TILE_PATH3)\
 FUNC(WORLD_TILE_PATH4)\
 FUNC(WORLD_TILE_PATH5)\
+FUNC(WORLD_TILE_PATH_NUB1)\
+FUNC(WORLD_TILE_PATH_NUB2)\
+FUNC(WORLD_TILE_PATH_NUB3)\
+FUNC(WORLD_TILE_PATH_NUB4)\
 FUNC(WORLD_TILE_BEACH)\
 FUNC(WORLD_TILE_SEA)\
 FUNC(WORLD_TILE_SEA1)\
@@ -184,18 +190,36 @@ FUNC(WORLD_TILE_PIER_SAND_CORNER_RIGHT)\
 FUNC(WORLD_TILE_PIER_SEA_CORNER_RIGHT)\
 FUNC(WORLD_TILE_PIER_SEA_CORNER_LEFT)\
 FUNC(WORLD_TILE_DIRT)\
+FUNC(WORLD_TILE_BRICK)\
+
+
 
 
 typedef enum {
     MY_TILE_TYPE(ENUM)
 } WorldTileType;
 
+#define MY_TILE_ROTATION_TYPE(FUNC)\
+FUNC(WORLD_TILE_ROTATION_FLAT)\
+FUNC(WORLD_TILE_ROTATION_UP)\
+FUNC(WORLD_TILE_ROTATION_SIDE)\
+
+typedef enum {
+	MY_TILE_ROTATION_TYPE(ENUM)
+} WorldTileRotation;
+
+static char *MyTile_TileRotationTypeStrings[] = { MY_TILE_ROTATION_TYPE(STRING) };
 static char *MyTiles_TileTypeStrings[] = { MY_TILE_TYPE(STRING) };
 
 typedef struct {
 	WorldTileType type;
-	int x;
-	int y;
+	float x;
+	float y;
+	float z;
+
+	float yAxis;
+
+	WorldTileRotation rotation;
 
 	EasyAnimation_Controller animationController;
 } WorldTile;
@@ -343,6 +367,8 @@ typedef struct {
 	float werewolf_knockback_distance;
 	float player_knockback_distance;
 
+	///////////////////////////
+	PlayingSound *currentBackgroundSound;
 
 	//EDITOR STATE
 	bool isEditorOpen;
@@ -564,6 +590,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	//////////////////////////////////////
 	state->rotationUpdate = 0;
 
+	state->currentBackgroundSound = 0;
+
 	/////////////////// INVENTORY PARTICLE SYSTEM//////////////////////////////
 
     particle_system_settings ps_set = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 3.0f);
@@ -693,17 +721,20 @@ static Animation *gameState_findSplatAnimation(GameState *gameState, char *name)
 }
 
 
-static inline bool addWorldTile(GameState *gameState, int x, int y, WorldTileType type) {
+static inline bool addWorldTile(GameState *gameState, float x, float y, float z, float tileYAxis, WorldTileType type, WorldTileRotation rotation) {
 	bool didAdd = false;
 
-	x = x - (x % GLOBAL_WORLD_TILE_SIZE);
-	y = y - (y % GLOBAL_WORLD_TILE_SIZE);
+	//don't need to do this since GLOBAL_WORLD_TILE_SIZE is 1 now
+	// x = x - (x % GLOBAL_WORLD_TILE_SIZE);
+	// y = y - (y % GLOBAL_WORLD_TILE_SIZE);
+	// z = z - (z % GLOBAL_WORLD_TILE_SIZE);
+
 	WorldTile *foundTile = 0;
 	//look for tile first
 	for(int i = 0; i < gameState->tileSheet.tileCount && !foundTile; ++i) {
 	    WorldTile *t = gameState->tileSheet.tiles + i;
 
-	    if(t->x == x && t->y == y) {
+	    if(t->x == x && t->y == y && t->z == z && t->rotation == rotation) {
 	    	foundTile = t;
 	    	didAdd = true;
 	    	break;
@@ -719,7 +750,11 @@ static inline bool addWorldTile(GameState *gameState, int x, int y, WorldTileTyp
 	if(foundTile) {
 		foundTile->x = x;
 		foundTile->y = y;
+		foundTile->z = z;
 		foundTile->type = type; 
+		foundTile->rotation = rotation; 
+		foundTile->yAxis = tileYAxis;
+
 
 		easyAnimation_initController(&foundTile->animationController);
 	}

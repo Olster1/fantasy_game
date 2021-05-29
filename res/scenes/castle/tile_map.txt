@@ -1,0 +1,41 @@
+{
+
+	type: "ENTITY_TILE_MAP";
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 1.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 2.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 3.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 4.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 18.000000 4.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 17.000000 4.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 17.000000 3.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 5.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 19.000000 6.000000 0.000000;
+}
+

@@ -101,6 +101,10 @@ inline void removeParticleBitmap(particle_system_settings *Settings, int index) 
     
 }
 
+inline void removeAllParticleBitmaps(particle_system_settings *Settings) {
+    Settings->BitmapCount = 0;
+}
+
 internal inline particle_system_settings InitParticlesSettings(ParticleSystemType type, float maxLifeSpan) {
     particle_system_settings Set = {};
     Set.MaxLifeSpan = Set.LifeSpan = maxLifeSpan;

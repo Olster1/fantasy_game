@@ -11,13 +11,13 @@
 #define invalidCodePathStr(msg) if(!(statement)) { int *i_ = 0; *i_ = 0; }
 #endif
 
-#if !defined assert 
-#if  //easy assert
-#define assert(statement) if(!(statement)) {printf("Something went wrong at %d", __LINE__); exit(0);}
-#else 
-#define assert(statement) if(!(statement)) { int *i_ = 0; *i_ = 0; }
-#endif
-#endif
+// #if !defined assert 
+// #if  //easy assert
+// #define assert(statement) if(!(statement)) {printf("Something went wrong at %d", __LINE__); exit(0);}
+// #else 
+// #define assert(statement) if(!(statement)) { int *i_ = 0; *i_ = 0; }
+// #endif
+// #endif
 
 typedef struct Pool Pool;
 typedef struct Pool {
@@ -374,34 +374,49 @@ void removeElement_ordered(Array_Dynamic *array, int absIndex) {
 
     //////////// We can say info.indexAt < info.pool->indexAt must be true since we only ever increment the index at and when we free an
     //              item it just goes onto the free list  
-    if(info.pool && info.indexAt < info.pool->indexAt && info.indexAt >= 0 && isElmValid(info.pool, info.indexAt)) {
+    if(info.pool && info.indexAt < info.pool->indexAt && info.indexAt >= 0) {
+        if(isElmValid(info.pool, info.indexAt)) {
         
-        ValidIndex *validInd = 0;
-        if(array->freeList) {
-            //get off free list
-            validInd = array->freeList;
-            array->freeList = validInd->next;
-        } else {
-            //alloc new valid index
-            validInd = (ValidIndex *)calloc(sizeof(ValidIndex), 1);
-        }
-        assert(validInd);
-        //assgin info
-        validInd->index = info.indexAt;
-        validInd->pool = info.pool;
-        validInd->pool->inValid |= (u64)((u64)1 << (u64)info.indexAt);
-        
-        //
-        validInd->prev = array->freeIndexesSent.prev;
-        validInd->next = &array->freeIndexesSent;
+            ValidIndex *validInd = 0;
+            if(array->freeList) {
+                //get off free list
+                validInd = array->freeList;
+                array->freeList = validInd->next;
+            } else {
+                //alloc new valid index
+                validInd = (ValidIndex *)calloc(sizeof(ValidIndex), 1);
+            }
+            assert(validInd);
+            //assgin info
+            validInd->index = info.indexAt;
+            validInd->pool = info.pool;
+            validInd->pool->inValid |= (u64)((u64)1 << (u64)info.indexAt);
+            
+            //
+            validInd->prev = array->freeIndexesSent.prev;
+            validInd->next = &array->freeIndexesSent;
 
-        //append to end of list. So we can pull off from the beginning. 
-        array->freeIndexesSent.prev->next = validInd;
-        array->freeIndexesSent.prev = validInd;
+            //append to end of list. So we can pull off from the beginning. 
+            array->freeIndexesSent.prev->next = validInd;
+            array->freeIndexesSent.prev = validInd;
+        } else {
+            //NOTE: The index might not be valid but still at the end of the array in the case when an element gets removed while it is not at the end of the array
+            //NOTE: But then it becomes the end by the actual end one gets removed. When we remove elements we could walk down the array and while not valid keep decrementing. 
+            // assert(false);
+        }
 
         if(absIndex == array->count - 1) {
             // is last member on the array. 
             array->count--;
+
+            // PoolInfo info = {};
+            // do {
+            //     // is last member on the array. 
+            //     array->count--;
+
+            //     info = getPoolInfo(array, array->count - 1);   
+            
+            // } while(!isElmValid(info.pool, info.indexAt));
         }
     } else {
         // assert(false);
@@ -412,6 +427,7 @@ void removeElement_ordered(Array_Dynamic *array, int absIndex) {
 inline void easyArray_clear(Array_Dynamic *array) {
     for(int i = array->count - 1; i >= 0; --i) {
         removeElement_ordered(array, i);
+
     }
 }
 

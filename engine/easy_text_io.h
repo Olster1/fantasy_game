@@ -197,7 +197,16 @@ InfiniteAlloc *getDataObjects(EasyTokenizer *tokenizer) {
                 parsing = false;
             } break;
             case TOKEN_WORD: {
-                
+                DataObject data = {};
+                data.type = VAR_BOOL;
+                if(stringsMatchNullN("true", token.at, token.size)) {
+                    data.boolVal = true;
+                    addElementInifinteAlloc_(&tokenizer->typesArray, &data);
+                } else if(stringsMatchNullN("false", token.at, token.size)) {
+                    data.boolVal = false;
+                    addElementInifinteAlloc_(&tokenizer->typesArray, &data);
+                }
+               
             } break;
             case TOKEN_STRING: {
                 DataObject data = {};
@@ -232,16 +241,7 @@ InfiniteAlloc *getDataObjects(EasyTokenizer *tokenizer) {
                 addElementInifinteAlloc_(&tokenizer->typesArray, &data);
             } break;
             case TOKEN_BOOL: {
-                DataObject data = {};
-                data.type = VAR_BOOL;
-                bool value = false;
-                if(stringsMatchNullN("true", token.at, token.size)) {
-                    value = true;
-                } else if(stringsMatchNullN("false", token.at, token.size)) {
-                    //
-                }
-                data.boolVal = value;
-                addElementInifinteAlloc_(&tokenizer->typesArray, &data);
+                
             } break;
             case TOKEN_COLON: {
                 

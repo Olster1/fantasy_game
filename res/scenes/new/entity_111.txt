@@ -8,6 +8,7 @@
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	layer: -1.000000;
 	subtype: 0;
+	enemyType: "ENEMY_SKELETON";
 	spriteName: "woodFire";
 	colliderScale: 0.300000 0.300000;
 	colliderOffset: 0.000000 0.000000 0.000000;
@@ -20,6 +21,7 @@
 	triggerType: "ENTITY_TRIGGER_SAVE_BY_FIRE";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
 	animationName: "woodFire5.png";
 }
 

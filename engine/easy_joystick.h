@@ -43,7 +43,8 @@ static void easyControllers_closeControllers(EasyGameControllerState *state) {
     }
 }
 
-static void easyControllers_pollControllers(EasyGameControllerState *state, AppKeyStates *keyStates) { //returns controllers available
+static bool easyControllers_pollControllers(EasyGameControllerState *state, AppKeyStates *keyStates) { //returns controllers available
+    bool controllerConnected = false;
     int availableControllers = 0;
     for (int ControllerIndex = 0;
          ControllerIndex < EASY_CONTROLLER_MAX_CONTROLLERS;
@@ -97,6 +98,8 @@ static void easyControllers_pollControllers(EasyGameControllerState *state, AppK
 
             availableControllers++;
 
+            controllerConnected = true;
+
             if(ControllerIndex == 0) { //player 1 controller
                 keyStates->gameButtons[BUTTON_LEFT] = controller->buttons[BUTTON_LEFT];
                 keyStates->gameButtons[BUTTON_RIGHT] = controller->buttons[BUTTON_RIGHT];
@@ -118,4 +121,5 @@ static void easyControllers_pollControllers(EasyGameControllerState *state, AppK
             // TODO: This controller is note plugged in.
         }
     }
+    return controllerConnected;
 }

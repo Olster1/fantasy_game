@@ -848,7 +848,7 @@ static inline void easyOS_processKeyStates(OSAppInfo *appInfo, AppKeyStates *sta
 
 
 	//Poll the controllers
-	easyControllers_pollControllers(appInfo->joyStickState, state);
+	state->usingController = easyControllers_pollControllers(appInfo->joyStickState, state);
 	
 }
 
@@ -862,4 +862,45 @@ void easyOS_endKeyState(AppKeyStates *keystates) {
 
 	keystates->inputString = 0;
 	keystates->droppedFilePath = 0;
+}
+
+
+static u8 *easyOS_getExeFilePath() {
+	u8 *result = 0;
+#if _WIN32 
+	WCHAR path[MAX_PATH];
+	GetModuleFileNameW(NULL, path, MAX_PATH);
+
+	int bufferSize_inBytes = WideCharToMultiByte(
+	  CP_UTF8,
+	  0,
+	  path,
+	  -1,
+	  (LPSTR)result, 
+	  0,
+	  0, 
+	  0
+	);
+
+
+
+	result = pushArray(&globalLongTermArena, bufferSize_inBytes, u8);
+
+	WideCharToMultiByte(
+	  CP_UTF8,
+	  0,
+	  path,
+	  -1,
+	  (LPSTR)result, 
+	  bufferSize_inBytes,
+	  0, 
+	  0
+	);
+
+
+
+#else 
+	assert(false);
+#endif
+	return result;
 }

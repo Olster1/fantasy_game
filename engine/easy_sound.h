@@ -169,7 +169,7 @@ static void easySound_endSound(PlayingSound *sound) {
     //NOTE(ollie): Since the sound is in a linked list, we can't remove
     //NOTE(ollie):  it without prev pointer. So we just let the sound loop do it for us 
     sound->bytesAt = sound->wavFile->size;
-    sound->nextSound =0;
+    sound->nextSound = 0;
     // while(sound) {
         
     //     if(sound != nextSound) {

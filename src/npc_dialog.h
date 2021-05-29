@@ -6,6 +6,7 @@ FUNC(ENTITY_DIALOG_WEREWOLF_SIGN)\
 FUNC(ENTITY_DIALOG_WELCOME_SIGN)\
 FUNC(ENTITY_DIALOG_HOUSE)\
 FUNC(ENTITY_DIALOG_FOREST_RIP)\
+FUNC(ENTITY_DIALOG_LADY_CASTLE)\
 
 typedef enum {
     MY_DIALOG_TYPE(ENUM)
@@ -48,6 +49,7 @@ typedef struct {
 	EntityDialogNode *houseDialog;
 	EntityDialogNode *philosophyDialog;
 	EntityDialogNode *graveDialog;
+	EntityDialogNode *ladyOutsideCastle;
 	EntityDialogNode *errorDialogForDebugging;
 
 	Arena perDialogArena;
@@ -70,6 +72,7 @@ static void initDialogTrees(GameDialogs *gd) {
 
 	easyMemory_zeroStruct(&gd->perDialogArenaMark, MemoryArenaMark); 
 
+	//man dialog
 	{
 
 		EntityDialogNode *n = pushStruct(&globalLongTermArena, EntityDialogNode);	
@@ -99,7 +102,62 @@ static void initDialogTrees(GameDialogs *gd) {
 		pushConnectionNode(n1, n2, 1);
 		pushConnectionNode(n1, n2, 2);
 
+
+		////TODO: HERE WE CAN ADD ACTIONS LIKE ADD TO QUEST 
+
 	}
+
+	//lady castle dialog
+	{
+
+		EntityDialogNode *n = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		gd->ladyOutsideCastle = n;
+
+		pushTextToNode(n, "{s: 2}Are you going inside?");
+		pushChoiceToNode(n, "If I can find a way to get in.");
+		pushChoiceToNode(n, "What's it to you?");
+
+		EntityDialogNode *n1 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		pushTextToNode(n1, "{s: 2}Can you find my daughter inside? The Illoway army took her captive.");
+		pushChoiceToNode(n1, "Consider it done.");
+		pushChoiceToNode(n1, "No way.");
+
+		EntityDialogNode *n3 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		pushTextToNode(n3, "{s: 2}My daughter is inside. The Illoway army has taken her.");
+		pushTextToNode(n3, "{s: 2}I am to weak to enter myself. Can you find her for me?");
+		pushChoiceToNode(n3, "I can do this for you.");
+		pushChoiceToNode(n3, "What's in it for me?");
+
+		EntityDialogNode *n5 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		pushTextToNode(n5, "{s: 2}I have gold I can offer.");
+		pushChoiceToNode(n5, "Ok");
+		pushChoiceToNode(n5, "Sorry, I need to keep moving.");
+
+		EntityDialogNode *n2 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		pushTextToNode(n2, "{s: 2}Thankyou, I will be forever be in your debt.");
+		pushTextToNode(n2, "{s: 0.8}Please find her.");
+
+		EntityDialogNode *n4 = pushStruct(&globalLongTermArena, EntityDialogNode);	
+		pushTextToNode(n4, "{s: 2}Ok, I wish you well on your journey.");
+
+		pushConnectionNode(n, n1, 0);
+		pushConnectionNode(n, n3, 1);
+
+		pushConnectionNode(n1, n2, 0);
+		pushConnectionNode(n1, n4, 1);
+
+		pushConnectionNode(n3, n2, 0);
+		pushConnectionNode(n3, n5, 1);
+
+		pushConnectionNode(n5, n2, 0);
+		pushConnectionNode(n5, n4, 1);
+		
+
+		
+
+	}
+
+
 	//graveDialog
 	{
 		EntityDialogNode *n = pushStruct(&globalLongTermArena, EntityDialogNode);	
@@ -169,6 +227,8 @@ static EntityDialogNode *findDialogInfo(DialogInfoType type, GameDialogs *gd) {
 		result = gd->graveDialog;
 	} else if(type == ENTITY_DIALOG_HOUSE) {
 		result = gd->houseDialog;
+	} else if(type == ENTITY_DIALOG_LADY_CASTLE) {
+		result = gd->ladyOutsideCastle;
 	}
 
 	return result;

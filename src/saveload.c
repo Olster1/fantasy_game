@@ -43,6 +43,8 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
     InfiniteAlloc fileContents = initInfinteAlloc(char);
 
     InfiniteAlloc aiNodeData = initInfinteAlloc(float);
+
+
     
 	for(int i = 0; i < manager->entities.count; ++i) {
 	    Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -62,6 +64,8 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 	        addVar(&fileContents, &e->T.Q.E, "rotation", VAR_V4);
 	        addVar(&fileContents, &e->layer, "layer", VAR_FLOAT);
 	        addVar(&fileContents, (int *)(&e->subEntityType), "subtype", VAR_INT);
+
+            addVar(&fileContents, MyEntity_EnemyTypeStrings[(int)e->enemyType], "enemyType", VAR_CHAR_STAR);
 
 	        if(e->sprite) {
 	        	addVar(&fileContents, e->sprite->name, "spriteName", VAR_CHAR_STAR);
@@ -94,6 +98,20 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
                 addVarArray(&fileContents, aiNodeData.memory, aiNodeData.count, "aiNodes", VAR_FLOAT);
 
+                aiNodeData.count = 0;
+
+                //the search bouys
+                for(int i = 0; i < aiController->searchBouysCount; ++i) {
+                    V3 *n = &aiController->searchBouys[i];
+
+                    addElementInfinteAlloc_notPointer(&aiNodeData, n->x);
+                    addElementInfinteAlloc_notPointer(&aiNodeData, n->y);
+                    addElementInfinteAlloc_notPointer(&aiNodeData, n->z);
+                    
+                }
+
+                addVarArray(&fileContents, aiNodeData.memory, aiNodeData.count, "searchBouys", VAR_FLOAT);
+                aiNodeData.count = 0;
             }
 
 	        if(e->collider1) {
@@ -114,6 +132,11 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
             addVar(&fileContents, (float *)(&e->lightIntensity), "lightIntensity", VAR_FLOAT);
 
 
+            if(e->type == ENTITY_ENEMY) {
+                addVar(&fileContents, &e->enemyMoveSpeed, "enemyMoveSpeed", VAR_FLOAT);
+                
+            }
+
             addVar(&fileContents, &e->renderFirstPass, "renderFirstPass", VAR_INT);    
 
 
@@ -133,7 +156,10 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             addVar(&fileContents, &e->rateOfCreation, "rateOfCreation", VAR_FLOAT);
             addVar(&fileContents, MyEntity_EntityTypeStrings[(int)e->typeToCreate], "typeToCreate", VAR_CHAR_STAR);
-            
+                
+            bool shouldNotRender = e->flags & ENTITY_SHOULD_NOT_RENDER;
+            addVar(&fileContents, &shouldNotRender, "shouldNotRender", VAR_BOOL);
+
 
             if((e->flags & ENTITY_SHOULD_SAVE_ANIMATION) && !easyAnimation_isControllerEmpty(&e->animationController)) {
                    
@@ -174,6 +200,7 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 	    }
 	}
 
+    releaseInfiniteAlloc(&aiNodeData);
 
     ////////save the tile map
     char buffer[32];
@@ -187,8 +214,13 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
         addVar(&fileContents, MyTiles_TileTypeStrings[(int)t->type], "tileType", VAR_CHAR_STAR);
 
-        V2 pos = v2(t->x, t->y);
-        addVar(&fileContents, &pos, "tilePos", VAR_V2);
+        addVar(&fileContents, MyTile_TileRotationTypeStrings[(int)t->rotation], "tileRotationType", VAR_CHAR_STAR);
+
+        addVar(&fileContents, &t->yAxis, "tileYAxis", VAR_FLOAT);
+        
+
+        V3 pos = v3(t->x, t->y, t->z);
+        addVar(&fileContents, &pos, "tilePos", VAR_V3);
 
     }
 
@@ -239,7 +271,7 @@ static bool gameScene_doesSceneExist(char *sceneName_) {
 	return result;
 }
 
-static void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_) {
+static void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_, GameWeatherState *gameWeather) {
 	DEBUG_TIME_BLOCK()
 
 	gameState->currentSceneName = sceneName_;
@@ -263,6 +295,29 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 		platformCreateDirectory(allScenesFolderName);	
 		easyConsole_addToStream(DEBUG_globalEasyConsole, "Scene folder created");
 	}
+
+    //NOTE: update background sounds
+    if(gameState->currentBackgroundSound) {
+        easySound_endSound(gameState->currentBackgroundSound);
+        gameState->currentBackgroundSound = 0;
+    }
+
+    if(easyString_stringsMatch_nullTerminated("castle", gameState->currentSceneName)) {
+        gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("Castle.wav"), 0, AUDIO_BACKGROUND);
+        EasySound_LoopSound(gameState->currentBackgroundSound);
+
+        gameWeather->timeOfDay = 0;
+        gameWeather->timeOfDaySpeed = 0;
+
+    } else {
+        gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND);
+        EasySound_LoopSound(gameState->currentBackgroundSound);
+        
+        gameWeather->timeOfDay = 0.5f;
+        gameWeather->timeOfDaySpeed = DEFAULT_DAY_NIGHT_SPEED;
+    }
+
+    //////////////////////////////////////////////////////////////
 
 	//Check that this level exists
 	if(platformDoesDirectoryExist(fullSceneFolderPath)) {
@@ -294,6 +349,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		bool foundId = false;
         		int id = 0;
 
+                EntityEnemyType enemyType = ENEMY_SKELETON;
+
 
         		bool colliderSet = false;
         		bool colliderSet2 = false;
@@ -314,6 +371,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 V3 lightColor = v3(1, 0.5f, 0);
                 float lightIntensity = 2.0f;
 
+                bool shouldNotRender = false;
+
                 EntityTriggerType triggerType = ENTITY_TRIGGER_NULL;
 
                 ChestType chestType = CHEST_TYPE_HEALTH_POTION;
@@ -325,6 +384,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 EntityType entityToCreate;
                 float rateOfCreation;
+                float enemyMoveSpeed = 1;
 
                 EasyAiController *aiController = 0;
 
@@ -404,6 +464,30 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                                 
                             }
 
+                            //These are arrays
+                            if(stringsMatchNullN("searchBouys", token.at, token.size)) {
+                                if(!aiController) {
+                                    aiController = easyAi_initController(&globalPerSceneArena);
+                                }
+
+                                InfiniteAlloc *dataObjs = getDataObjects(&tokenizer);
+                                int indexAt = 0;
+                                while(indexAt < dataObjs->count) {
+
+                                    V3 pAt = makeV3FromDataObjects_notClearObjects(&tokenizer, indexAt);
+                                    indexAt += 3;
+
+                                    easyAi_pushSearchBouy(aiController, pAt);  
+                                    
+                                    assert((dataObjs->count - indexAt) % 3 == 0);
+                                }
+
+                                dataObjs->count = 0;
+                                
+                            }
+
+
+                            
 
                             if(stringsMatchNullN("levelToLoad", token.at, token.size)) {
                                 char *loadString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
@@ -412,8 +496,17 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                             }
 
 
+                            if(stringsMatchNullN("shouldNotRender", token.at, token.size)) {
+                                shouldNotRender = getBoolFromDataObjects(&tokenizer);
+                            }
+
+
                             if(stringsMatchNullN("rateOfCreation", token.at, token.size)) {
                                 rateOfCreation = getFloatFromDataObjects(&tokenizer);
+                            }
+
+                            if(stringsMatchNullN("enemyMoveSpeed", token.at, token.size)) {
+                                enemyMoveSpeed = getFloatFromDataObjects(&tokenizer);
                             }
 
                             if(stringsMatchNullN("typeToCreate", token.at, token.size)) {
@@ -452,8 +545,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                             }
                             if(stringsMatchNullN("colliderOffset2", token.at, token.size)) {
                                 colliderOffset2 = buildV3FromDataObjects(&tokenizer);
-                            }
+                            }   
 
+                            if(stringsMatchNullN("enemyType", token.at, token.size)) {
+                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                enemyType = (EntityEnemyType)findEnumValue(typeString, MyEntity_EnemyTypeStrings, arrayCount(MyEntity_EnemyTypeStrings));
+
+                            }
 
                     		if(stringsMatchNullN("type", token.at, token.size)) {
                     			char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
@@ -571,11 +670,15 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 if(entType == ENTITY_TILE_MAP) {
                     parsing = true;
                     tokenizer = lexBeginParsing((char *)contents.memory, EASY_LEX_OPTION_EAT_WHITE_SPACE);
+                    WorldTileType tileType; 
+                    WorldTileRotation rotationType = WORLD_TILE_ROTATION_FLAT;
+                    float tileYAxis = 0;
+
                     while(parsing) {
                         EasyToken token = lexGetNextToken(&tokenizer);
                         InfiniteAlloc *data = 0;
                         bool ranOutOfTileRooms = false;
-                        WorldTileType tileType; 
+                        
 
                         switch(token.type) {
                             case TOKEN_NULL_TERMINATOR: {
@@ -584,9 +687,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                             } break;
                             case TOKEN_WORD: {
                                 if(stringsMatchNullN("tilePos", token.at, token.size) && !ranOutOfTileRooms) {
-                                    V2 p = buildV2FromDataObjects(&tokenizer);
+                                    // V2 p = buildV2FromDataObjects(&tokenizer);
+                                    V3 p = buildV3FromDataObjects(&tokenizer);
 
-                                    ranOutOfTileRooms = !addWorldTile(gameState, p.x, p.y, tileType);
+                                    ranOutOfTileRooms = !addWorldTile(gameState, p.x, p.y, p.z, tileYAxis, tileType, rotationType);
                                     if(ranOutOfTileRooms) { easyFlashText_addText(&globalFlashTextManager, "Tile Array Full. Make bigger!"); }
                                 }
 
@@ -594,6 +698,16 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                                     char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
                                     tileType = (WorldTileType)findEnumValue(typeString, MyTiles_TileTypeStrings, arrayCount(MyTiles_TileTypeStrings));
                                 }
+
+                                if(stringsMatchNullN("tileRotationType", token.at, token.size)) {
+                                    char *tileRotationTypeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+                                    rotationType = (WorldTileRotation)findEnumValue(tileRotationTypeString, MyTile_TileRotationTypeStrings, arrayCount(MyTile_TileRotationTypeStrings));
+                                }
+
+                                if(stringsMatchNullN("tileYAxis", token.at, token.size)) {
+                                    tileYAxis = getFloatFromDataObjects(&tokenizer);
+                                }
+
                             } break;
                             default: {
                             }
@@ -602,7 +716,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 } else {    
 
         			//Make the entity
-        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile);
+        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile, animation);
 
                     newEntity->chestType = chestType;
 
@@ -641,8 +755,14 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         newEntity->collider1->offset = colliderOffset2;
         			}
 
+                    if(newEntity->type == ENTITY_ENEMY) {
+                        newEntity->enemyMoveSpeed = enemyMoveSpeed;
+                    }
+
                     newEntity->rateOfCreation = rateOfCreation;
                     newEntity->typeToCreate = entityToCreate;
+
+                    newEntity->subEntityType = subtype;
 
         			newEntity->layer = layer;
                     newEntity->renderFirstPass = renderFirstPass;
@@ -668,6 +788,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     newEntity->T.scale = scale;
             		newEntity->colorTint = color;
 
+                    newEntity->enemyType = enemyType;
+
                     if(model) {
                         newEntity->model = model;
                     }
@@ -676,6 +798,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     if(audioFile) {
                         newEntity->audioFile = audioFile;
                     }
+
+                    u32 shouldNotRenderFlag = (shouldNotRender) ? ENTITY_SHOULD_NOT_RENDER : 0;
+                    newEntity->flags |= shouldNotRenderFlag;
 
                     newEntity->lightColor = lightColor;
                     newEntity->lightIntensity = lightIntensity;
@@ -690,12 +815,16 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		color = v4(1, 1, 1, 1);
         		entType = ENTITY_NULL;
 
+                enemyMoveSpeed = 1;
                 lightColor = v3(0, 0, 0);
                 lightIntensity = 0;
+
+                enemyType = ENEMY_SKELETON; 
 
 
         		colliderSet = false;
         		colliderSet2 = false;
+                shouldNotRender = false;
 
         		splatTexture = 0;
                 animation = 0; 

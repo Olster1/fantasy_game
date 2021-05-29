@@ -309,3 +309,26 @@ static EasyAi_A_Star_Result easyAi_update_A_star(EasyAiController *controller, V
 	return result;
 
 }
+
+//NOTE: Searches all nodes - visible to the player and not
+static EasyAi_Node *easyAi_getClosestNode(EasyAiController *aiController, V3 pos) {
+	float closetDistance = FLT_MAX;
+	EasyAi_Node *closetNode = 0;
+
+	for(int i = 0; i < arrayCount(aiController->boardHash); ++i) {
+	    EasyAi_Node *n = aiController->boardHash[i];
+
+	    while(n) {
+	    	float distanceSqr = getLengthSqrV3(v3_minus(pos, n->pos));
+
+	    	if(distanceSqr < closetDistance) {
+	    		closetDistance = distanceSqr;
+	    		closetNode = n;
+	    	}
+
+	        n = n->next;
+	    }
+	}
+
+	return closetNode;
+}

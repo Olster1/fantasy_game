@@ -13,6 +13,8 @@ typedef struct {
     V2 joystick;
     
 	int scrollWheelY;
+
+	bool usingController;
 } AppKeyStates;
 
 

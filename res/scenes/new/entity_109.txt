@@ -8,6 +8,7 @@
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	layer: -1.000000;
 	subtype: 0;
+	enemyType: "ENEMY_SKELETON";
 	spriteName: "man";
 	colliderScale: 1.000000 1.000000;
 	colliderOffset: 0.000000 0.000000 0.000000;
@@ -19,5 +20,6 @@
 	dialogType: "ENTITY_DIALOG_HOUSE";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
 }
 

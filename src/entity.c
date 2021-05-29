@@ -14,9 +14,67 @@ typedef enum {
 	ENEMY_IGNORE_PLAYER = 1 << 4
 } SubEntityType;
 
+
+//// Entity Trigger Types ////////////
+#define MY_ENTITY_ENEMY_TYPE(FUNC) \
+FUNC(ENEMY_SKELETON)\
+FUNC(ENEMY_BOLT_BALL)\
+
 typedef enum {
-	ENEMY_FIRE_BALL,
+    MY_ENTITY_ENEMY_TYPE(ENUM)
 } EntityEnemyType;
+
+static char *MyEntity_EnemyTypeStrings[] = { MY_ENTITY_ENEMY_TYPE(STRING) };
+
+typedef enum {
+	ENTITY_ANIMATION_IDLE,
+	ENTITY_ANIMATION_WALK,
+	ENTITY_ANIMATION_ATTACK,
+	ENTITY_ANIMATION_HURT,
+	ENTITY_ANIMATION_DIE,
+} EntityAnimationState;
+
+
+static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationState state, EntityEnemyType type) {
+	Animation *animation = 0;
+	if(false) {
+
+	} else if(type == ENEMY_SKELETON) {
+		switch(state) {
+			case ENTITY_ANIMATION_IDLE: {
+				animation = gameState_findSplatAnimation(gameState, "SIdle_4.png");
+			} break;
+			case ENTITY_ANIMATION_WALK: {
+				animation = gameState_findSplatAnimation(gameState, "SWalk_4.png");
+			} break;
+			case ENTITY_ANIMATION_ATTACK: {
+				animation = gameState_findSplatAnimation(gameState, "SAttack_8.png");
+			} break;
+			case ENTITY_ANIMATION_HURT: {
+				animation = gameState_findSplatAnimation(gameState, "SHit_4.png");
+			} break;
+			case ENTITY_ANIMATION_DIE: {
+				animation = gameState_findSplatAnimation(gameState, "SDeath_4.png");
+			} break;
+		}
+		
+	} else if(type == ENEMY_BOLT_BALL) {
+		switch(state) {
+			case ENTITY_ANIMATION_ATTACK: 
+			case ENTITY_ANIMATION_HURT: 
+			case ENTITY_ANIMATION_DIE: {
+				//bogus animation
+				animation = &gameState->wizardForward;
+			} break;
+			default: {
+				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
+			}
+		}
+	}
+
+	return animation;
+}
+
 
 typedef enum {
 	ENTITY_DIRECTION_LEFT,
@@ -41,6 +99,8 @@ typedef struct {
 	bool isDead;
 
 	bool isSwimming;
+
+	EntityEnemyType enemyType; 
 
 	//FOr empty triggers that do stuff
 	EntityTriggerType triggerType;
@@ -107,6 +167,10 @@ typedef struct {
 
 	
 	/////
+	int footstepAt;
+	float footStepTimer;
+
+	//////////////////
 
 	float lightIntensity;
 	V3 lightColor;
@@ -143,6 +207,9 @@ typedef struct {
 	V3 startMovePos;
 	V3 endMovePos;
 	////////////////////
+
+	int particleSystemIndexToEndOnDelete;
+	float enemyMoveSpeed;
 
 
 } Entity;
@@ -267,7 +334,7 @@ static bool isBlockOnSquare(EntityManager *manager, V3 testP, Entity *self) {
 	return found;
 }
 
-static ParticleSystemListItem *getParticleSystem(EntityManager *m) {
+static ParticleSystemListItem *getParticleSystem(EntityManager *m, Entity *entity) {
 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&m->activeParticleSystems);
 	ParticleSystemListItem *result = (ParticleSystemListItem *)arrayInfo.elm;
 	assert(result);
@@ -297,6 +364,9 @@ static ParticleSystemListItem *getParticleSystem(EntityManager *m) {
 	Reactivate(&result->ps);
 
 	result->color = COLOR_BROWN;//hexARGBTo01Color(0xFFF5DEB3);
+
+	entity->particleSystemIndexToEndOnDelete = arrayInfo.absIndex;
+	result->position = &entity->T.pos;
 
 	return result;	
 }
@@ -383,7 +453,7 @@ static inline void createDamageNumbers(EntityManager *manager, float value, V3 p
 
 static inline float findMaxStamina(EntityType type) {
 
-	if(type == ENTITY_WEREWOLF) { return 3; }
+	if(type == ENTITY_ENEMY) { return 3; }
 
 	if(type == ENTITY_WIZARD) { return 10; }
 
@@ -392,7 +462,7 @@ static inline float findMaxStamina(EntityType type) {
 
 static inline float findMaxHealth(EntityType type) {
 
-	if(type == ENTITY_WEREWOLF) { return 10; }
+	if(type == ENTITY_ENEMY) { return 10; }
 
 	if(type == ENTITY_WIZARD) { return 10; }
 
@@ -404,7 +474,7 @@ static inline float findDamage(EntityType type) {
 
 	if(type == ENTITY_SWORD) { return 1; }
 
-	if(type == ENTITY_WEREWOLF) { return 5; }
+	if(type == ENTITY_ENEMY) { return 5; }
 
 	if(type == ENTITY_ENEMY_PROJECTILE) { return 5; }
 
@@ -431,7 +501,7 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
     	easyConsole_addToStream(DEBUG_globalEasyConsole, "had collision");
 
         //Check if it got hurt 
-        MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WEREWOLF, EASY_COLLISION_STAY);	
+        MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_ENEMY, EASY_COLLISION_STAY);	
         if(info.found) {
         	easyConsole_addToStream(DEBUG_globalEasyConsole, "In bounds");
 
@@ -458,16 +528,16 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
         		createDamageNumbers(manager, damage, v3_plus(worldP, v3(0, 0, -1.0f)));	
 
         		easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit 1");
-        		if(enemy->type == ENTITY_WEREWOLF) {
+        		if(enemy->type == ENTITY_ENEMY) {
     				easyAnimation_emptyAnimationContoller(&enemy->animationController, &gameState->animationFreeList);
-    				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "SHit_4.png"), EASY_ANIMATION_PERIOD);	
+    				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType), EASY_ANIMATION_PERIOD);	
     				if(enemy->health > 0.0f) {
-    					easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "SIdle_4.png"), EASY_ANIMATION_PERIOD);		
+    					easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, entity->enemyType), EASY_ANIMATION_PERIOD);		
     				}
     				
         			easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit");
 
-        			assert(easyAnimation_getCurrentAnimation(&enemy->animationController, gameState_findSplatAnimation(gameState, "SHit_4.png")));
+        			assert(easyAnimation_getCurrentAnimation(&enemy->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType)));
         		}
         		
         	}
@@ -476,7 +546,7 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
         	if(enemy->health <= 0.0f) {
         		// enemy->isDead = true;
 
-        		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "SDeath_4.png"), EASY_ANIMATION_PERIOD);	
+        		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType), EASY_ANIMATION_PERIOD);	
 
         		//////////////////Release items /////////////////
         		//Add items skelton leaves behind
@@ -496,6 +566,29 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
 	}
 }
 
+
+static bool playerUsedKey(GameState *gameState, AppKeyStates *keyStates) {
+	bool result = false;
+	bool pressedSpace = false;
+
+
+	int index = -1;
+	if(gameState->playerHolding[0] && gameState->playerHolding[0]->type == ENTITY_KEY) {
+		index = 0;
+		pressedSpace = wasPressed(keyStates->gameButtons, BUTTON_Z) && !gameState->gameIsPaused;
+	}
+
+	if(gameState->playerHolding[1] && gameState->playerHolding[1]->type == ENTITY_KEY) {
+		index = 1;
+		pressedSpace = wasPressed(keyStates->gameButtons, BUTTON_X) && !gameState->gameIsPaused;
+	}
+
+	if(index >= 0 && pressedSpace) {
+		result = true; 
+	}
+
+	return result;
+}
 
 
 static inline void entity_useItem(EntityManager *manager, GameState *gameState, Entity *entity, EntityType type, int itemIndex, float dt) {
@@ -628,7 +721,13 @@ static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics
 	easyArray_clear(&manager->entitiesToAddForFrame);
 	easyArray_clear(&manager->damageNumbers);
 	easyArray_clear(&manager->activeParticleSystems);
+
+	assert(manager->entitiesToDeleteForFrame.count == 0);
+	assert(manager->entities.count == 0);
+	assert(manager->entitiesToAddForFrame.count == 0);
+	assert(manager->damageNumbers.count == 0);
 	assert(manager->activeParticleSystems.count == 0);
+
 	
 
 	EasyPhysics_emptyPhysicsWorld(physicsWorld);
@@ -644,6 +743,7 @@ typedef struct {
 	EntityManager *manager;	
 	char *sceneToLoad;
 	EditorState *editorState;
+	GameWeatherState *weatherState;
 } EntityLoadSceneData;
 
 static void loadScene(void *data_) {
@@ -654,7 +754,7 @@ static void loadScene(void *data_) {
 
 		entityManager_emptyEntityManager(data->manager, &data->gameState->physicsWorld);
 
-		gameScene_loadScene(data->gameState, data->manager, data->sceneToLoad);
+		gameScene_loadScene(data->gameState, data->manager, data->sceneToLoad, data->weatherState);
 
 		
 	}
@@ -724,6 +824,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->lifeSpanLeft = -1.0f;
 	entity->type = type;
 	entity->rotation = 0;
+	entity->enemyMoveSpeed = 2;
 	entity->shieldInUse = false;
 	entity->isDeleted = false;
 	entity->tBob = 0;
@@ -732,10 +833,14 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->innerRadius = 0.2f;
 	entity->outerRadius = 4.0f;
 
+	entity->footStepTimer = 0;
+
 	entity->lightIntensity = 2.0f;
 	entity->lightColor = v3(1, 0.5f, 0);
 
 	entity->flashHurtTimer = -1.0f;
+
+	entity->particleSystemIndexToEndOnDelete = -1;
 
 
 	entity->maxStamina = findMaxStamina(type);
@@ -753,7 +858,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		gravityFactor = 0; 
 	}
 
-	if(type == ENTITY_SKELETON || type == ENTITY_WEREWOLF) {
+	if(type == ENTITY_SKELETON || type == ENTITY_ENEMY) {
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
@@ -798,7 +903,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_WEREWOLF || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -849,7 +954,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 			case ENITY_CHECKPOINT: {
 				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
 			} break;
-			case ENTITY_WEREWOLF: {
+			case ENTITY_ENEMY: {
 				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
 			case ENTITY_SEAGULL: {
@@ -866,11 +971,30 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 }
 
 
+static void tryPlayFootstep(Entity *entity) {
+	if(entity->footStepTimer == 0) {
+
+		char *files[3] = { "footstep_1.wav", "footstep_2.wav", "footstep_3.wav" }; 
+
+		easyConsole_addToStream(DEBUG_globalEasyConsole, files[entity->footstepAt]);
+
+		PlayingSound *s = playGameSound(&globalLongTermArena, easyAudio_findSound(files[entity->footstepAt++]), 0, AUDIO_FOREGROUND);
+
+		if(entity->footstepAt >= 2) {
+			entity->footstepAt = 0;
+		}
+
+		s->volume = 1.5f;
+
+		entity->footStepTimer = 0.35f + randomBetween(-0.1f, 0.1f);
+	}
+}
+
 
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup, GameWeatherState *weatherState) {
 
 	RenderProgram *shaderProgram = &pixelArtProgram;
 
@@ -933,6 +1057,14 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			float staminaFactor = 0.01f;
 
+			if(entity->footStepTimer > 0) {
+				entity->footStepTimer -= dt;
+
+				if(entity->footStepTimer < 0) {
+					entity->footStepTimer = 0;
+				}
+			}
+
 			if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 				entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
 
@@ -942,6 +1074,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					animToAdd = &gameState->wizardLeft;
 					idleAnimation = &gameState->wizardIdleLeft;	
 				}
+
+				tryPlayFootstep(entity);
 
 				entity->collider1->offset.x = -maxOffsetValue;
 				entity->collider1->offset.y = 0;
@@ -963,6 +1097,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				}
 				staminaFactor = 0.1f;
 
+				tryPlayFootstep(entity);
+
 				entity->collider1->offset.x = maxOffsetValue;
 				entity->collider1->offset.y = 0;
 
@@ -980,6 +1116,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					idleAnimation = &gameState->wizardIdleForward;
 				}
 				staminaFactor = 0.1f;
+				tryPlayFootstep(entity);
 
 				entity->collider1->offset.x = 0;
 				entity->collider1->offset.y = maxOffsetValue;
@@ -1000,6 +1137,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					idleAnimation = &gameState->wizardIdleBottom;
 				}
 				staminaFactor = 0.1f;
+
+				tryPlayFootstep(entity);
 
 				entity->collider1->offset.x = 0;
 				entity->collider1->offset.y = -maxOffsetValue;
@@ -1131,10 +1270,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			// animToAdd = &gameState->wizardFall;
 		}
 
-		if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
-			entity->rb->accumForceOnce.y += gameState->jumpPower;
-			animToAdd = &gameState->wizardJump;
-		}
+		// if(entity->rb->isGrounded && wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !isPaused) {
+		// 	entity->rb->accumForceOnce.y += gameState->jumpPower;
+		// 	animToAdd = &gameState->wizardJump;
+		// }
 
 		//Add collect item animation
 		if(gameState->gameModeType == GAME_MODE_ITEM_COLLECT) {
@@ -1250,7 +1389,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             			loadSceneData->manager = manager;
             			loadSceneData->sceneToLoad = entity->levelToLoad;
             			loadSceneData->editorState = editorState;
-
+            			loadSceneData->weatherState = weatherState;
 
             			easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 2");
 
@@ -1368,20 +1507,55 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	
 
-	if(entity->type == ENTITY_WEREWOLF) {
+	if(entity->type == ENTITY_ENEMY) {
 
-		
+		if(entity->enemyType == ENEMY_BOLT_BALL && entity->particleSystemIndexToEndOnDelete < 0) {
+			//add particle effects if haven't
+			ParticleSystemListItem *ps = getParticleSystem(manager, entity);
+
+			// ps->ps.Set.VelBias = rect3f(-0.4f, -0.1f, -1, 0.4f, 0.1f, -0.4f);
+			ps->ps.Set.VelBias = rect3f(-0.4f, 0, -1.f, 0.4f, 0, -1.7f);
+			ps->ps.Set.posBias = rect3f(-0.3f, -0.1f, 0, 0.3f, 0.1f, 0);
+			ps->ps.Set.bitmapScale = 0.6f;
+			removeAllParticleBitmaps(&ps->ps.Set);
+
+			pushParticleBitmap(&ps->ps.Set, findTextureAsset("spark_04.png"), "particle1");
+			pushParticleBitmap(&ps->ps.Set, findTextureAsset("spark_05.png"), "particle1");
+
+			easyParticles_setSystemLifeSpan(&ps->ps, 30.0f);
+			setParticleLifeSpan(&ps->ps, 1.6f);
+
+			entity->currentSound = playLocationSound(&globalLongTermArena, easyAudio_findSound("electricty.wav"), 0, AUDIO_FOREGROUND, easyTransform_getWorldPos(&entity->T));
+			EasySound_LoopSound(entity->currentSound);
+
+			entity->currentSound->volume = 3.0f;
+			entity->currentSound->innerRadius = 0.4f;
+			entity->currentSound->outerRadius = 4.f;
+
+			ps->color = COLOR_GREEN;
+			ps->ps.Set.Loop = true;
+
+			Reactivate(&ps->ps);
+
+			ps->offset = v3(0, 0, -0.1f);
+
+		}
+
 
 		if(!entity->aiController) {
 			entity->aiController = easyAi_initController(&globalPerSceneArena);
 		}	
 
-		bool isDying = easyAnimation_getCurrentAnimation(&entity->animationController, gameState_findSplatAnimation(gameState, "SDeath_4.png"));
-		bool isHurt = easyAnimation_getCurrentAnimation(&entity->animationController, gameState_findSplatAnimation(gameState, "SHit_4.png")) || isDying;
+		bool isDying = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType));
+		bool isHurt = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType)) || isDying;
 
 		//TODO: make this an array for all enemy types 
 
+		V3 entP = easyTransform_getWorldPos(&entity->T);
 
+		if(entity->currentSound) {
+			entity->currentSound->location = entP;
+		}
 
 
 
@@ -1389,7 +1563,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			// easyConsole_addToStream(DEBUG_globalEasyConsole, "werewolf is not hurt");
 
 			V3 worldP = easyTransform_getWorldPos(&player->T);
-			V3 entP = easyTransform_getWorldPos(&entity->T);
+			
 			Animation *animToAdd = 0;
 
 			float werewolfMoveSpeed = gameState->werewolf_attackSpeed;
@@ -1403,10 +1577,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			V3 entP_inWorld = roundToGridBoard(entP, 1);
 
 			if(entity->subEntityType & ENEMY_IGNORE_PLAYER) {
-				werewolfMoveSpeed = 1;
+				werewolfMoveSpeed = entity->enemyMoveSpeed;
 				worldP = playerInWorldP = entity->aiController->searchBouys[entity->aiController->bouyIndexAt];
-				if(getLengthSqrV3(v3_minus(playerInWorldP, entP_inWorld)) < 1.0f) {
+				float searchDist = 0.4f;
+				if(getLengthSqrV3(v3_minus(playerInWorldP, entP_inWorld)) < sqr(searchDist)) {
 
+					entity->rb->dP.xy = v2(0, 0);
 					entity->aiController->bouyIndexAt++;
 
 					if(entity->aiController->bouyIndexAt >= entity->aiController->searchBouysCount) {
@@ -1432,11 +1608,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 				V2 dir = normalizeV2(diff.xy);
 
-				animToAdd = gameState_findSplatAnimation(gameState, "SWalk_4.png");
+				animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_WALK, entity->enemyType);
 
 				entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);
 			} else {
-				animToAdd = gameState_findSplatAnimation(gameState, "SIdle_4.png");
+				animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, entity->enemyType);
 			}
 
 
@@ -1538,7 +1714,31 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 	if(entity->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
-		if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || entity->triggerType == ENTITY_TRIGGER_FIRE_POST) {
+
+		if(entity->triggerType == ENTITY_TRIGGER_OPEN_GATE_WITH_KEY) {
+			if(entity->chestIsOpen) {
+				//do nothing, already open				
+			} else {
+				if(entity->collider1->collisions.count > 0) {
+					MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);
+					if(info.found && playerUsedKey(gameState, keyStates)) {
+						// Animation *openAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
+						
+						entity->sprite = gameState_findSplatTexture(gameState, "ironGate_open");
+						// easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, openAnimation, EASY_ANIMATION_PERIOD);	
+
+						playGameSound(&globalLongTermArena, gameState->chestOpenSound, 0, AUDIO_FOREGROUND);
+
+						entity->chestIsOpen = true;
+						//turn collider off. 
+						entity->collider->isActive = false;
+					}
+				} else {
+					entity->sprite = gameState_findSplatTexture(gameState, "ironGate");
+				}
+			}
+
+		} else if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || entity->triggerType == ENTITY_TRIGGER_FIRE_POST) {
 
 			if(entity->chestIsOpen) {
 				//do nothing				
@@ -1548,9 +1748,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
 					entity->sprite = findTextureAsset("woodFire.png");
 					fireAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
-				} else {
+				} else {						
 					entity->sprite = gameState_findSplatTexture(gameState, "firePost");
-					fireAnimation = gameState_findSplatAnimation(gameState, "firePostAniamted_5.png");
+					fireAnimation = gameState_findSplatAnimation(gameState, "firePostAniamted_5.png");	
+					
 				}
 				
 
@@ -1566,7 +1767,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 						
 						entity->chestIsOpen = true;
 
-						ParticleSystemListItem *ps = getParticleSystem(manager);
+						ParticleSystemListItem *ps = getParticleSystem(manager, entity);
 						// ps->ps.Set.VelBias = rect3f(-0.4f, -0.1f, -1, 0.4f, 0.1f, -0.4f);
 						ps->ps.Set.VelBias = rect3f(0, 0, -0.3f, 0, 0, -0.7f);
 						ps->ps.Set.posBias = rect3f(-0.3f, -0.1f, 0, 0.3f, 0.1f, 0);
@@ -1640,6 +1841,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				loadSceneData->manager = manager;
 				loadSceneData->sceneToLoad = entity->levelToLoad;
 				loadSceneData->editorState = editorState;
+				loadSceneData->weatherState = weatherState;
 
 				easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 1");
 
@@ -1715,7 +1917,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				entity->endMovePos = targetP;
 				playGameSound(&globalLongTermArena, gameState->blockSlideSound, 0, AUDIO_FOREGROUND);
 
-				ParticleSystemListItem *ps = getParticleSystem(manager);
+				ParticleSystemListItem *ps = getParticleSystem(manager, entity);
 				ps->ps.Set.VelBias = rect3f(-1, 0, -1, -0.3f, 0, -1.3f);
 				ps->ps.Set.posBias = rect3f(0, -0.3f, 0, 0, 0.3f, 0);
 
@@ -1738,7 +1940,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				entity->endMovePos = targetP;
 				playGameSound(&globalLongTermArena, gameState->blockSlideSound, 0, AUDIO_FOREGROUND);
 
-				ParticleSystemListItem *ps = getParticleSystem(manager);
+				ParticleSystemListItem *ps = getParticleSystem(manager, entity);
 				ps->ps.Set.VelBias = rect3f(0.3f, 0, -1, 1.f, 0, -1.3f);
 				ps->ps.Set.posBias = rect3f(0, -0.3f, 0, 0, 0.3f, 0);
 				ps->position = &entity->T.pos;
@@ -1760,7 +1962,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				entity->endMovePos = targetP;
 				playGameSound(&globalLongTermArena, gameState->blockSlideSound, 0, AUDIO_FOREGROUND);
 
-				ParticleSystemListItem *ps = getParticleSystem(manager);
+				ParticleSystemListItem *ps = getParticleSystem(manager, entity);
 				ps->ps.Set.VelBias = rect3f(0, 0.3f, -1, 0, 1, -1.3f);
 				ps->ps.Set.posBias = rect3f(-0.3f, 0, 0, 0.3f, 0, 0);
 				ps->position = &entity->T.pos;
@@ -1782,7 +1984,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				entity->endMovePos = targetP;
 				playGameSound(&globalLongTermArena, gameState->blockSlideSound, 0, AUDIO_FOREGROUND);
 
-				ParticleSystemListItem *ps = getParticleSystem(manager);
+				ParticleSystemListItem *ps = getParticleSystem(manager, entity);
 				ps->ps.Set.VelBias = rect3f(0, -1.f, -1, 0, -0.3f, -1.3f);
 				ps->ps.Set.posBias = rect3f(-0.3f, 0, 0, 0.3f, 0, 0);
 				ps->position = &entity->T.pos;
@@ -1962,7 +2164,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             	
             }
 
-            info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WEREWOLF, EASY_COLLISION_ENTER);	
+            info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_ENEMY, EASY_COLLISION_ENTER);	
             if(info.found) {
             	easyConsole_addToStream(console, "werewolf hit");
             }
@@ -2062,11 +2264,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		//We snap alter the width based on the aspect ratio of the sprite, this is based on that the y is the same across frames
 		entity->T.scale.x = (1.0f / sprite->aspectRatio_h_over_w)*entity->T.scale.y;
 
-		if(entity->type == ENTITY_WEREWOLF) {
-			Animation *deathAnimation = gameState_findSplatAnimation(gameState, "SDeath_4.png");
+		if(entity->type == ENTITY_ENEMY) {
+			Animation *deathAnimation = getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType);
 			if(entity->animationController.finishedAnimationLastUpdate && entity->animationController.lastAnimationOn == deathAnimation && easyAnimation_getCurrentAnimation(&entity->animationController, deathAnimation)) {
 				entity->isDead = true;
 				easyConsole_addToStream(DEBUG_globalEasyConsole, "werewolf died");
+
+				if(entity == editorState->entitySelected) {
+					letGoOfSelectedEntity(editorState);
+				}
 
 				//drop any items
 				// ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
@@ -2123,6 +2329,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	    }
 	}
 	
+	bool shouldDrawForShadows = true;
+
+	if(easyString_stringsMatch_nullTerminated(sprite->name, "grass_splat")) {
+		shouldDrawForShadows = false;
+	}
+
 
 	Quaternion Q = entity->T.Q;
 	Quaternion Q1 = eulerAnglesToQuaternion(0, 0, entity->rotation);
@@ -2165,17 +2377,21 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 		
 
 	if(sprite && DEBUG_DRAW_SCENERY_TEXTURES && !entity->renderFirstPass && !(entity->flags & ENTITY_SHOULD_NOT_RENDER)) {
-		if(sprite->isAlpha) {
-			EntityRender_Alpha alphaStruct = {};
-			alphaStruct.sprite = sprite;
-			alphaStruct.T = T;
-			alphaStruct.shader = shaderProgram;
-			alphaStruct.colorTint = entity->colorTint; 
+		// if(sprite->isAlpha) {
+		// 	EntityRender_Alpha alphaStruct = {};
+		// 	alphaStruct.sprite = sprite;
+		// 	alphaStruct.T = T;
+		// 	alphaStruct.shader = shaderProgram;
+		// 	alphaStruct.colorTint = entity->colorTint; 
 
-			addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
-		} else {
+		// 	addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
+		// } else 
+		{
 			renderSetShader(entitiesRenderGroup, shaderProgram); renderDrawSprite(entitiesRenderGroup, sprite, entity->colorTint);
-			renderSetShader(shadowMapGroup, &shadowMapProgram); renderDrawSprite(shadowMapGroup, sprite, entity->colorTint);
+
+			if(shouldDrawForShadows) {
+				renderSetShader(shadowMapGroup, &shadowMapProgram); renderDrawSprite(shadowMapGroup, sprite, entity->colorTint);
+			}
 		}
 		
 	}
@@ -2258,8 +2474,8 @@ static Entity *initSkeleton(GameState *gameState, EntityManager *manager, V3 wor
 	return initEntity(manager, &gameState->skeltonIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
 }
 
-static Entity *initWerewolf(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.5f, 0.25f), gameState, ENTITY_WEREWOLF, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+static Entity *initEnemy(GameState *gameState, EntityManager *manager, V3 worldP) {
+	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.5f, 0.25f), gameState, ENTITY_ENEMY, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
 }
 
 
@@ -2345,23 +2561,46 @@ static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP
 	return e;
 }
 
-static Entity *initLampPost(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
-	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_LAMP_POST, 0, splatTexture, COLOR_WHITE, -1, true);
+static Entity *initLampPost(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture, Animation *animation) {
+	//this is a bit of a hack, I just wanted the torches not to have a collision box
+	bool shouldCollide = true;
+	if(animation) {
+		shouldCollide = false;
+	}
+
+	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_LAMP_POST, 0, splatTexture, COLOR_WHITE, -1, shouldCollide);
 	
 	float w = 3.0f;
-	float h = e->sprite->aspectRatio_h_over_w*w;
+	float h = 2.0f;
+	if(e->sprite) {
+		h = e->sprite->aspectRatio_h_over_w*w;	
+	}
+	
 	e->T.scale = v3(w, h, 1);
 	e->T.pos.z = -0.5f*h;
-
-	e->collider->offset.x = -1.0f;
-	e->collider->offset.y = -1.5f;
-	
-	e->collider->dim2f.x = 0.5f;
-	e->collider->dim2f.y = 0.3f;
 
 	e->innerRadius = 0.2f;
 	e->outerRadius = 9.0f;
 
+	if(animation) {
+		e->sprite = 0;
+		easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "castle_torch_fire4.png"), EASY_ANIMATION_PERIOD);
+		
+		e->innerRadius = 0.2f;
+		e->outerRadius = 3.0f;
+		
+		e->flags |= ENTITY_SHOULD_SAVE_ANIMATION;
+	}
+
+	if(e->collider) {
+
+		e->collider->offset.x = -1.0f;
+		e->collider->offset.y = -1.5f;
+		
+		e->collider->dim2f.x = 0.5f;
+		e->collider->dim2f.y = 0.3f;
+
+	}	
 
 	return e;
 }
@@ -2448,7 +2687,7 @@ static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 wor
 
 
 
-static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile) {
+static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile, Animation *animation) {
 	Entity *newEntity = 0;
 
 	switch(entType) {
@@ -2514,13 +2753,13 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 			newEntity = initAiAnimation(gameState, manager, position);
 		} break;
         case ENTITY_LAMP_POST: {
-            newEntity = initLampPost(gameState, manager, position, splatTexture);
+            newEntity = initLampPost(gameState, manager, position, splatTexture, animation);
         } break;
         case ENTITY_HOUSE: {
             newEntity = initHouse(gameState, manager, position, splatTexture);
         } break;
-        case ENTITY_WEREWOLF: {
-            newEntity = initWerewolf(gameState, manager, position);
+        case ENTITY_ENEMY: {
+            newEntity = initEnemy(gameState, manager, position);
         } break;
 		case ENTITY_HEALTH_POTION_1: {
 			assert(false);

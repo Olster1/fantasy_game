@@ -1,0 +1,25 @@
+{
+
+	id: 13;
+	type: "ENTITY_SHOOT_TRIGGER";
+	position: 12.000000 3.000000 -0.500000;
+	scale: 1.000000 1.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	enemyType: "ENEMY_SKELETON";
+	spriteName: "AncientDartShooter";
+	colliderScale: 0.500000 0.500000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	colliderScale2: 1.000000 4.000000;
+	colliderOffset2: 0.000000 -2.000000 0.000000;
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 3.000000;
+	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
+}
+

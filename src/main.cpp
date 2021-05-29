@@ -22,6 +22,7 @@ static bool DEBUG_DRAW_COLLISION_BOUNDS = false;
 static bool DEBUG_DRAW_COLLISION_BOUNDS_TRIGGERS = false; 
 static bool DEBUG_USE_ORTHO_MATRIX = false;
 static bool DEBUG_AI_BOARD_FOR_ENTITY = true;
+static bool DEBUG_CONTROL_PLAYER = true;
 
 static int GLOBAL_WORLD_TILE_SIZE = 1;
 
@@ -58,6 +59,87 @@ static Texture *getInvetoryTexture(EntityType type) {
     }
     return t;
 }
+
+//this maps the sprite name to the tile type
+static WorldTileType getTileTypeBasedOnSprite(GameState *gameState, int tileIndex) {
+
+    WorldTileType result = WORLD_TILE_GRASS;
+
+    Texture **ts = (Texture **)gameState->splatTextures_tiles.memory;
+
+    char *name = ts[tileIndex]->name;
+
+
+    if(false) {
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_tile")) {
+        result = WORLD_TILE_GRASS;
+    } else if(easyString_stringsMatch_nullTerminated(name, "lava_tile")) {
+        result = WORLD_TILE_LAVA;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_tile")) {
+        result = WORLD_TILE_ROCK;
+    } else if(easyString_stringsMatch_nullTerminated(name, "cobble")) {
+        result = WORLD_TILE_COBBLE;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road")) {
+        result = WORLD_TILE_PATH;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_horzintoal")) {
+        result = WORLD_TILE_PATH1;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_corner")) {
+        result = WORLD_TILE_PATH2;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_corner-bottom")) {
+        result = WORLD_TILE_PATH3;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_corner-right")) {
+        result = WORLD_TILE_PATH4;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_corner-left")) {
+        result = WORLD_TILE_PATH5;
+    } else if(easyString_stringsMatch_nullTerminated(name, "sand")) {
+        result = WORLD_TILE_BEACH;
+    } else if(easyString_stringsMatch_nullTerminated(name, "water")) {
+        result = WORLD_TILE_SEA;
+    } else if(easyString_stringsMatch_nullTerminated(name, "water2")) {
+        result = WORLD_TILE_SEA1;
+    } else if(easyString_stringsMatch_nullTerminated(name, "sand-grass")) {
+        result = WORLD_TILE_BEACH_GRASS;
+    } else if(easyString_stringsMatch_nullTerminated(name, "sand-water")) {
+        result = WORLD_TILE_SAND_WATER;
+    } else if(easyString_stringsMatch_nullTerminated(name, "sand-water2")) {
+        result = WORLD_TILE_SAND_WATER1;
+    } else if(easyString_stringsMatch_nullTerminated(name, "pier_middle_middle")) {
+        result = WORLD_TILE_PIER_MIDDLE;
+    } else if(easyString_stringsMatch_nullTerminated(name, "pier_middle_middle-end-sand")) {
+        result = WORLD_TILE_PIER_SAND;
+    } else if(easyString_stringsMatch_nullTerminated(name, "piermiddle")) {
+        result = WORLD_TILE_PIER_SIDE_LEFT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "piermiddle-right")) {
+        result = WORLD_TILE_PIER_SIDE_RIGHT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "pier-top-left-sand")) {
+        result = WORLD_TILE_PIER_SAND_CORNER_LEFT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "pier-top-right-sand")) {
+        result = WORLD_TILE_PIER_SAND_CORNER_RIGHT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "piermiddle_right_corner")) {
+        result = WORLD_TILE_PIER_SEA_CORNER_RIGHT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "piercorner")) {
+        result = WORLD_TILE_PIER_SEA_CORNER_LEFT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "dirt_tile")) {
+        result = WORLD_TILE_DIRT;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_nub")) {
+        result = WORLD_TILE_PATH_NUB1;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_nub_bottom")) {
+        result = WORLD_TILE_PATH_NUB2;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_nub_left")) {
+        result = WORLD_TILE_PATH_NUB3;
+    } else if(easyString_stringsMatch_nullTerminated(name, "grass_road_nub_right")) {
+        result = WORLD_TILE_PATH_NUB4;
+    } else if(easyString_stringsMatch_nullTerminated(name, "brick")) {
+        result = WORLD_TILE_BRICK;
+    } else {
+        result = WORLD_TILE_NULL;
+    }
+    
+
+
+    return result;
+}
+
 
 static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
     bool isCompletelyFinished = false;
@@ -392,7 +474,7 @@ static V3 roundToGridBoard(V3 in, float tileSize) {
 
 
 bool gameScene_doesSceneExist(char *sceneName);
-void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_);
+void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_, GameWeatherState *weatherState);
 #include "entity.c"
 #include "saveload.c"
 
@@ -509,25 +591,7 @@ int main(int argc, char *args[]) {
         loadAndAddImagesToAssets("img/tilesets/", true);
 
 
-        {
-            // char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
-            // char *folderName = concatInArena(globalExeBasePath, "img/tilesets/", &globalPerFrameArena);
-            // FileNameOfType splatFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
-            // int splatCount = splatFileNames.count;
-            // for(int i = 0; i < splatFileNames.count; ++i) {
-            //     char *fullName = splatFileNames.names[i];
-            //     char *shortName = getFileLastPortion(fullName);
-            //     if(shortName[0] != '.') { //don't load hidden file 
-            //         addElementInfinteAlloc_notPointer(&gameState->splatList_tiles, shortName);
-
-            //         Texture texOnStack = loadImage(fullName, TEXTURE_FILTER_LINEAR, true, true);
-            //         Texture *tex = (Texture *)calloc(sizeof(Texture), 1);
-            //         memcpy(tex, &texOnStack, sizeof(Texture));
-            //         addElementInfinteAlloc_notPointer(&gameState->splatTextures_tiles, tex);
-            //     }
-            //     free(fullName);
-            // }
-        }
+       
 
 
 
@@ -714,6 +778,7 @@ int main(int argc, char *args[]) {
         EntityManager *manager = pushStruct(&globalLongTermArena, EntityManager);
         initEntityManager(manager);
 
+        easyConsole_addToStream(DEBUG_globalEasyConsole, (char *)easyOS_getExeFilePath());
 
 
         int canCameraMove = 0;//EASY_CAMERA_MOVE;
@@ -769,6 +834,27 @@ int main(int argc, char *args[]) {
         }
 
         ////////////////////////
+
+        {
+            char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
+            char *folderName = concatInArena(globalExeBasePath, "img/tilesets/", &globalPerFrameArena);
+            FileNameOfType splatFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
+            int splatCount = splatFileNames.count;
+            for(int i = 0; i < splatFileNames.count; ++i) {
+                char *fullName = splatFileNames.names[i];
+                char *shortName = getFileLastPortion(fullName);
+                if(shortName[0] != '.') { //don't load hidden file 
+                    addElementInfinteAlloc_notPointer(&gameState->splatList_tiles, shortName);
+
+                    Texture texOnStack = loadImage(fullName, TEXTURE_FILTER_LINEAR, true, true);
+                    Texture *tex = (Texture *)easyPlatform_allocateMemory(sizeof(Texture), EASY_PLATFORM_MEMORY_ZERO);
+
+                    memcpy(tex, &texOnStack, sizeof(Texture));
+                    addElementInfinteAlloc_notPointer(&gameState->splatTextures_tiles, tex);
+                }
+                free(fullName);
+            }
+        }
 
         ///////// LOAD ALL ANIMATION FILES
 
@@ -838,7 +924,7 @@ int main(int argc, char *args[]) {
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "new");
+                gameScene_loadScene(gameState, manager, "new", weatherState);
                 
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
@@ -862,8 +948,6 @@ int main(int argc, char *args[]) {
         tweaker->varCount = 0;
 
         char *tweakerFileName = concatInArena(globalExeBasePath, "tweaker_file.txt", &globalLongTermArena); 
-
-        EasySound_LoopSound(playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND));
 
         easyConsole_pushInt(DEBUG_globalEasyConsole, GLOBAL_transformID_static);
 
@@ -918,7 +1002,12 @@ int main(int argc, char *args[]) {
 
             easyOS_processKeyStates(appInfo, &appInfo->keyStates, resolution, &screenDim, &appInfo->running, !appInfo->hasBlackBars);
             easyOS_beginFrame(resolution, appInfo);
-            
+                
+            if(!appInfo->keyStates.usingController) {
+                gameState->spacePrompt = findTextureAsset("space_prompt.png");
+            } else {
+                gameState->spacePrompt = findTextureAsset("playstation_x.png");
+            }
             
             clearBufferAndBind(shadowMapBuffer.bufferId, COLOR_BLACK, shadowMapBuffer.flags, shadowMapRenderGroup);
             clearBufferAndBind(appInfo->frameBackBufferId, COLOR_BLACK, FRAMEBUFFER_COLOR, 0);
@@ -945,13 +1034,18 @@ int main(int argc, char *args[]) {
             renderSetFrameBuffer(mainFrameBuffer.bufferId, entitiesRenderGroup);
 
             ////////////////////////////////////////////////////////////////////
-            
-            EasyCamera_MoveType camMove = (EasyCamera_MoveType)(EASY_CAMERA_ZOOM);
+
+            u32 moveType = EASY_CAMERA_MOVE_NULL;
+            if(!DEBUG_CONTROL_PLAYER) {
+                moveType = EASY_CAMERA_MOVE_XY | EASY_CAMERA_MOVE; 
+            }
+
+            EasyCamera_MoveType camMove = (EasyCamera_MoveType)(EASY_CAMERA_ZOOM | moveType);
 
             camMove = (EasyCamera_MoveType)((int)camMove | canCameraMove | canCamRotate);
     
             //FOLLOW PLAYER  
-            if(!canCameraMove) {
+            if(DEBUG_CONTROL_PLAYER) {
                 V3 worldP = easyTransform_getWorldPos(&((Entity *)(manager->player))->T);
                 {//update x position
                     float distance = absVal(worldP.x - camera.hidden_pos.x);
@@ -970,6 +1064,24 @@ int main(int argc, char *args[]) {
                         camera.hidden_pos.y = newPosY;
                     }
                 }
+            } else {
+                if(!editorState->entitySelected) {
+                    editorState->lerpTowardsTimer = -1;   
+                }
+
+                if(editorState->lerpTowardsTimer >= 0) {
+                    editorState->lerpTowardsTimer += appInfo->dt;
+
+                    float canVal = editorState->lerpTowardsTimer / 0.5f;
+
+                    Entity *e = (Entity *)editorState->entitySelected;
+                    camera.pos.xy = lerpV2(editorState->startLerpP, smoothStep01(0, canVal, 1), v3_minus(easyTransform_getWorldPos(&e->T), v3(0, cameraFollow_yOffset, 0)).xy);
+                    camera.hidden_pos.xy = camera.pos.xy;
+
+                    if(canVal >= 1) {
+                        editorState->lerpTowardsTimer = -1;
+                    }
+                }
             }
             ////////////////
 
@@ -985,8 +1097,6 @@ int main(int argc, char *args[]) {
 
             // update camera first
             Matrix4 viewMatrix = easy3d_getWorldToView(&camera);
-
-
 
             //cast ray against floor to find reference point
             {
@@ -1191,9 +1301,125 @@ int main(int argc, char *args[]) {
                     } break;
                 }
                 
-            } else 
-            {
+            } else  { //if(!gameState->gameIsPaused)
                 EasyPhysics_UpdateWorld(&gameState->physicsWorld, appInfo->dt);    
+                
+                //NOTE: Not sure if this is the best place to do this but we make sure the player isn't outside of the world based on the tile grid
+
+                Entity *player = (Entity *)manager->player;
+                V3 playerP = easyTransform_getWorldPos(&player->T);
+
+                if(!player->aiController) {
+                    player->aiController = easyAi_initController(&globalPerSceneArena);
+                }   
+
+                EasyAi_Node *node = easyAi_getClosestNode(player->aiController, playerP);
+
+                if(node) {
+                    V3 closestP = node->pos;
+                    
+                    V3 diffP = v3_minus(playerP, closestP);
+
+                    //NOTE: check if the player is outside the square first
+                    if(inRect(diffP.xy, rect2fCenterDim(0, 0, GLOBAL_WORLD_TILE_SIZE, GLOBAL_WORLD_TILE_SIZE))) {
+                        //NOTE: in Square so safe 
+                    } else {
+                        //NOTE: Out of bounds so put player back in
+                        //NOTE: Now find the _closest direction vector_ to move the player back into safety and find the _wall normal_ of the square.
+
+                        V3 normal = {};
+                        V3 directionVector = {};
+
+                        int cornerType = -1;
+
+                        diffP.z = 0;
+
+                        float halfTileSize = 0.5f*GLOBAL_WORLD_TILE_SIZE;
+
+                        //Find the closest edge by seperating the square into 8 different quadrants - 4 for the sides and 4 for the corners
+                        if(diffP.x < -halfTileSize) {
+                            // can be in three guadrants - one side and two corners - now find which one
+                            if(diffP.y < -halfTileSize) {
+                                //bottom left corner
+                                cornerType = 0;
+                            } else if(diffP.y >= halfTileSize) {
+                                //top left corner
+                                cornerType = 1;
+                            } else {
+                                //left side
+                                normal = v3(1, 0, 0);
+                                directionVector = v3(absVal(diffP.x) - halfTileSize, 0, 0);
+                            }
+                        } else if(diffP.x >= halfTileSize) {
+                            // can be in three guadrants - one side and two corners - now find which one
+                            if(diffP.y < -halfTileSize) {
+                                //bottom right corner
+                                cornerType = 2;
+                            } else if(diffP.y >= halfTileSize) {
+                                //top right corner
+                                cornerType = 3;
+                            } else {
+                                //right side
+                                normal = v3(-1, 0, 0);
+                                directionVector = v3(-(diffP.x - halfTileSize), 0, 0);
+                            }
+                        } else if(diffP.y < -halfTileSize) {
+                            // can be in three guadrants - one side and two corners - now find which one
+                            if(diffP.x < -halfTileSize) {
+                                //bottom left corner
+                                cornerType = 0; 
+                            } else if(diffP.x >= halfTileSize) {
+                                //bottom right corner
+                                cornerType = 2;
+                            } else {
+                                //bottom side
+                                normal = v3(0, 1, 0);
+                                directionVector = v3(0, absVal(diffP.y) - halfTileSize, 0);
+                            }
+                        } else if(diffP.y >= halfTileSize) {
+                            // can be in three guadrants - one side and two corners - now find which one
+                            if(diffP.x < -halfTileSize) {
+                                //top left corner
+                                cornerType = 1;
+                            } else if(diffP.x >= halfTileSize) {
+                                //top right corner
+                                cornerType = 3;
+                            } else {
+                                //top side
+                                normal = v3(0, -1, 0);
+                                directionVector = v3(0, -(diffP.y - halfTileSize), 0);
+                            }
+                        }
+
+                        if(cornerType == 0) {
+                            //bottom left corner
+                            V3 localP = v3_minus(v3(-0.5f*GLOBAL_WORLD_TILE_SIZE, -0.5f*GLOBAL_WORLD_TILE_SIZE, 0), diffP);
+                            normal = normalizeV3(localP);
+                            directionVector = localP;
+                        } else if(cornerType == 1) {
+                            //top left corner
+                            V3 localP = v3_minus(v3(-0.5f*GLOBAL_WORLD_TILE_SIZE, 0.5f*GLOBAL_WORLD_TILE_SIZE, 0), diffP);
+                            normal = normalizeV3(localP);
+                            directionVector = localP;
+                        } else if(cornerType == 2) {
+                            //bottom right corner
+                            V3 localP = v3_minus(v3(0.5f*GLOBAL_WORLD_TILE_SIZE, -0.5f*GLOBAL_WORLD_TILE_SIZE, 0), diffP);
+                            normal = normalizeV3(localP);
+                            directionVector = localP;
+                        } else if(cornerType == 3) {
+                            //top right corner
+                            V3 localP = v3_minus(v3(0.5f*GLOBAL_WORLD_TILE_SIZE, 0.5f*GLOBAL_WORLD_TILE_SIZE, 0), diffP);
+                            normal = normalizeV3(localP);
+                            directionVector = localP;
+                        }
+
+                        directionVector.z = 0;
+
+                        player->T.pos = v3_plus(player->T.pos, directionVector);
+                        // player->rb->dP = v3_plus(player->rb->dP, v3_scale(dotV3(player->rb->dP, normal), normal));
+                    }   
+                }
+
             }
 
             setViewTransform(globalRenderGroup, viewMatrix);
@@ -1298,6 +1524,8 @@ int main(int argc, char *args[]) {
 
                                         editorState->entitySelected = e;
                                         editorState->entityIndex = i;
+
+                                        lerpToSelectedEntity(editorState, camera.pos.xy);
 
                                         editorState->grabOffset = v3_minus(position, castInfo.hitP);
 
@@ -1411,6 +1639,7 @@ int main(int argc, char *args[]) {
                     
 
                     //Grab new entity
+                    lerpToSelectedEntity(editorState, camera.pos.xy);
                     editorState->entitySelected = info->e;
                     editorState->entityIndex = info->index;
 
@@ -1428,7 +1657,7 @@ int main(int argc, char *args[]) {
             }
            //  //////////////////////////////////////////
            //Draw the square to where the mouse is pointing
-           {
+           if(gameState->isEditorOpen) {
                V3 hitP;
                float tAt;
 
@@ -1494,7 +1723,7 @@ int main(int argc, char *args[]) {
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup);        
+                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup, weatherState);        
                
                    if(e->isDead) {
                        ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -1528,16 +1757,25 @@ int main(int argc, char *args[]) {
                 renderSetShader(globalRenderGroup, &pixelArtProgram);
 
                 for(int i = 0; i < gameState->tileSheet.tileCount; ++i) {
+                    bool draw = true;
+
                     WorldTile *t = gameState->tileSheet.tiles + i;
 
                     gameState->tempTransform.pos.x = t->x;
                     gameState->tempTransform.pos.y = t->y;
-                    gameState->tempTransform.pos.z = 0;
+                    gameState->tempTransform.pos.z = t->z;
 
-                    if(false) {
+                    if(t->z < 0) {
+                        //breakl
+                        int h = 0;
+                    }
 
+                    if(t->type == WORLD_TILE_NULL) {
+                        sprite = &globalPinkTexture;
                     } else if(t->type == WORLD_TILE_GRASS) {
                         sprite = findTextureAsset("grass_tile.png");
+                    } else if(t->type == WORLD_TILE_BRICK) {
+                        sprite = findTextureAsset("brick.png");
                     } else if(t->type == WORLD_TILE_DIRT) {
                         sprite = findTextureAsset("dirt_tile.png");
 
@@ -1562,7 +1800,7 @@ int main(int argc, char *args[]) {
                     } else if(t->type == WORLD_TILE_PATH2) {
                         sprite = findTextureAsset("grass_road_corner.png");
                     } else if(t->type == WORLD_TILE_PATH3) {
-                        sprite = findTextureAsset("grass_road_corner-top.png");
+                        sprite = findTextureAsset("grass_road_corner-bottom.png");
                     } else if(t->type == WORLD_TILE_PATH4) {
                         sprite = findTextureAsset("grass_road_corner-right.png");
                     } else if(t->type == WORLD_TILE_PATH5) {
@@ -1605,11 +1843,45 @@ int main(int argc, char *args[]) {
                         sprite = findTextureAsset("piercorner.png");
                     } else if(t->type == WORLD_TILE_PIER_SEA_CORNER_LEFT) {
                         sprite = findTextureAsset("piermiddle_right_corner.png");
+                    } else if(t->type == WORLD_TILE_PATH_NUB1) {
+                        sprite = findTextureAsset("grass_road_nub.png");
+                    } else if(t->type == WORLD_TILE_PATH_NUB2) {
+                        sprite = findTextureAsset("grass_road_nub_bottom.png");
+                    }   else if(t->type == WORLD_TILE_PATH_NUB3) {
+                        sprite = findTextureAsset("grass_road_nub_left.png");
+                    }   else if(t->type == WORLD_TILE_PATH_NUB4) {
+                        sprite = findTextureAsset("grass_road_nub_right.png");
+                    }      
+
+                    V4 color = COLOR_WHITE;
+
+                    if(t->rotation == WORLD_TILE_ROTATION_FLAT) {
+                        gameState->tempTransform.Q = identityQuaternion();
+                    } else if(t->rotation == WORLD_TILE_ROTATION_UP) {
+                        gameState->tempTransform.Q = gameState->angledQ;;//eulerAnglesToQuaternion(-PI32, 0, 0);
+
+                        Entity *playerEnt = (Entity *)manager->player;
+                        if(playerEnt->T.pos.y > t->yAxis) {
+                            color.w = 0.3f;
+
+                            EntityRender_Alpha alphaStruct = {};
+                            alphaStruct.sprite = sprite;
+                            alphaStruct.T = easyTransform_getTransform(&gameState->tempTransform);
+                            alphaStruct.shader = &pixelArtProgram;
+                            alphaStruct.colorTint = color; 
+
+                            addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
+
+                            draw = false;
+                            
+                        } 
+
+                    } 
+
+                    if(draw) {
+                        setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+                        renderDrawSprite(globalRenderGroup, sprite, color);
                     }
-
-                    setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
-                    renderDrawSprite(globalRenderGroup, sprite, COLOR_WHITE);
-
                 }
                 
                 gameState->tempTransform.Q = gameState->angledQ;
@@ -1641,7 +1913,7 @@ int main(int argc, char *args[]) {
 
                         while(n) {
 
-                            Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, -0.)); 
+                            Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(1, 1, 0)), v3(n->pos.x, n->pos.y, -0.05)); 
                             setModelTransform(globalRenderGroup, T);
                             renderDrawQuad(globalRenderGroup, n->canSeePlayerFrom ? COLOR_GOLD : COLOR_AQUA);
 
@@ -1662,7 +1934,7 @@ int main(int argc, char *args[]) {
             }
 
 
-            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_DEFAULT));
+            drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
             renderEnableBatchOnZ(globalRenderGroup);
             
@@ -1699,6 +1971,7 @@ int main(int argc, char *args[]) {
             }
             ///////////////////////////////////
 
+            renderDisableBatchOnZ(globalRenderGroup);
 
             //Draw any particle systems
             {   
@@ -1725,6 +1998,11 @@ int main(int argc, char *args[]) {
                     /////////////////////////////////////////////////////////
 
             }
+
+            renderEnableBatchOnZ(globalRenderGroup);
+            
+            drawRenderGroup(entitiesRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+            
 
 
             { //NOTE: Update the damage numbers
@@ -1849,7 +2127,7 @@ int main(int argc, char *args[]) {
 
                             
                         } else {
-                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0);
+                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0);
                            if(e1->rb) {
                                 e1->rb->dP = e->dP;
 
@@ -1896,6 +2174,13 @@ int main(int argc, char *args[]) {
                             EasyPhysics_removeRigidBody(&gameState->physicsWorld, e->rb);
                         }
 
+
+                        if(e->particleSystemIndexToEndOnDelete >= 0) {
+                            ParticleSystemListItem *ps = (ParticleSystemListItem *)getElement(&manager->activeParticleSystems, e->particleSystemIndexToEndOnDelete);
+                            if(ps) {
+                                ps->ps.Active = false;
+                            }
+                        }
 
                         removeElement_ordered(&manager->entities, *indexToDelete);
                     }
@@ -2102,25 +2387,27 @@ int main(int argc, char *args[]) {
                 
                 }
 
+
+                easyEditor_pushCheckBox(appInfo->editor, "Control Player", &DEBUG_CONTROL_PLAYER);
+
+
                 int splatIndexOn = 0;
                 // if(editorState->createMode == EDITOR_CREATE_HOUSE || editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY || editorState->createMode == EDITOR_CREATE_ONE_WAY_PLATFORM || editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_LAMP_POST)
-                 {
+                {
                     splatIndexOn = easyEditor_pushSpriteList(appInfo->editor, "Sprites: ", (Texture **)gameState->splatTextures.memory, gameState->splatTextures.count);
                     // splatIndexOn = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList.memory, gameState->splatList.count); 
 
                 }
 
+                
+
 
                 int animationOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY) {
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
                     animationOn = easyEditor_pushList(appInfo->editor, "Animations: ", (char **)gameState->splatListAnimations.memory, gameState->splatListAnimations.count); 
                 }   
 
-                int splatIndexOn_tiles = 0;
-                if(editorState->createMode == EDITOR_CREATE_TILE_MODE) {
-                    // splatIndexOn_tiles = easyEditor_pushList(appInfo->editor, "Sprites: ", (char **)gameState->splatList_tiles.memory, gameState->splatList_tiles.count); 
-
-                }   
+ 
 
                 EntityTriggerType triggerType;
                 
@@ -2133,10 +2420,17 @@ int main(int argc, char *args[]) {
                     
                 }
 
+                WorldTileRotation rotationType = WORLD_TILE_ROTATION_FLAT;
+                if(editorState->createMode == EDITOR_CREATE_TILE_MODE) 
+                {
+                    rotationType = (WorldTileRotation)easyEditor_pushList(appInfo->editor, "Tile Rotation: ", MyTile_TileRotationTypeStrings, arrayCount(MyTile_TileRotationTypeStrings));
+                }
+
+                
+
                 easyEditor_pushSlider(appInfo->editor, "Time of day: ", &weatherState->timeOfDay, 0, 1);
                 easyEditor_pushSlider(appInfo->editor, "Time of Day Speed: ", &weatherState->timeOfDaySpeed, 0, 1);
 
-                
                 
 
                 EasyModel *modelSelected = 0;
@@ -2153,8 +2447,13 @@ int main(int argc, char *args[]) {
 
 
                 if(editorState->createMode ==  EDITOR_CREATE_TILE_MODE) {
-                    editorState->tileType = (WorldTileType)easyEditor_pushList(appInfo->editor, "Tile Type: ", MyTiles_TileTypeStrings, arrayCount(MyTiles_TileTypeStrings));
+                    // editorState->tileType = (WorldTileType)easyEditor_pushList(appInfo->editor, "Tile Type: ", MyTiles_TileTypeStrings, arrayCount(MyTiles_TileTypeStrings));
                     editorState->tileOption = (EditorTileOption)easyEditor_pushList(appInfo->editor, "Tile Mode: ", MyTiles_editorOptionStrings, arrayCount(MyTiles_editorOptionStrings));
+                    
+                    int tileIndex = easyEditor_pushSpriteList(appInfo->editor, "Tiles: ", (Texture **)gameState->splatTextures_tiles.memory, gameState->splatTextures_tiles.count);
+                    
+
+                    editorState->tileType = getTileTypeBasedOnSprite(gameState, tileIndex);
                 }
                 
 
@@ -2233,12 +2532,60 @@ int main(int argc, char *args[]) {
                                     }
                                 }
                             }
-                            
                         } break;
                         case EDITOR_CREATE_TILE_MODE: {
                             if(editorState->tileOption == EDITOR_TILE_SINGLE) {
                                 if(isDown(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
-                                    if(!addWorldTile(gameState, hitP.x, hitP.y, editorState->tileType)) {
+
+                                    V3 createP;
+                                    float planeOrigin = {};
+                                    {
+                                        EasyPlane plane = {};
+
+                                        plane.origin = v3(0, 0, 0);
+                                        plane.normal = v3(0, 0, -1);
+
+                                        if(rotationType == WORLD_TILE_ROTATION_UP) {
+                                            //start at the bottom of the tile in the y coordinate
+                                            plane.origin = v3_minus(editorState->lastcreatedTileP_onGround, v3(0, 0.5f, 0));
+                                            
+                                            plane.origin.x = 0;
+                                            plane.origin.z = 0;
+
+                                            planeOrigin = plane.origin.y;
+
+                                            plane.normal = v3(0, -SIN45, -SIN45);       
+                                        }
+
+                                        float tAt;
+
+                                        if(easyMath_castRayAgainstPlane(mouseP_worldRay, plane, &createP, &tAt)) {
+                                            if(rotationType == WORLD_TILE_ROTATION_FLAT) {
+                                                createP = roundToGridBoard(createP, GLOBAL_WORLD_TILE_SIZE);
+                                                editorState->lastcreatedTileP_onGround = createP;
+                                                easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->lastcreatedTileP_onGround);
+                                            } else {
+
+                                                createP = v3_minus(createP, plane.origin);
+
+                                                V3 xAxis = v3(1, 0, 0);
+                                                V3 yAxis = normalizeV3(v3(0, SIN45, -SIN45));
+
+                                                // V3 otherXAxis = v3_crossProduct(yAxis, plane.normal);
+                                                // we get the x & y positions local to the plane
+                                                V3 localP = {};
+                                                localP.x = dotV3(createP, xAxis);
+                                                localP.y = dotV3(createP, yAxis);
+                                                localP.z = 0;
+
+                                                localP = roundToGridBoard(localP, GLOBAL_WORLD_TILE_SIZE);
+
+                                                createP = v3_plus(plane.origin, v3_plus(v3_scale(localP.x, xAxis), v3_scale(localP.y, yAxis)));
+                                            }
+                                        }
+                                    }
+
+                                    if(!addWorldTile(gameState, createP.x, createP.y, createP.z, planeOrigin, editorState->tileType, rotationType)) {
                                         easyFlashText_addText(&globalFlashTextManager, "Tile Array Full. Make bigger!");
                                     }
                                 }
@@ -2271,7 +2618,7 @@ int main(int argc, char *args[]) {
                                     int h = (int)absVal(diff.y);
                                     for(int i = 0; i < h && !ranOutOfTileRoom; i++) {
                                         for(int j = 0; j < w && !ranOutOfTileRoom; j++) {
-                                            ranOutOfTileRoom = !addWorldTile(gameState, j + editorState->topLeftCornerOfTile.x, editorState->topLeftCornerOfTile.y - i, editorState->tileType);
+                                            ranOutOfTileRoom = !addWorldTile(gameState, j + editorState->topLeftCornerOfTile.x, editorState->topLeftCornerOfTile.y - i, 0, 0, editorState->tileType, WORLD_TILE_ROTATION_FLAT);
                                         }    
                                     }
 
@@ -2296,7 +2643,12 @@ int main(int argc, char *args[]) {
                         } break;
                         case EDITOR_CREATE_LAMP_POST: {
                             if(pressed) {
-                                editorState->entitySelected = initLampPost(gameState, manager, hitP, splatTexture);
+                                Animation *animation = 0;
+                                if(animationOn > 0) {
+                                    animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
+                                }
+
+                                editorState->entitySelected = initLampPost(gameState, manager, hitP, splatTexture, animation);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
@@ -2386,17 +2738,9 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;   
-                        case EDITOR_CREATE_SKELETON: {
+                        case EDITOR_CREATE_ENEMY: {
                             if(pressed) {
-                                editorState->entitySelected = initEntity(manager, &gameState->skeltonIdle, hitP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
-                        case EDITOR_CREATE_WEREWOLF: {
-                            if(pressed) {
-                                editorState->entitySelected = initWerewolf(gameState, manager, hitP);
+                                editorState->entitySelected = initEnemy(gameState, manager, hitP);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 justCreatedEntity = true;
 
@@ -2501,6 +2845,9 @@ int main(int argc, char *args[]) {
                             }
                         } break;
                     }
+
+                    lerpToSelectedEntity(editorState, camera.pos.xy);
+                    
                 }
                 
                 easyEditor_pushCheckBox(appInfo->editor, "Bounds", &DEBUG_DRAW_COLLISION_BOUNDS);
@@ -2693,11 +3040,16 @@ int main(int argc, char *args[]) {
                         easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
                     }
 
+                    if(e->type == ENTITY_ENEMY) {
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->enemyType, e->T.id, gameState->currentSceneName); e->enemyType = (EntityEnemyType)easyEditor_pushList_withIds(appInfo->editor, "Enemy Type: ", MyEntity_EnemyTypeStrings, arrayCount(MyEntity_EnemyTypeStrings), e->T.id, gameState->currentSceneName);
+                        easyEditor_pushSlider(appInfo->editor, "Move Speed: ", &e->enemyMoveSpeed, 1, 10);
+                    }
+
                     if(e->type == ENTITY_CHEST) {
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->chestType, e->T.id, gameState->currentSceneName); e->chestType = (ChestType)easyEditor_pushList_withIds(appInfo->editor, "Chest Type: ", MyEntity_ChestTypeStrings, arrayCount(MyEntity_ChestTypeStrings), e->T.id, gameState->currentSceneName);
                     }
 
-                    if(e->type == ENTITY_WEREWOLF) {
+                    if(e->type == ENTITY_ENEMY) {
                         bool value = (bool)(e->subEntityType & ENEMY_IGNORE_PLAYER);
                         easyEditor_pushCheckBox(appInfo->editor, "Ingore Player", &value);
 
@@ -2707,6 +3059,24 @@ int main(int argc, char *args[]) {
                             e->subEntityType |= ENEMY_IGNORE_PLAYER;
                         }
                         
+                    }
+
+
+
+                    bool value = (bool)(e->flags & ENTITY_SHOULD_NOT_RENDER);
+                    easyEditor_pushCheckBox(appInfo->editor, "Should Not Render", &value);
+
+                    if(!value) {
+                       e->flags &= ~ENTITY_SHOULD_NOT_RENDER;
+                    } else {
+                        e->flags |= ENTITY_SHOULD_NOT_RENDER;
+                    }
+                        
+
+                    if(e->currentSound) {
+                        easyEditor_pushSlider(appInfo->editor, "volume: ", &e->currentSound->volume, 0, 3);
+                        easyEditor_pushSlider(appInfo->editor, "innerRadius: ", &e->currentSound->innerRadius , 0.1, 2);
+                        easyEditor_pushSlider(appInfo->editor, "outerRadius: ", &e->currentSound->outerRadius, 0.5, 20);
                     }
 
                     
@@ -3608,7 +3978,7 @@ int main(int argc, char *args[]) {
                                 entityManager_emptyEntityManager(manager, &gameState->physicsWorld);
                                 letGoOfSelectedEntity(editorState);
                                 //NOTE: MEMEORY LEAK HERE. We don' free the scene file name when we load a new scene
-                                gameScene_loadScene(gameState, manager, nullTerminateArena(token.at, token.size, &globalLongTermArena));
+                                gameScene_loadScene(gameState, manager, nullTerminateArena(token.at, token.size, &globalLongTermArena), weatherState);
                             } else {
                                 easyConsole_addToStream(DEBUG_globalEasyConsole, "No scene to load");    
                             }

@@ -223,6 +223,8 @@ typedef struct {
 	EasyColliderType type;
 	V3 offset;
 
+	bool isActive;
+
 	bool isTrigger;
 
 	EasyCollisionLayer layer;
@@ -633,6 +635,7 @@ static EasyCollider *EasyPhysics_AddCollider(EasyPhysics_World *world, EasyTrans
 		rb->hasRigidCollider = true;
 	}
 
+	col->isActive = true;
 
 	switch (type) {
 		case EASY_COLLIDER_SPHERE:
@@ -740,7 +743,7 @@ void ProcessPhysics(Array_Dynamic *colliders, Array_Dynamic *rigidBodies, float 
 
 	                
 
-	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer) && !(a->isTrigger && b->isTrigger)) 
+	                if(b && b->rb != a->rb && EasyPhysics_layersCanCollider(a->layer, b->layer) && !(a->isTrigger && b->isTrigger) && b->isActive) 
 	                {
 	                	bool hit = false;
 

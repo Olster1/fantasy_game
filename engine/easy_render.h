@@ -601,7 +601,7 @@ static inline EasyImage loadImage_(char *fileName, bool premultiplyAlpha) {
         }
 
             ///////////////////////************* Do pre-multiplied alpha ************////////////////////
-        if(true) {
+        {
             DEBUG_TIME_BLOCK_NAMED("Pre-multiply alpha");
             if(result.comp == 4) 
             {
