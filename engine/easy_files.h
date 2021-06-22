@@ -165,7 +165,7 @@ game_file_handle platformBeginFileWrite(char *FileName)
 {
     game_file_handle Result = {};
     
-    SDL_RWops* FileHandle = SDL_RWFromFile(FileName, "w+");
+    SDL_RWops* FileHandle = SDL_RWFromFile(FileName, "wb");
     
     if(FileHandle)
     {
@@ -278,7 +278,7 @@ bool platformDoesFileExist(char *FileName) {
 FileContents platformReadEntireFile(char *FileName, bool nullTerminate) {
     FileContents Result = {};
     assert(FileName);
-    SDL_RWops* FileHandle = SDL_RWFromFile(FileName, "r");
+    SDL_RWops* FileHandle = SDL_RWFromFile(FileName, "r+b");
     
     if(FileHandle)
     {
@@ -420,9 +420,19 @@ typedef enum {
     DIR_COPY_FILE_TYPE,
 } DirTypeOperation;
 
+char *platformGetTimeStamp_withSlashAtFront(Arena *arena) {
+    char *result = easy_createString_printf(arena, "/%lu", (unsigned long)time(NULL));
+    return result;
+}
+
+char *platformGetTimeStamp(Arena *arena) {
+    char *result = easy_createString_printf(arena, "%lu", (unsigned long)time(NULL));
+    return result;
+}
+
 char *platformGetUniqueDirName(char *dirName) {
-    char timeStampBuffer[256] = {};
-    sprintf(timeStampBuffer, "%lu/", (unsigned long)time(NULL)); 
+    char timeStampBuffer[512] = {};
+    snprintf(timeStampBuffer, arrayCount(timeStampBuffer), "%lu/", (unsigned long)time(NULL)); 
     char *newDirName = concat(dirName, timeStampBuffer);
     return newDirName;
 }

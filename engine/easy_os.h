@@ -54,7 +54,7 @@ static u8 *easyOs_getSaveFolderLocation() {
 
 	//NOTE(ollie): Get the folder name
 	if(SHGetKnownFolderPath(
-	  FOLDERID_LocalAppData,
+	  FOLDERID_SavedGames, //FOLDERID_LocalAppData,
 	  KF_FLAG_CREATE,
 	  0,
 	  (PWSTR *)&win32_wideString_utf16
@@ -230,13 +230,13 @@ OSAppInfo *easyOS_createApp(char *windowName, V2 *screenDim, bool fullscreen) {
     return result;
 }
 
-void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder) {
+void easyOS_setupApp(OSAppInfo *result, V2 *resolution, char *resPathFolder, char *gameName_forSaveFolder) {
 	DEBUG_TIME_BLOCK()
 
 
 
 	//NOTE(ollie): Get the folder location of AppData/Roaming
-	result->saveFolderLocation = concatInArena((char *)easyOs_getSaveFolderLocation(), "/easy_engine", &globalLongTermArena);
+	result->saveFolderLocation = concatInArena((char *)easyOs_getSaveFolderLocation(), gameName_forSaveFolder, &globalLongTermArena);
 
 	if(!platformDoesDirectoryExist((char *)result->saveFolderLocation)) {
 	    platformCreateDirectory((char *)result->saveFolderLocation);

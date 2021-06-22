@@ -1,3 +1,18 @@
+/*
+
+TODO: 
+
+Save the doors correctly when they are open and if they have been activated
+
+Clear sokobon puzzles with a key that prompts you. Have clear place of to reset to and where the bricks start at
+
+Fade out when you press the button
+
+
+
+*/
+
+
 typedef enum {
 	ENTITY_SHOW_HEALTH_BAR = 1 << 0,
 	ENTITY_SHOULD_SAVE = 1 << 1,
@@ -33,6 +48,8 @@ typedef enum {
 	ENTITY_ANIMATION_HURT,
 	ENTITY_ANIMATION_DIE,
 } EntityAnimationState;
+
+
 
 
 static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationState state, EntityEnemyType type) {
@@ -114,6 +131,9 @@ typedef struct {
 	ChestType chestType;
 	/////
 
+	//NOTE: For things that are have a switch that gets turns on and stay on. Using for a door when you exit it it closes.
+	bool isActivated;
+
 	//For entity creator
 	float rateOfCreation;
 	float timeSinceLastCreation;
@@ -138,6 +158,11 @@ typedef struct {
 	float travelTimer; //timer to lerp between A* positions
 	V3 lastGoalPos;
 	///
+
+	//NOTE: For loading to other scenes through a door
+	int partnerId;
+	V2 moveDirection;
+	//////////////////////
 
 
 	EasyRigidBody *rb;
@@ -182,6 +207,10 @@ typedef struct {
 
 	PlayingSound *currentSound;
 
+	//NOTE: For the button that needs to know things are on top of it
+	int refCount;
+
+
 	//Player stamina
 	float stamina;
 	float maxStamina;
@@ -214,11 +243,185 @@ typedef struct {
 
 } Entity;
 
+///////////////////////////// Save State Entity ///////////////////////////////////
+
+
+static EntitySaveStateData saveStateEntity_makeSaveEntity(Entity *e) {
+	EntitySaveStateData result = {};
+
+	result.pos = e->T.pos;
+
+	result.isOpen = e->chestIsOpen;
+	result.isDead = e->isDead;
+	result.isActivated = e->isActivated;
+	result.health = e->health;
+	result.stamina = e->stamina;
+
+	if(e->collider) {
+		result.colliderActive = e->collider->isActive;	
+	}
+	
+
+	return result;
+}
+
+
+static SaveStateEntity *saveStateEntity_findEntity(GameState *gameState, int id, char *sceneName) {
+	SaveStateEntity *result = 0;
+	for(int i = 0; i < gameState->playerSaveProgress.saveStateEntities.count && !result; ++i) {
+		SaveStateEntity *saveEntity = getElementFromAlloc(&gameState->playerSaveProgress.saveStateEntities, i, SaveStateEntity);
+
+		if(easyString_stringsMatch_nullTerminated(sceneName, saveEntity->sceneName) && saveEntity->id == id) {
+			result = saveEntity;
+			break;
+		}
+	}
+
+	return result;
+}
+
+static void saveStateEntity_addEntity(GameState *gameState, int id, char *sceneName, EntitySaveStateData data) {
+	SaveStateEntity entity = {};
+
+	entity.id = id;
+
+	easyMemory_zeroArray(entity.sceneName);
+
+	nullTerminateBuffer(entity.sceneName, sceneName, easyString_getSizeInBytes_utf8(sceneName));
+	entity.data = data;
+
+	addElementInfinteAlloc_notPointer(&gameState->playerSaveProgress.saveStateEntities, entity);
+}
+
+
+//NOTE: Helper function to combine the ones above to make it easier
+static void saveStateEntity_addOrEditEntity(GameState *gameState, int id, char *sceneName, Entity *entity) {
+	SaveStateEntity *saveEntity = saveStateEntity_findEntity(gameState, id, sceneName);
+
+	EntitySaveStateData data = saveStateEntity_makeSaveEntity(entity);
+
+	if(saveEntity) {
+		saveEntity->data = data;
+
+	} else {
+		saveStateEntity_addEntity(gameState, id, sceneName, data);	
+	}
+}
+
+
+
+
+#pragma pack(push, 1)
+typedef struct {
+    u8 magicNumber;
+    u8 version;
+    u32 sizeOfData;
+    u32 offsetToData;
+    u32 offsetToPlayerData;
+} SaveProgressFileFormat;
+#pragma pack(pop)
+
+#define SAVE_FILE_MAGIC_NUMBER ('S' | 'A' | 'V' | 'E')
+
+static void playerGameState_saveProgress(GameState *gameState, EntityManager *manager, char *filePath_) {
+
+    char *filePath = concatInArena(filePath_, concatInArena(platformGetTimeStamp_withSlashAtFront(&globalPerFrameArena), ".save", &globalPerFrameArena), &globalPerFrameArena);
+
+    SaveProgressFileFormat format = {};
+
+    //NOTE: Fill out player info 
+    {
+	    Entity *e = (Entity *)manager->player;
+
+	    gameState->playerSaveProgress.playerInfo.isValid = true; 
+	    gameState->playerSaveProgress.playerInfo.position = easyTransform_getWorldPos(&e->T);
+	    gameState->playerSaveProgress.playerInfo.health = e->health;
+	    gameState->playerSaveProgress.playerInfo.stamina = e->stamina;
+
+	    nullTerminateBuffer(gameState->playerSaveProgress.playerInfo.sceneName, gameState->currentSceneName, easyString_getSizeInBytes_utf8(gameState->currentSceneName));
+	}
+    /////////////////////////
+
+    format.magicNumber = SAVE_FILE_MAGIC_NUMBER;
+    format.version = 1;
+    format.sizeOfData = gameState->playerSaveProgress.saveStateEntities.count * gameState->playerSaveProgress.saveStateEntities.sizeOfMember;
+    
+    format.offsetToData = sizeof(SaveProgressFileFormat);
+
+    format.offsetToPlayerData = format.offsetToData + format.sizeOfData;
+
+    ///////////////////////************ Write the file to disk *************////////////////////
+    game_file_handle handle = platformBeginFileWrite(filePath);
+    if(!handle.HasErrors) {
+        platformWriteFile(&handle, &format, sizeof(SaveProgressFileFormat), 0);
+
+        if(gameState->playerSaveProgress.saveStateEntities.count > 0) {
+        	platformWriteFile(&handle, gameState->playerSaveProgress.saveStateEntities.memory, format.sizeOfData, format.offsetToData);
+    	}
+
+    	platformWriteFile(&handle, &gameState->playerSaveProgress.playerInfo, sizeof(SaveEntity_PlayerInfo), format.offsetToPlayerData);
+    	
+
+    } else {
+        easyConsole_addToStream(DEBUG_globalEasyConsole, "Can't save entity file. Handle has Errors.");             
+    }
+
+    platformEndFile(handle);    
+
+}
+
+static void playerGameState_loadProgress(GameState *gameState, EntityManager *manager, char *filePath_) {
+	char *saveFileTypes[] = {"save"};
+	FileNameOfType saveFiles = getDirectoryFilesOfType(concatInArena(filePath_, "\\", &globalPerFrameArena), saveFileTypes, arrayCount(saveFileTypes));
+		
+	if(saveFiles.count > 0) {
+		//NOTE: Just get the most recent save file
+		FileContents contents = platformReadEntireFile(saveFiles.names[saveFiles.count - 1], false);
+
+		if(contents.valid) {
+			SaveProgressFileFormat *format = (SaveProgressFileFormat *)contents.memory;
+
+			assert(contents.fileSize == (sizeof(SaveProgressFileFormat) + format->sizeOfData + sizeof(SaveEntity_PlayerInfo)));
+
+			assert(format->magicNumber == SAVE_FILE_MAGIC_NUMBER);
+
+			if(format->version == 1) {
+				SaveStateEntity *entities = (SaveStateEntity *)(((u8 *)contents.memory) + format->offsetToData);				
+				int entityCount = format->sizeOfData / sizeof(SaveStateEntity); 
+
+				//NOTE: Loop through entities and add them to the save state
+				for(int i = 0; i < entityCount; ++i) {
+					SaveStateEntity saveEntity = entities[i];
+
+ 					addElementInfinteAlloc_notPointer(&gameState->playerSaveProgress.saveStateEntities, saveEntity);
+				}
+
+				//Get the player info
+				SaveEntity_PlayerInfo *playerInfo = (SaveEntity_PlayerInfo *)(((u8 *)contents.memory) + format->offsetToPlayerData);
+				gameState->playerSaveProgress.playerInfo = *playerInfo;
+
+			}
+		}
+
+		//NOTE: Free the file contents
+		easyFile_endFileContents(&contents);
+
+
+		//NOTE: Free all the file names
+		for(int i = 0; i < saveFiles.count; ++i) {
+			free(saveFiles.names[i]);
+		}
+	}
+
+
+}
+
 
 typedef struct {
 	EntityType type;
 	V3 position;
 	V3 dP;
+	float rotation;
 	EasyTransform *parentT;
 	SubEntityType subType;
 } EntityToAdd;
@@ -250,6 +453,46 @@ typedef struct {
     EasyCollisionType collisionType;
     bool found;
 } MyEntity_CollisionInfo;
+
+
+#define ENTITY_MULTI_COLLISION_COUNT 64
+typedef struct {
+	int count;
+
+    Entity *e[ENTITY_MULTI_COLLISION_COUNT];
+    EasyCollisionType collisionType[ENTITY_MULTI_COLLISION_COUNT];
+
+    bool found;
+} MyEntity_CollisionInfo_Multi;
+
+static MyEntity_CollisionInfo_Multi MyEntity_hadCollisionWithType_multi(EntityManager *manager, EasyCollider *collider, EntityType type, EasyCollisionType colType) {
+    
+    MyEntity_CollisionInfo_Multi result = {};
+    result.found = false;
+    
+    for(int i = 0; i < collider->collisions.count; ++i) {
+    	EasyCollisionInfo *info = getElementFromAlloc(&collider->collisions, i, EasyCollisionInfo);
+
+        if(info->type == colType) {
+            int id = info->objectId; 
+            bool foundEntity = false;
+            for(int j = 0; j < manager->entities.count && !foundEntity; ++j) {
+                Entity *e = (Entity *)getElement(&manager->entities, j);
+                if(e) { //can be null
+                    if(result.count < arrayCount(result.e) && e->T.id == id && e->type == type) {
+                        int index = result.count++;
+                        result.e[index] = e;
+                        result.collisionType[index] = info->type;
+                        result.found = true;
+                        foundEntity = true;
+                    }
+                }
+            }
+        }
+    } 
+    
+    return result;
+}
 
 static MyEntity_CollisionInfo MyEntity_hadCollisionWithType(EntityManager *manager, EasyCollider *collider, EntityType type, EasyCollisionType colType) {
     
@@ -474,9 +717,11 @@ static inline float findDamage(EntityType type) {
 
 	if(type == ENTITY_SWORD) { return 1; }
 
-	if(type == ENTITY_ENEMY) { return 5; }
+	if(type == ENTITY_ENEMY) { return 1; }
 
-	if(type == ENTITY_ENEMY_PROJECTILE) { return 5; }
+	if(type == ENTITY_ENEMY_PROJECTILE) { return 1; }
+
+	if(type == ENTITY_PLAYER_PROJECTILE) { return 2; }
 
 	return 1.0f; //default value
 }
@@ -494,6 +739,64 @@ static inline void damagePlayer(EntityManager *manager, Entity *e, GameState *ga
 	}
 }
 
+static inline void hurtEnemy(GameState *gameState, EntityManager *manager, float damage, Entity *enemy, V3 worldP_ofEntityAttacking) {
+	easyConsole_addToStream(DEBUG_globalEasyConsole, "Enemy got hurt");
+
+	enemy->flashHurtTimer = 0;
+	enemy->healthBarTimer = 0;
+
+	V3 worldP = easyTransform_getWorldPos(&enemy->T);
+
+	//Knock the enemy back
+	V2 dir = normalizeV2(v2_minus(worldP.xy, worldP_ofEntityAttacking.xy));
+	enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(gameState->werewolf_knockback_distance, dir));
+	///
+
+	//Damage the enemy
+	if(enemy->health > 0.0f) {
+		enemy->health -= damage;
+
+		createDamageNumbers(manager, damage, v3_plus(worldP, v3(0, 0, -1.0f)));	
+
+		easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit 1");
+		if(enemy->type == ENTITY_ENEMY) {
+			easyAnimation_emptyAnimationContoller(&enemy->animationController, &gameState->animationFreeList);
+			easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, enemy->enemyType), EASY_ANIMATION_PERIOD);	
+			if(enemy->health > 0.0f) {
+				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, enemy->enemyType), EASY_ANIMATION_PERIOD);		
+			}
+			
+			easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit");
+
+			assert(easyAnimation_getCurrentAnimation(&enemy->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, enemy->enemyType)));
+		}
+		
+	}
+
+	//See if the enemey is dead
+	if(enemy->health <= 0.0f) {
+
+		easyConsole_addToStream(DEBUG_globalEasyConsole, "ENEMY DEAD");
+		// enemy->isDead = true;
+
+		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, enemy->enemyType), EASY_ANIMATION_PERIOD);	
+
+		//////////////////Release items /////////////////
+		//Add items skelton leaves behind
+		// for(int i = 0; i < 10; ++i) {
+		// 	// easyConsole_addToStream(DEBUG_globalEasyConsole, "creating potion");
+    	// 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+    	// 	EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+    	// 	entityToAdd->type = ENTITY_HEALTH_POTION_1;
+    	// 	entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
+
+    	// 	entityToAdd->dP.y = 0;
+    	// 	entityToAdd->dP.x = 0;//randomBetween(-5, 5);
+    	// }
+		/////////////////////////////////////////
+	}
+}
+
 static inline void player_useAttackItem(GameState *gameState, EntityManager *manager, float damage, Entity *entity) {
 	assert(entity->collider1->isTrigger);
     if(entity->collider1->collisions.count > 0) {
@@ -503,65 +806,11 @@ static inline void player_useAttackItem(GameState *gameState, EntityManager *man
         //Check if it got hurt 
         MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_ENEMY, EASY_COLLISION_STAY);	
         if(info.found) {
-        	easyConsole_addToStream(DEBUG_globalEasyConsole, "In bounds");
-
+        	// easyConsole_addToStream(DEBUG_globalEasyConsole, "In bounds");
         	Entity *enemy = info.e;
+        	hurtEnemy(gameState, manager, damage, enemy, easyTransform_getWorldPos(&entity->T));
 
-        	easyConsole_addToStream(DEBUG_globalEasyConsole, "WEREWOLF GOT HURT");
-
-
-        	enemy->flashHurtTimer = 0;
-        	enemy->healthBarTimer = 0;
-
-        	V3 worldP = easyTransform_getWorldPos(&enemy->T);
-        	V3 projectileP = easyTransform_getWorldPos(&entity->T);
-
-        	//Knock the enemy back
-        	V2 dir = normalizeV2(v2_minus(worldP.xy, projectileP.xy));
-        	enemy->rb->accumForceOnce.xy = v2_plus(enemy->rb->accumForceOnce.xy, v2_scale(gameState->werewolf_knockback_distance, dir));
-        	///
-
-        	//Damage the enemy
-        	if(enemy->health > 0.0f) {
-        		enemy->health -= damage;
-
-        		createDamageNumbers(manager, damage, v3_plus(worldP, v3(0, 0, -1.0f)));	
-
-        		easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit 1");
-        		if(enemy->type == ENTITY_ENEMY) {
-    				easyAnimation_emptyAnimationContoller(&enemy->animationController, &gameState->animationFreeList);
-    				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType), EASY_ANIMATION_PERIOD);	
-    				if(enemy->health > 0.0f) {
-    					easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, entity->enemyType), EASY_ANIMATION_PERIOD);		
-    				}
-    				
-        			easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit");
-
-        			assert(easyAnimation_getCurrentAnimation(&enemy->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType)));
-        		}
-        		
-        	}
-
-        	//See if the enemey is dead
-        	if(enemy->health <= 0.0f) {
-        		// enemy->isDead = true;
-
-        		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType), EASY_ANIMATION_PERIOD);	
-
-        		//////////////////Release items /////////////////
-        		//Add items skelton leaves behind
-        		// for(int i = 0; i < 10; ++i) {
-        		// 	// easyConsole_addToStream(DEBUG_globalEasyConsole, "creating potion");
-	        	// 	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
-	        	// 	EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
-	        	// 	entityToAdd->type = ENTITY_HEALTH_POTION_1;
-	        	// 	entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0.0f, 0));
-
-	        	// 	entityToAdd->dP.y = 0;
-	        	// 	entityToAdd->dP.x = 0;//randomBetween(-5, 5);
-	        	// }
-        		/////////////////////////////////////////
-        	}
+        	
         }
 	}
 }
@@ -744,6 +993,10 @@ typedef struct {
 	char *sceneToLoad;
 	EditorState *editorState;
 	GameWeatherState *weatherState;
+	int partnerId;
+	V2 moveDirection;
+
+	EasyCamera *camera;
 } EntityLoadSceneData;
 
 static void loadScene(void *data_) {
@@ -756,6 +1009,18 @@ static void loadScene(void *data_) {
 
 		gameScene_loadScene(data->gameState, data->manager, data->sceneToLoad, data->weatherState);
 
+
+		Entity *partnerEntity = findEntityById(data->manager, data->partnerId);
+		if(partnerEntity) {
+			V3 pos = easyTransform_getWorldPos(&partnerEntity->T);
+			Entity *player = (Entity *)data->manager->player;
+			player->T.pos = pos;
+
+			setCameraPosition(data->camera, pos);
+		}
+
+		data->gameState->preventSceneLoadTimer = 0;
+		data->gameState->moveDirectionAfterSceneLoad = data->moveDirection;
 		
 	}
 	data->gameState->gameIsPaused = false;	
@@ -778,6 +1043,54 @@ static void playerDiedReset(void *data_) {
 	data->gameState->gameIsPaused = false;	
 
 	free(data_);
+}
+
+static void entity_turnFireSavePlaceOn(GameState *gameState, EntityManager *manager, Entity *entity, bool prewarm) {
+	Animation *fireAnimation = 0;
+	if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
+		entity->sprite = findTextureAsset("woodFire.png");
+		fireAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
+	} else {						
+		entity->sprite = gameState_findSplatTexture(gameState, "firePost");
+		fireAnimation = gameState_findSplatAnimation(gameState, "firePostAniamted_5.png");	
+		
+	}
+
+	entity->sprite = 0;
+
+	easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, fireAnimation, EASY_ANIMATION_PERIOD);	
+	
+	entity->chestIsOpen = true;
+
+	ParticleSystemListItem *ps = getParticleSystem(manager, entity);
+	// ps->ps.Set.VelBias = rect3f(-0.4f, -0.1f, -1, 0.4f, 0.1f, -0.4f);
+	ps->ps.Set.VelBias = rect3f(0, 0, -0.3f, 0, 0, -0.7f);
+	ps->ps.Set.posBias = rect3f(-0.3f, -0.1f, 0, 0.3f, 0.1f, 0);
+	ps->ps.Set.bitmapScale = 0.6f;
+
+	easyParticles_setSystemLifeSpan(&ps->ps, 30.0f);
+	setParticleLifeSpan(&ps->ps, 5.6f);
+
+	ps->color = v4(0.3f, 0.3f, 0.3f, 1);
+	ps->ps.Set.Loop = true;
+
+	Reactivate(&ps->ps);
+
+	ps->position = &entity->T.pos;
+	ps->offset = v3(0, 0, -0.1f);
+
+	if(prewarm) {
+		prewarmParticleSystem(&ps->ps, v3(0, 0, 0));
+	}
+
+
+	//place fire sound
+	entity->currentSound = playLocationSound(&globalLongTermArena, easyAudio_findSound("fireplace.wav"), 0, AUDIO_FOREGROUND, easyTransform_getWorldPos(&entity->T));
+	EasySound_LoopSound(entity->currentSound);
+
+	entity->currentSound->volume = 3.0f;
+	entity->currentSound->innerRadius = 0.4f;
+	entity->currentSound->outerRadius = 1.0f;
 }
 
 
@@ -829,6 +1142,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->isDeleted = false;
 	entity->tBob = 0;
 	entity->chestIsOpen = false;
+	entity->isActivated = false;
 
 	entity->innerRadius = 0.2f;
 	entity->outerRadius = 4.0f;
@@ -839,6 +1153,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->lightColor = v3(1, 0.5f, 0);
 
 	entity->flashHurtTimer = -1.0f;
+	entity->refCount = 0;
 
 	entity->particleSystemIndexToEndOnDelete = -1;
 
@@ -858,7 +1173,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		gravityFactor = 0; 
 	}
 
-	if(type == ENTITY_SKELETON || type == ENTITY_ENEMY) {
+	if(type == ENTITY_ENEMY) {
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
@@ -903,7 +1218,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY || type == ENTITY_PLAYER_PROJECTILE) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -930,10 +1245,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER;
 			} break;
 			case ENTITY_PLAYER_PROJECTILE: {
+				//NOTE: This also has a collider1 which the player can choose to pick up
 				entity->collider->layer = EASY_COLLISION_LAYER_PLAYER_BULLET;
-			} break;
-			case ENTITY_SKELETON: {
-				entity->collider->layer = EASY_COLLISION_LAYER_ENEMIES;
 			} break;
 			case ENTITY_ENEMY_PROJECTILE:
 			case ENTITY_FOG:
@@ -970,6 +1283,14 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	return entity;
 }
 
+static void activateDoor(Entity *entity) {
+	entity->isActivated = true;
+	entity->moveTimer = 0;
+	entity->chestIsOpen = false;
+	entity->collider->isActive = true;
+
+}
+
 
 static void tryPlayFootstep(Entity *entity) {
 	if(entity->footStepTimer == 0) {
@@ -994,7 +1315,7 @@ static void tryPlayFootstep(Entity *entity) {
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup, GameWeatherState *weatherState) {
+void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup, GameWeatherState *weatherState, char *engine_saveFilePath) {
 
 	RenderProgram *shaderProgram = &pixelArtProgram;
 
@@ -1022,6 +1343,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	if(entity->type == ENTITY_WIZARD) {
 
+
+
 		V3 wP = easyTransform_getWorldPos(&entity->T);
 
 		//Update listener position which is the wizard
@@ -1032,12 +1355,12 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		easy_setPlayerPosition(entitiesRenderGroup, wP);
 		
-
+		float walkModifier = 1;
 		Animation *idleAnimation = 0;
 		// if(easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardIdle) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRun) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardBottom) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardRight) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardLeft) || easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->wizardJump))
 		{
 			
-			float walkModifier = 1;
+			
 
 			if(isDown(keyStates->gameButtons, BUTTON_SHIFT)) {
 				walkModifier = 2.5f;
@@ -1160,6 +1483,38 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		}
 
+		//NOTE: On a level load we move to the partner id and walk for a bit and run a timer to prevent going back in the door we came out of 
+		if(gameState->preventSceneLoadTimer >= 0) {
+			entity->rb->accumForce.xy = v2_scale(gameState->walkPower*walkModifier, gameState->moveDirectionAfterSceneLoad);
+
+			gameState->preventSceneLoadTimer += dt;
+
+			float canVal = gameState->preventSceneLoadTimer / 0.5f;
+
+			if(gameState->moveDirectionAfterSceneLoad.x > 0) {
+				entity->direction = ENTITY_DIRECTION_RIGHT;
+				animToAdd = &gameState->wizardRight;
+				idleAnimation = &gameState->wizardIdleRight;	
+			} else if(gameState->moveDirectionAfterSceneLoad.x < 0) {
+				entity->direction = ENTITY_DIRECTION_LEFT;
+				animToAdd = &gameState->wizardLeft;
+				idleAnimation = &gameState->wizardIdleLeft;	
+
+			} else if(gameState->moveDirectionAfterSceneLoad.y < 0) {
+				entity->direction = ENTITY_DIRECTION_DOWN;
+				animToAdd = &gameState->wizardBottom;
+				idleAnimation = &gameState->wizardIdleBottom;	
+			} else if(gameState->moveDirectionAfterSceneLoad.y > 0) {
+				entity->direction = ENTITY_DIRECTION_UP;
+				animToAdd = &gameState->wizardForward;
+				idleAnimation = &gameState->wizardIdleForward;
+			}
+
+			if(canVal >= 1) {
+				gameState->preventSceneLoadTimer = -1;
+			} 
+		}
+
 		// char string[512];
 		// sprintf(string, "is grounded");
 		// easyConsole_addToStream(console, string);
@@ -1207,6 +1562,29 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			// 	}
 			// }
 
+
+		}
+
+		//NOTE: CAST A SPELL
+		if(wasPressed(keyStates->gameButtons, BUTTON_C)) {
+			//spawn bullet
+			ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+			EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+			easyMemory_zeroStruct(entityToAdd, EntityToAdd);
+
+			entityToAdd->type = ENTITY_PLAYER_PROJECTILE;
+			entityToAdd->position = easyTransform_getWorldPos(&entity->T);
+			entityToAdd->position.z = -0.5f;
+
+			playGameSound(&globalLongTermArena, gameState->bowArrowSound, 0, AUDIO_FOREGROUND);
+
+			V2 shootDirection = v2_minus(v2(keyStates->mouseP_01.x, 1.0f - keyStates->mouseP_01.y), v2(0.5f, 0.5f));
+
+			float shootPower = 7.0f;
+			shootDirection = v2_scale(shootPower, normalizeV2(shootDirection));
+
+			entityToAdd->dP.xy = shootDirection;
+			entityToAdd->rotation = ATan2_0toTau(shootDirection.y, shootDirection.x) + PI32/2;
 
 		}
 
@@ -1391,6 +1769,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             			loadSceneData->editorState = editorState;
             			loadSceneData->weatherState = weatherState;
 
+
             			easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 2");
 
             			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
@@ -1425,6 +1804,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	            			if(entity->type == ENTITY_CHEST) {
 	            				assert(!entity->chestIsOpen);
 	            				entity->chestIsOpen = true;
+
+	            				//NOTE: Update the chest state in the save file so the chest is open when the player comes back here on new scene load
+	            				saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
 
 	            				ChestContents chestContents = getChestContents(entity->chestType);
 
@@ -1546,7 +1928,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entity->aiController = easyAi_initController(&globalPerSceneArena);
 		}	
 
-		bool isDying = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType));
+		bool isDying = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType));
 		bool isHurt = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, entity->enemyType)) || isDying;
 
 		//TODO: make this an array for all enemy types 
@@ -1621,7 +2003,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			V2 dir = normalizeV2(diff.xy);
 
 
-			//WEREWOLF HURT PLAYER//
+			//Enemy HURT PLAYER//
 			if(entity->collider1->collisions.count > 0) {
 				assert(entity->collider1->isTrigger);
 
@@ -1675,7 +2057,9 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	        	}
 	        }
     	} else {
-    		easyConsole_addToStream(DEBUG_globalEasyConsole, "werewolf is hurt");
+    		easyConsole_addToStream(DEBUG_globalEasyConsole, "enemy is hurt");
+
+
     	}
 		
 	}
@@ -1714,8 +2098,64 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 	if(entity->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
+		if(entity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON || entity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
 
-		if(entity->triggerType == ENTITY_TRIGGER_OPEN_GATE_WITH_KEY) {
+			//NOTE: This is the Door
+
+			float zOffset = 1.f;
+			if(!entity->chestIsOpen) {
+				zOffset = 0;
+			}
+
+			if(entity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE && !entity->isActivated) {
+				zOffset = 1.f;	
+			}
+
+			//NOTE: Animate the door opening and closing
+			if(entity->moveTimer >= 0.0f) {
+				float timeScale = 2.1f;
+				entity->moveTimer += timeScale*dt;
+
+				zOffset = entity->moveTimer;
+
+				if(!entity->chestIsOpen) {
+					zOffset = 1.0f - entity->moveTimer;
+				}  
+
+				if(entity->moveTimer >= 1.0f) {
+					entity->moveTimer = -1.0f;
+				}
+			}
+
+			entity->T.pos.z = zOffset;
+
+			//NOTE: See if we need to close the door on exit
+			if(entity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
+				if(entity->collider1->collisions.count > 0 && !entity->isActivated) {
+					MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_EXIT);
+					
+					V3 entityP = easyTransform_getWorldPos(&entity->T);
+					Entity *player = (Entity *)manager->player;
+					V3 diff = v3_minus(easyTransform_getWorldPos(&player->T), entityP);
+
+					if(info.found && diff.x < 0) { //TODO: This check has to be specific to the door
+						//NOTE: Won't come back in this code path
+
+						
+ 						activateDoor(entity);
+
+ 						assert(!entity->chestIsOpen);
+
+						playGameSound(&globalLongTermArena, gameState->metalDoorSlamSound, 0, AUDIO_FOREGROUND);
+
+						//NOTE: Update the chest state in the save file so the chest is open when the player comes back here on new scene load
+						saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+
+						
+					}
+				}
+			}
+		} else if(entity->triggerType == ENTITY_TRIGGER_OPEN_GATE_WITH_KEY) {
 			if(entity->chestIsOpen) {
 				//do nothing, already open				
 			} else {
@@ -1732,6 +2172,10 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 						entity->chestIsOpen = true;
 						//turn collider off. 
 						entity->collider->isActive = false;
+
+						//NOTE: Update the chest state in the save file so the chest is open when the player comes back here on new scene load
+						saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+ 
 					}
 				} else {
 					entity->sprite = gameState_findSplatTexture(gameState, "ironGate");
@@ -1740,98 +2184,119 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		} else if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || entity->triggerType == ENTITY_TRIGGER_FIRE_POST) {
 
-			if(entity->chestIsOpen) {
-				//do nothing				
-			} else {
-
-				Animation *fireAnimation = 0;
-				if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
-					entity->sprite = findTextureAsset("woodFire.png");
-					fireAnimation = gameState_findSplatAnimation(gameState, "woodFire5.png");
-				} else {						
-					entity->sprite = gameState_findSplatTexture(gameState, "firePost");
-					fireAnimation = gameState_findSplatAnimation(gameState, "firePostAniamted_5.png");	
 					
+			{
+
+				if(!entity->chestIsOpen) {
+					if(entity->triggerType == ENTITY_TRIGGER_FIRE_POST) {
+						entity->sprite = gameState_findSplatTexture(gameState, "firePost");
+					} else {
+						entity->sprite = findTextureAsset("woodFire.png");	
+					}
 				}
 				
 
 				if(entity->collider1->collisions.count > 0) {
-					MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
-					if(info.found && gameState->lastCheckPointId != entity->T.id) {
-						
-						// easyConsole_addToStream(DEBUG_globalEasyConsole, "Playing ANimation");
-						//turn fire on
-						entity->sprite = 0;
-						
-						easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, fireAnimation, EASY_ANIMATION_PERIOD);	
-						
-						entity->chestIsOpen = true;
+					MyEntity_CollisionInfo info_enter = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);
 
-						ParticleSystemListItem *ps = getParticleSystem(manager, entity);
-						// ps->ps.Set.VelBias = rect3f(-0.4f, -0.1f, -1, 0.4f, 0.1f, -0.4f);
-						ps->ps.Set.VelBias = rect3f(0, 0, -0.3f, 0, 0, -0.7f);
-						ps->ps.Set.posBias = rect3f(-0.3f, -0.1f, 0, 0.3f, 0.1f, 0);
-						ps->ps.Set.bitmapScale = 0.6f;
-
-						easyParticles_setSystemLifeSpan(&ps->ps, 30.0f);
-						setParticleLifeSpan(&ps->ps, 5.6f);
-
-						ps->color = v4(0.3f, 0.3f, 0.3f, 1);
-						ps->ps.Set.Loop = true;
-
-						Reactivate(&ps->ps);
-
-						ps->position = &entity->T.pos;
-						ps->offset = v3(0, 0, -0.1f);
-
-						//place fire sound
-						entity->currentSound = playLocationSound(&globalLongTermArena, easyAudio_findSound("fireplace.wav"), 0, AUDIO_FOREGROUND, easyTransform_getWorldPos(&entity->T));
-						EasySound_LoopSound(entity->currentSound);
-
-						entity->currentSound->volume = 3.0f;
-						entity->currentSound->innerRadius = 0.4f;
-						entity->currentSound->outerRadius = 1.0f;
+					MyEntity_CollisionInfo info_stay = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);
 
 
-						//extra stuff it is a save fire
-						if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
-							//play sound to say saved checkpoint
-							playGameSound(&globalLongTermArena, gameState->gongSound, 0, AUDIO_FOREGROUND);
+					if((info_enter.found && !entity->chestIsOpen) || (info_stay.found && entity->chestIsOpen)) {
+						// if(gameState->playerSaveProgress.playerInfo.lastCheckPointId != entity->T.id) 
+						{
+							bool shouldSave = false;
+							//extra stuff is a save fire
+							if(entity->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE) {
 
-							//save your checkpoint state
-							gameState->lastCheckPointId = entity->T.id;
-							gameState->lastCheckPointSceneName = gameState->currentSceneName;
+								if(entity->chestIsOpen) {
+									//NOTE: Show hover for prompt to save
+									renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, true, entitiesRenderGroup);
+								}
 
-							///// Show help message
-	    					//The dialog options 
-	    					// Make the temporary talk node
-	    					{
-	        					gameState->gameDialogs.perDialogArenaMark = takeMemoryMark(&gameState->gameDialogs.perDialogArena);
+								if(!entity->chestIsOpen || (wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !gameState->gameIsPaused)) {
+									//ask user if they want to save their progress		
 
-	        					gameState->currentTalkText = constructDialogNode(&gameState->gameDialogs);
-	        					pushTextToNode(gameState->currentTalkText, "{s: 3}Sleeping at campfires will save your progress. Once lit, you can navigate back to them.");
+									if(!entity->chestIsOpen) {
+										//play sound to say saved checkpoint only if a new fire
+										playGameSound(&globalLongTermArena, gameState->gongSound, 0, AUDIO_FOREGROUND);
+									}
+									
+									//save your checkpoint state by adding it as the lastest checkpoint
+									gameState->playerSaveProgress.playerInfo.lastCheckPointId = entity->T.id;
+									nullTerminateBuffer(gameState->playerSaveProgress.playerInfo.lastCheckPointSceneName, gameState->currentSceneName, easyString_getSizeInBytes_utf8(gameState->currentSceneName));
+									
 
-	    					}
+									///// Show help message
+			    					//The dialog options 
+			    					// Make the temporary talk node
+			    					if(!entity->chestIsOpen) {
+				    					if(!gameState->playerSaveProgress.playerInfo.hasShownFireplaceTutorial){
+				        					gameState->gameDialogs.perDialogArenaMark = takeMemoryMark(&gameState->gameDialogs.perDialogArena);
 
-	    					gameState->gameModeType = GAME_MODE_READING_TEXT;
-	    					gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
-	    					gameState->enteredTalkModeThisFrame = true;
-	    					
-	    					gameState->messageIndex = 0; //start at the begining
-	    					easyFontWriter_resetFontWriter(&gameState->fontWriter);
-							///////////////////////////////////////////////////////
+				        					gameState->currentTalkText = constructDialogNode(&gameState->gameDialogs);
+				        					pushTextToNode(gameState->currentTalkText, "{s: 3}Sleeping at campfires will save your progress. Once lit, you can navigate back to them.");
+				    						
+				    						gameState->playerSaveProgress.playerInfo.hasShownFireplaceTutorial = true;
+
+				    					} else {
+				    						gameState->gameDialogs.perDialogArenaMark = takeMemoryMark(&gameState->gameDialogs.perDialogArena);
+
+				    						gameState->currentTalkText = constructDialogNode(&gameState->gameDialogs);
+				    						pushTextToNode(gameState->currentTalkText, "{s: 3}You Rest. Progress Saved.");
+				    					}
+
+				    					shouldSave = true;
+
+			    					} else {
+			    						gameState->currentTalkText = findDialogInfo(ENTITY_DIALOG_ASK_USER_TO_SAVE, &gameState->gameDialogs);
+			    					}
+
+			    					
+
+			    					gameState->gameModeType = GAME_MODE_READING_TEXT;
+			    					gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING;
+			    					gameState->enteredTalkModeThisFrame = true;
+			    					
+			    					gameState->messageIndex = 0; //start at the begining
+			    					easyFontWriter_resetFontWriter(&gameState->fontWriter);
+									///////////////////////////////////////////////////////
+
+		    					}
+		    				}
+
+		    				if(!entity->chestIsOpen) {							
+		    					//turn fire on
+		    					entity_turnFireSavePlaceOn(gameState, manager, entity, false);
+		    					//NOTE: Make fire stay on when you come back here
+		    					saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+		    				}
+
+		    				if(shouldSave) {
+		    					//NOTE: Save after we set the shownFirePlace boolean tutorial
+		    					playerGameState_saveProgress(gameState, manager, engine_saveFilePath);
+		    				}
+
 	    				}
 
 					} 
 				}
 			}
+		} else if(entity->triggerType == ENTITY_TRIGGER_ENTER_SHOP) {
+			if(wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !gameState->gameIsPaused) {
+				//Enter the shop
+				if(entity->chestType == CHEST_TYPE_SHOP_1) {
+					enterGameShop(gameState->townShop, gameState);
+				}
+			}
+
 		}
 	}
 
 	if(entity->type == ENTITY_TRIGGER) {
 
 
-		if(entity->triggerType == ENTITY_TRIGGER_LOAD_SCENE) {
+		if(entity->triggerType == ENTITY_TRIGGER_LOAD_SCENE && gameState->preventSceneLoadTimer < 0) { //NOTE: scene loader 
 			MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
 			if(info.found) {
 				playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
@@ -1842,13 +2307,18 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				loadSceneData->sceneToLoad = entity->levelToLoad;
 				loadSceneData->editorState = editorState;
 				loadSceneData->weatherState = weatherState;
+				loadSceneData->partnerId = entity->partnerId;
+				loadSceneData->moveDirection = entity->moveDirection;
+				loadSceneData->camera = cam;
 
 				easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 1");
 
 				EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
 				gameState->gameIsPaused = true;	
 			}
-		}
+		}	
+
+		//TODO: Change to box aswell
 
 		MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
 		if(info.found) {
@@ -1875,9 +2345,91 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			} 
 		}
 
-		// if(entity->triggerType == ENTITY_TRIGGER_LOCATION_SOUND && entity->currentSound) {
-			
-		// }
+		if(entity->triggerType == ENTITY_TRIGGER_BUTTON_FOR_DOOR) {
+
+			//NOTE: The trigger button can have wizard and push blocks on it
+
+			info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);
+			MyEntity_CollisionInfo info1 = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_BLOCK_TO_PUSH, EASY_COLLISION_ENTER);	
+
+			//Open the door partner
+			Entity *partnerDoor = findEntityById(manager, entity->partnerId);
+
+			if((info.found || info1.found) && partnerDoor) {
+
+				if(info.found) {
+					entity->refCount++;	
+				}
+
+				if(info1.found) {
+					entity->refCount++;	
+				}
+				
+
+				if(!partnerDoor->chestIsOpen) {
+
+					playGameSound(&globalLongTermArena, gameState->metalDoorSlamSound, 0, AUDIO_FOREGROUND);
+
+					entity->sprite = gameState_findSplatTexture(gameState, "button_down");
+					
+					partnerDoor->chestIsOpen = true;
+					partnerDoor->collider->isActive = false;
+					//open the door
+					if(partnerDoor->moveTimer >= 0) {
+						entity->moveTimer = 1.0f - partnerDoor->moveTimer;
+					} else {
+						partnerDoor->moveTimer = 0;	
+					}
+
+					//NOTE: Update the button state
+					saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+					//NOTE: Update the door state
+					saveStateEntity_addOrEditEntity(gameState, entity->partnerId, gameState->currentSceneName, partnerDoor);
+
+				}
+			}
+
+			info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_EXIT);
+			info1 = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_BLOCK_TO_PUSH, EASY_COLLISION_EXIT);	
+
+			//Close the door partner
+			partnerDoor = findEntityById(manager, entity->partnerId);
+
+			if((info.found || info1.found) && partnerDoor) {
+
+				entity->refCount--;
+				
+				if(entity->refCount <= 0) {
+					assert(entity->refCount == 0);
+					assert(partnerDoor->chestIsOpen);
+					//NOTE: CLOSE THE DOOR
+
+					entity->sprite = gameState_findSplatTexture(gameState, "button_up");
+
+					playGameSound(&globalLongTermArena, gameState->metalDoorSlamSound, 0, AUDIO_FOREGROUND);
+
+
+					//NOTE: Update the chest state in the save file so the chest is open when the player comes back here on new scene load
+					
+
+					partnerDoor->collider->isActive = true;
+					//close the door
+					partnerDoor->chestIsOpen = false;
+					//open the door
+					if(partnerDoor->moveTimer >= 0) {
+						partnerDoor->moveTimer = 1.0f - partnerDoor->moveTimer;
+					} else {
+						partnerDoor->moveTimer = 0;	
+					}
+
+					//NOTE: Update the button state
+					saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+					//NOTE: Update the door state
+					saveStateEntity_addOrEditEntity(gameState, entity->partnerId, gameState->currentSceneName, partnerDoor);
+
+				}
+			}
+		}
 	}
 
 	
@@ -1900,7 +2452,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			entity->aiController = easyAi_initController(&globalPerSceneArena);
 		}	
 		
-
+		bool saveEntity = false;
 
 		/////////////////////////////////
 
@@ -1923,6 +2475,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 				ps->position = &entity->T.pos;
 				ps->offset = v3(-0.2f, 0, 0.5f);
+				saveEntity = true;
 				
 			}
 		}
@@ -1945,7 +2498,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				ps->ps.Set.posBias = rect3f(0, -0.3f, 0, 0, 0.3f, 0);
 				ps->position = &entity->T.pos;
 				ps->offset = v3(0.2f, 0, 0.5f);
-				
+				saveEntity = true;
 			}
 		}
 
@@ -1967,7 +2520,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				ps->ps.Set.posBias = rect3f(-0.3f, 0, 0, 0.3f, 0, 0);
 				ps->position = &entity->T.pos;
 				ps->offset = v3(0, 0.5f, 0.5f);
-				
+				saveEntity = true;
 			}
 		}
 
@@ -1989,8 +2542,18 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 				ps->ps.Set.posBias = rect3f(-0.3f, 0, 0, 0.3f, 0, 0);
 				ps->position = &entity->T.pos;
 				ps->offset = v3(0, -0.5f, 0.5f);
-				
+
+				saveEntity = true;
+
 			}
+		}
+
+		if(saveEntity) {
+			V3 lastP = entity->T.pos;
+			entity->T.pos.xy = entity->endMovePos.xy;
+
+			saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+			entity->T.pos = lastP;
 		}
 
 
@@ -2053,64 +2616,8 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 
 
-	if(entity->type == ENTITY_SKELETON) {
-		Animation *animToAdd = 0;
-
-		// if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) {
-		// 	animToAdd = &gameState->skeletonAttack;
-		// }
-
-		// if(wasPressed(keyStates->gameButtons, BUTTON_2)) {
-		// 	animToAdd = &gameState->skeletonDeath;
-		// }
-
-		// if(wasPressed(keyStates->gameButtons, BUTTON_3)) {
-		// 	animToAdd = &gameState->skeltonShield;
-		// }
-
-		// if(wasPressed(keyStates->gameButtons, BUTTON_4)) {
-		// 	animToAdd = &gameState->skeltonHit;
-		// }
-
-		// if(wasPressed(keyStates->gameButtons, BUTTON_5)) {
-		// 	animToAdd = &gameState->skeltonWalk;
-		// }
-
-
-
-		//NOTE: Check if a player bullet hit the skeleton 
-
-		if(entity->collider->collisions.count > 0 && entity->health > 0) {
-            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_PLAYER_PROJECTILE, EASY_COLLISION_ENTER);	
-            if(info.found) {
-            	easyConsole_addToStream(console, "skeleton hit");
-            	animToAdd = &gameState->skeltonHit;	
-
-            	entity->health--;
-
-            	entity->healthBarTimer = 0;
-            	
-            }
-		}
-
-		if(!entity->isDying && entity->health == 0 && !animToAdd && !easyAnimation_getCurrentAnimation(&entity->animationController, &gameState->skeltonHit)) {
-			animToAdd = &gameState->skeletonDeath;
-			entity->isDying = true;
-		}
-
-
-		if(animToAdd) {
-			easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);
-			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, &gameState->skeltonIdle, EASY_ANIMATION_PERIOD);	
-		}
-
-	}	
-
 	if(entity->type == ENTITY_ENEMY_PROJECTILE) {
-		// easyConsole_addToStream(console, "updateing projectileP");
-
-		easyConsole_pushFloat(DEBUG_globalEasyConsole, entity->rb->dP.y);
+		//NOTE: See if it hurt any entities
 
  		if(entity->collider->collisions.count > 0) {
             MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
@@ -2152,29 +2659,63 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	}
 
 	if(entity->type == ENTITY_PLAYER_PROJECTILE) {
-			
-		// char str[256];
-		// sprintf(str, "%f", entity->rb->inverseWeight);
-		// easyConsole_addToStream(DEBUG_globalEasyConsole, str);
+		entity->rb->dragFactor = 0.001f;
+		entity->rb->accumForce.z = 20; //gravity for the projectile
 
- 		if(entity->collider->collisions.count > 0) {
-            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_SKELETON, EASY_COLLISION_ENTER);	
-            if(info.found) {
-            	easyConsole_addToStream(console, "skeleton hit 2");
+		if(entity->isDying) {
+			entity->rb->dragFactor = 0;
+			entity->rb->dP = v3(0, 0, 0);
+			entity->rb->accumForce = v3(0, 0, 0); //gravity for the projectile
+		}
+
+		V3 entityP = easyTransform_getWorldPos(&entity->T);
+
+		if(entityP.z > 0 && !entity->isDying) {
+			//NOTE: Add floor friction now
+			entity->rb->dragFactor = 0.08;
+			entity->T.pos.z = 0; //make sure it doesn't go through the floor
+
+			//NOTE: Can pick up the arrow now that it's stopped
+
+	 		if(entity->collider1->collisions.count > 0 && !entity->isDying) {
+	 			MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);
+
+	 			if(info.found) {
+	 				renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, true, entitiesRenderGroup);
+
+	 				if(wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !gameState->gameIsPaused) {
+	 					//NOTE: Pickup the arrow
+	 					//TODO: Should hover above the person's head briefly
+
+	 					playGameSound(&globalLongTermArena, gameState->saveSuccessSound, 0, AUDIO_FOREGROUND);
+
+	 					addItemToPlayer(gameState, ENTITY_PLAYER_PROJECTILE, 1, true);
+	 					
+	 					//Remove from the game
+	 					entity->isDead = true;
+	 				}
+
+	 			}
+			}
+
+		}
+
+ 		if(entity->collider->collisions.count > 0 && !entity->isDying) {
+ 			MyEntity_CollisionInfo_Multi infos = MyEntity_hadCollisionWithType_multi(manager, entity->collider, ENTITY_ENEMY, EASY_COLLISION_ENTER);
+            for(int i = 0; i < infos.count; ++i) {
+            	// easyConsole_addToStream(console, "HIT Enemy");
+            	Entity *enemy = infos.e[i];
+            	hurtEnemy(gameState, manager, findDamage(entity->type), enemy, easyTransform_getWorldPos(&entity->T));
+
+            	//NOTE: Make the arrow part of the entity so it walks around with it in
+            	easyTransform_assignAsParent(&entity->T, &enemy->T);
             	
-            }
-
-            info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_ENEMY, EASY_COLLISION_ENTER);	
-            if(info.found) {
-            	easyConsole_addToStream(console, "werewolf hit");
+            	//Should walk around with the enemy now, so deavtivate the arrow. Piggy backing on the isDying bool
+            	entity->isDying = true;
             }
 		}
 
-
-
 		entity->lifeSpanLeft -= dt;
-
-		
 
 		if(entity->lifeSpanLeft <= 0.0f) {
 			entity->isDead = true;
@@ -2268,7 +2809,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 			Animation *deathAnimation = getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType);
 			if(entity->animationController.finishedAnimationLastUpdate && entity->animationController.lastAnimationOn == deathAnimation && easyAnimation_getCurrentAnimation(&entity->animationController, deathAnimation)) {
 				entity->isDead = true;
-				easyConsole_addToStream(DEBUG_globalEasyConsole, "werewolf died");
+
+				//NOTE: Add it to the save file
+				saveStateEntity_addOrEditEntity(gameState, entity->T.id, gameState->currentSceneName, entity);
+
+				easyConsole_addToStream(DEBUG_globalEasyConsole, "enemy died");
 
 				if(entity == editorState->entitySelected) {
 					letGoOfSelectedEntity(editorState);
@@ -2446,8 +2991,9 @@ static Entity *initEmptyTriggerWithRigidBody(GameState *gameState, EntityManager
     return e;
 }
 
-static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3 worldP, EntityTriggerType triggerType) {
-    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TRIGGER, 0, &globalWhiteTexture, COLOR_WHITE, -1, true);
+static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3 worldP, EntityTriggerType triggerType, Texture *t) {
+	if(!t) { t = &globalWhiteTexture; }
+    Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TRIGGER, 0, t, COLOR_WHITE, -1, true);
     e->T.pos.z = -0.5f;
 
     e->triggerType = triggerType;
@@ -2455,6 +3001,8 @@ static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3
     e->flags |= (int)ENTITY_SHOULD_NOT_RENDER;
 
     e->levelToLoad = gameState->emptyString;
+
+
 
     return e;
 }
@@ -2469,9 +3017,6 @@ static Entity *initScenery_withRigidBody(GameState *gameState, EntityManager *ma
 
 static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 worldP) {
 	 return initEntity(manager, &gameState->wizardIdle, worldP, v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
-}
-static Entity *initSkeleton(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, &gameState->skeltonIdle, worldP, v2(2.5f, 2.5f), v2(0.25f, 0.15f), gameState, ENTITY_SKELETON, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
 }
 
 static Entity *initEnemy(GameState *gameState, EntityManager *manager, V3 worldP) {
@@ -2659,7 +3204,7 @@ static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 wor
 
 	Entity *e = initEntity(manager, 0, worldP, v2(blockDim, blockDim), v2(0.5f, 0.5f), gameState, ENTITY_BLOCK_TO_PUSH, gameState->inverse_weight, crateTexture, COLOR_WHITE, -1, true);
 		
-	e->T.pos.z = -0.2f;
+	e->T.pos.z = -0.26f;
 	//Add triggers to see if player is pushing	
 
 	float triggerSize = 0.8f;
@@ -2713,7 +3258,17 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 
 		} break;
 		case ENTITY_PLAYER_PROJECTILE: {
-			assert(false);
+			Texture *dartTexture = findTextureAsset("dart.png");
+		    newEntity =  initEntity(manager, 0, position, v2(1, 1), v2(1, 1), gameState, ENTITY_PLAYER_PROJECTILE, 1.f / 20.f, dartTexture, COLOR_WHITE, -1, true);
+		    newEntity->T.pos.z = -0.5f;
+		    newEntity->lifeSpanLeft = 60.f*3; //3minutes: they have a really long life span so you can pick them back up
+		    float spellScale = 0.15f;
+		    newEntity->T.scale = v3(spellScale, dartTexture->aspectRatio_h_over_w*spellScale, spellScale);
+
+		    assert(newEntity->collider1);
+
+		    //NOTE: Make the pickup collider bigger
+		    newEntity->collider1->dim2f = v2(6, 6);
 		} break;
 		case ENTITY_TRIGGER_WITH_RIGID_BODY: {
 			newEntity = initEmptyTriggerWithRigidBody(gameState, manager, position, splatTexture);
@@ -2721,9 +3276,6 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 		} break;
 		case ENTITY_SHOOT_TRIGGER: {
 			newEntity = initShootTrigger(gameState, manager, position, splatTexture);
-		} break;
-		case ENTITY_SKELETON: {
-			newEntity = initSkeleton(gameState, manager, position);
 		} break;
         case ENTITY_SEAGULL: {
             newEntity = initSeagull(gameState, manager, position);
@@ -2738,7 +3290,7 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
             newEntity = initHorse(gameState, manager, position);
         } break;
         case ENTITY_TRIGGER: {
-            newEntity = initEmptyTrigger(gameState, manager, position, triggerType);
+            newEntity = initEmptyTrigger(gameState, manager, position, triggerType, splatTexture);
         } break;
         case ENTITY_BLOCK_TO_PUSH: {
             newEntity = initPushRock(gameState, manager, position);

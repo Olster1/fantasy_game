@@ -12,6 +12,7 @@ static char *getFullNameForEntityFile(int entityID, char *fullSceneFolderPath) {
 
 }
 
+
 static void gameScene_saveScene(GameState *gameState, EntityManager *manager, char *sceneName_) {
 	DEBUG_TIME_BLOCK()
 
@@ -121,7 +122,14 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             if(e->levelToLoad) {
                 addVar(&fileContents, e->levelToLoad, "levelToLoad", VAR_CHAR_STAR);    
+
             }
+
+            addVar(&fileContents, &e->partnerId, "partnerId", VAR_INT);    
+
+            addVar(&fileContents, &e->moveDirection, "moveDirection", VAR_V2);    
+            
+            
 
 	        if(e->audioFile) {
 	        	addVar(&fileContents, e->audioFile, "audioFileName", VAR_CHAR_STAR);	
@@ -392,6 +400,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                 bool renderFirstPass = false;
 
+                int partnerId = -1;
+                V2 moveDirection = v2(0, 0);
+
+
         		// s32 teleporterIds[256];
         		// Entity *teleportEnts[256];
         		// u32 idCount = 0;
@@ -495,6 +507,15 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                                 sceneToLoad = easyString_copyToHeap(loadString);
                             }
 
+
+
+                            if(stringsMatchNullN("partnerId", token.at, token.size)) {
+                                partnerId = getIntFromDataObjects(&tokenizer);
+                            }
+
+                            if(stringsMatchNullN("moveDirection", token.at, token.size)) {
+                                moveDirection = buildV2FromDataObjects(&tokenizer);
+                            }
 
                             if(stringsMatchNullN("shouldNotRender", token.at, token.size)) {
                                 shouldNotRender = getBoolFromDataObjects(&tokenizer);
@@ -767,6 +788,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         			newEntity->layer = layer;
                     newEntity->renderFirstPass = renderFirstPass;
 
+                    newEntity->partnerId = partnerId;
+                    newEntity->moveDirection = moveDirection;
+
                     newEntity->aiController = aiController;
                     
                     newEntity->dialogType = dialogType;
@@ -799,11 +823,19 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                         newEntity->audioFile = audioFile;
                     }
 
-                    u32 shouldNotRenderFlag = (shouldNotRender) ? ENTITY_SHOULD_NOT_RENDER : 0;
-                    newEntity->flags |= shouldNotRenderFlag;
+                    u64 shouldNotRenderFlag = (shouldNotRender) ? 0 : ENTITY_SHOULD_NOT_RENDER;
+                    
+                    if(newEntity->flags & ENTITY_SHOULD_NOT_RENDER) {
+                        newEntity->flags &= ~shouldNotRenderFlag;    
+                    }
 
                     newEntity->lightColor = lightColor;
                     newEntity->lightIntensity = lightIntensity;
+
+                    if(newEntity->type == ENTITY_TRIGGER_WITH_RIGID_BODY && newEntity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
+                        newEntity->T.pos.z = 1;
+                        newEntity->collider->isActive = false;
+                    }
 
                 }
                 
@@ -818,6 +850,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 enemyMoveSpeed = 1;
                 lightColor = v3(0, 0, 0);
                 lightIntensity = 0;
+
+                moveDirection = v2(0, 0);
+                partnerId = -1;
 
                 enemyType = ENEMY_SKELETON; 
 
@@ -866,6 +901,74 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         }
         
     }
-	
 
+    {
+        //NOTE: Update the entities based on the save progress state
+        for(int i = 0; i < gameState->playerSaveProgress.saveStateEntities.count; ++i) {
+
+            SaveStateEntity *saveEntity = getElementFromAlloc(&gameState->playerSaveProgress.saveStateEntities, i, SaveStateEntity);
+            
+             if(easyString_stringsMatch_nullTerminated(sceneName_, saveEntity->sceneName)) {
+
+                Entity *e = findEntityById(manager, saveEntity->id);
+
+                if(e) {
+                    /*
+                        This is all the specific stuff we have to do to set the scene up based on the saved state like what image should be, should the fire place be on etc.
+                    */
+                    {
+                        //NOTE: Turn the fire on 
+                        if((e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST)) {
+                            if(saveEntity->data.isOpen) {
+                                entity_turnFireSavePlaceOn(gameState, manager, e, true);
+                            }
+                        }
+
+                        if(saveEntity->data.isOpen && (e->triggerType == ENTITY_TRIGGER_OPEN_GATE_WITH_KEY)) {
+                            assert(saveEntity->data.colliderActive == false);
+                            e->sprite = gameState_findSplatTexture(gameState, "ironGate_open");
+                        }
+
+                        //NOTE: Make sure the door is open
+                        if(e->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
+                            if(!saveEntity->data.isActivated || saveEntity->data.isOpen) { //if it's not activated it has to be open
+                                assert(!saveEntity->data.colliderActive);
+                                e->T.pos.z = 1;
+                            } else {
+                                assert(saveEntity->data.colliderActive);
+                                e->T.pos.z = 0;
+                            }
+                        }
+                    }
+
+                    ////////////////// Now we actually set the entity information ////////////////
+
+                    if(e->collider) {
+                        e->collider->isActive = saveEntity->data.colliderActive;
+                    }
+                    
+                    e->T.pos = saveEntity->data.pos;
+                    e->health = saveEntity->data.health;
+                    e->stamina = saveEntity->data.stamina;
+
+                    e->isActivated = saveEntity->data.isActivated;
+                    e->chestIsOpen = saveEntity->data.isOpen;
+                    e->isDead = saveEntity->data.isDead; 
+
+                    /////////////////////////////////////////////////////////////////////////////   
+                }
+            }        
+        }
+
+        if(gameState->playerSaveProgress.playerInfo.isValid) {
+            //NOTE: Update player stats
+            assert(manager->player);
+            Entity *player = (Entity *)manager->player;
+
+            player->T.pos = gameState->playerSaveProgress.playerInfo.position;
+            player->health = gameState->playerSaveProgress.playerInfo.health;
+            player->stamina = gameState->playerSaveProgress.playerInfo.stamina;
+        }
+    }
+    ///////////////////////////////////////// 
 }	

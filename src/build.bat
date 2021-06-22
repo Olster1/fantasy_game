@@ -1,6 +1,9 @@
 @echo off
 
 
+REM CLear the console so it's easier to see the errors
+cls
+
 IF NOT EXIST ..\bin mkdir ..\bin
 pushd ..\bin
 

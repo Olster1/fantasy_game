@@ -9,6 +9,8 @@
 	layer: -1.000000;
 	subtype: 0;
 	enemyType: "ENEMY_SKELETON";
+	partnerId: -1;
+	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 1.000000;
 	renderFirstPass: 0;

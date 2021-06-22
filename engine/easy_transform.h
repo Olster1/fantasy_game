@@ -147,3 +147,18 @@ static inline V3 easyTransform_getZAxis(EasyTransform *T) {
 	return result;
 }
 
+static inline void easyTransform_assignAsParent(EasyTransform *child, EasyTransform *parent) {
+	V3 parentP = easyTransform_getWorldPos(parent);
+	V3 childP = easyTransform_getWorldPos(child);
+	child->pos = v3_minus(childP, parentP);
+
+	V3 parentScale = easyTransform_getWorldScale(parent);
+	V3 childScale = easyTransform_getWorldScale(child);
+
+	child->scale = v3(childScale.x / parentScale.x, childScale.y / parentScale.y, childScale.z / parentScale.z);
+
+
+	//After we've got their world positions
+	child->parent = parent;
+
+}

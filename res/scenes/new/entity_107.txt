@@ -12,6 +12,8 @@
 	spriteName: "barrel";
 	colliderScale: 1.000000 1.000000;
 	colliderOffset: 0.000000 0.000000 0.000000;
+	partnerId: -1;
+	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;

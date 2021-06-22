@@ -3,13 +3,15 @@
 
 //****** TODO *********/////
 /*
-1. collision boxes should be at the bottom of the sprites, and not in the middle. Really big sprites would put the box back further.  
+Engine: 
+
 
 Gameplay:
 
-The wolf should attack you
-You pick up a sword which goes to your inventory - floating 3d model?
-You pick up shield as well 
+1. Shop where you can choose items to buy
+2. cut grass to find potions and coins
+3. When pick up item in the wild, if haven't picked it up before, breifly display above the head of the player
+
 */
 ///////////////////////////
 
@@ -26,11 +28,18 @@ static bool DEBUG_CONTROL_PLAYER = true;
 
 static int GLOBAL_WORLD_TILE_SIZE = 1;
 
+static float global_cameraFollow_yOffset = 40;
+
 #include "npc_dialog.h"
 #include "gameState.h"
 #include "editor.h"
 #include "game_weather.c"
 
+
+static void setCameraPosition(EasyCamera *camera, V3 position) {
+    camera->pos.xy = v3_minus(position, v3(0, global_cameraFollow_yOffset, 0)).xy;
+    camera->hidden_pos.xy = camera->pos.xy;
+}
 
 static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
@@ -53,8 +62,11 @@ static Texture *getInvetoryTexture(EntityType type) {
         case ENTITY_SHEILD: {
             t = findTextureAsset("inventory_shield.png");
         } break;
+        case ENTITY_BOMB: {
+            t = findTextureAsset("bomb.png");
+        } break;
         default: {
-
+            assert(false);
         }
     }
     return t;
@@ -140,8 +152,86 @@ static WorldTileType getTileTypeBasedOnSprite(GameState *gameState, int tileInde
     return result;
 }
 
+static char *getInventoryString(EntityType type) {
+    char *result = "Empty";
+    switch(type) {
+        case ENTITY_HEALTH_POTION_1: {
+            result = "Restore 3 health points with this bubbly potion.";
+            // assert(false);
+        } break;
+        case ENTITY_STAMINA_POTION_1: {
+            result = "Restore 3 stamina points with this yellow mixture.";
+            // assert(false);
+        } break;
+        case ENTITY_SWORD: {
+            result = "Sharp sword";
+        } break;
+        case ENTITY_SHEILD: {
+            result = "Protective shield";
+        } break;
+        case ENTITY_KEY: {
+            result = "A key to open locks.";
+        } break;
+        case ENTITY_BOMB: {
+            result = "A bomb.";
+        } break;
+        default: {
 
-static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
+        }
+    }
+    return result;
+}
+
+struct ParticleSystemListItem {
+    particle_system ps;
+    V3 *position; //pointing to position in Entity Transform
+    V3 offset;
+    V4 color;
+};
+
+
+
+static V3 roundToGridBoard(V3 in, float tileSize) {
+    float xMod = (in.x < 0) ? -tileSize : tileSize;
+    float yMod = (in.y < 0) ? -tileSize : tileSize;
+    
+    V3 result = {};
+    if(tileSize == 1) {
+        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
+    } else {
+        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
+
+        result.x -= ((int)result.x) % (int)tileSize;
+        result.y -= ((int)result.y) % (int)tileSize;
+    }
+    
+    return result;
+}
+
+
+typedef struct {
+    Array_Dynamic entities;
+
+    Array_Dynamic entitiesToAddForFrame;
+    Array_Dynamic entitiesToDeleteForFrame;
+
+    Array_Dynamic damageNumbers;
+    Array_Dynamic activeParticleSystems;
+
+    int lastEntityIndex;
+    void *player;
+} EntityManager;    
+
+
+bool gameScene_doesSceneExist(char *sceneName);
+void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_, GameWeatherState *weatherState);
+#include "entity.c"
+#include "shop.c"
+
+
+
+static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, EntityManager *manager, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
+
     bool isCompletelyFinished = false;
 
     EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
@@ -259,6 +349,20 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
            ////////////////////////////////////////////////////////////
 
            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
+            //Where we actually commit our choice
+
+            //NOTE: Activate any action that needs doing
+            DialogActionType actionType = gameState->currentTalkText->actions[gameState->choiceOptionIndex];
+            if(actionType == DIALOG_ACTION_SAVE_PROGRESS) {
+                playerGameState_saveProgress(gameState, manager, appInfo->saveFolderLocation);                
+                playMenuSound(&globalLongTermArena, gameState->saveSuccessSound, 0, AUDIO_FOREGROUND);
+            } else if(actionType == DIALOG_ACTION_EXIT_DIALOG) {
+                playMenuSound(&globalLongTermArena, gameState->exitUiSound, 0, AUDIO_FOREGROUND);
+            }
+
+
+
+            //NOTE: Move to the next node
              nextTalkNode = gameState->currentTalkText->next[gameState->choiceOptionIndex];
              // assert(nextTalkNode);
 
@@ -332,7 +436,7 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
      bool returningToCenter = (gameState->dialogChoiceTimerReturn >= 0.0f && gameState->dialogChoiceTimerReturn < 0.9f*returnToCenterPeriod);
 
     //Exit back to game
-    if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING && !gameState->enteredTalkModeThisFrame && !returningToCenter) {
+    if(((wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) || gameState->currentTalkText->isEndNode) && gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING && !gameState->enteredTalkModeThisFrame && !returningToCenter)) {
          // if(gameState->talkingNPC) {
          //     easySound_endSound(gameState->talkingNPC);
          // }
@@ -340,13 +444,13 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
          bool writerFinished = easyFontWriter_isFontWriterFinished(&gameState->fontWriter, currentTalkText);
 
          //still messages
-         if(gameState->messageIndex < (gameState->currentTalkText->textCount - 1) || (gameState->messageIndex == (gameState->currentTalkText->textCount - 1) && !writerFinished)) {
+         if((gameState->messageIndex < (gameState->currentTalkText->textCount - 1) || (gameState->messageIndex == (gameState->currentTalkText->textCount - 1) && !writerFinished))) {
              assert(gameState->gameModeSubType == GAME_MODE_SUBTYPE_TALKING);
 
              if(!writerFinished) {
                  easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
              } else {
-                 //still messages left in array
+                 //still messages left in array 
                  gameState->messageIndex++;
 
                  easyFontWriter_resetFontWriter(&gameState->fontWriter);
@@ -387,7 +491,6 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
                 //clear the arena to make sure we don't enter here again if user hasn't specifically set memory mark
                 easyMemory_zeroStruct(&gameState->gameDialogs.perDialogArenaMark, MemoryArenaMark);
              }
-             
          }
      }
 
@@ -409,73 +512,7 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
 }
 
 
-static char *getInventoryString(EntityType type) {
-    char *result = "Empty";
-    switch(type) {
-        case ENTITY_HEALTH_POTION_1: {
-            result = "Restore 3 health points with this bubbly potion.";
-            // assert(false);
-        } break;
-        case ENTITY_STAMINA_POTION_1: {
-            result = "Restore 3 stamina points with this yellow mixture.";
-            // assert(false);
-        } break;
-        case ENTITY_SWORD: {
-            result = "Sharp sword";
-        } break;
-        case ENTITY_SHEILD: {
-            result = "Protective shield";
-        } break;
-        default: {
 
-        }
-    }
-    return result;
-}
-
-struct ParticleSystemListItem {
-    particle_system ps;
-    V3 *position; //pointing to position in Entity Transform
-    V3 offset;
-    V4 color;
-};
-
-typedef struct {
-    Array_Dynamic entities;
-
-    Array_Dynamic entitiesToAddForFrame;
-    Array_Dynamic entitiesToDeleteForFrame;
-
-    Array_Dynamic damageNumbers;
-    Array_Dynamic activeParticleSystems;
-
-    int lastEntityIndex;
-    void *player;
-} EntityManager;    
-
-
-static V3 roundToGridBoard(V3 in, float tileSize) {
-    float xMod = (in.x < 0) ? -tileSize : tileSize;
-    float yMod = (in.y < 0) ? -tileSize : tileSize;
-    
-    V3 result = {};
-    if(tileSize == 1) {
-        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
-    } else {
-        result = v3((int)(in.x + xMod*0.5f), (int)(in.y + yMod*0.5f), (int)(in.z));
-
-        result.x -= ((int)result.x) % (int)tileSize;
-        result.y -= ((int)result.y) % (int)tileSize;
-    }
-    
-    return result;
-}
-
-
-
-bool gameScene_doesSceneExist(char *sceneName);
-void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_, GameWeatherState *weatherState);
-#include "entity.c"
 #include "saveload.c"
 
 
@@ -544,7 +581,7 @@ int main(int argc, char *args[]) {
     
     if(appInfo->valid) {
         
-        easyOS_setupApp(appInfo, &resolution, RESOURCE_PATH_EXTENSION);
+        easyOS_setupApp(appInfo, &resolution, RESOURCE_PATH_EXTENSION, "/Illoway");
 
         //Gif Recording stuff    
         int gif_width = resolution.x, gif_height = resolution.y, centisecondsPerFrame = 10, bitDepth = 16;
@@ -924,8 +961,16 @@ int main(int argc, char *args[]) {
 
         #define LOAD_SCENE_FROM_FILE 1
         #if LOAD_SCENE_FROM_FILE
-                gameScene_loadScene(gameState, manager, "new", weatherState);
-                
+                //NOTE: Load the player's progress file 
+                playerGameState_loadProgress(gameState, manager, appInfo->saveFolderLocation);
+
+                char *sceneNameToLoad = "new";
+
+                if(easyString_getSizeInBytes_utf8(gameState->playerSaveProgress.playerInfo.sceneName) > 0) {
+                    sceneNameToLoad = gameState->playerSaveProgress.playerInfo.sceneName;
+                }
+
+                gameScene_loadScene(gameState, manager, sceneNameToLoad, weatherState);
         #else
                 //Init player first so it's in slot 0 which is special since we want to update the player position before other entities
                 manager->player = initEntity(manager, &gameState->wizardIdle, v3(0, 0, 0), v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
@@ -970,7 +1015,7 @@ int main(int argc, char *args[]) {
         float tweakY;
         float tweakSpacing;
 
-        float cameraFollow_yOffset = 20;
+        
         while(appInfo->running) {
 
             if(refreshTweakFile(tweakerFileName, tweaker)) {
@@ -989,7 +1034,7 @@ int main(int argc, char *args[]) {
                 gameState->werewolf_knockback_distance = (float)getFloatFromTweakData(tweaker, "werewolf_knockback_distance");
                 gameState->player_knockback_distance = (float)getFloatFromTweakData(tweaker, "player_knockback_distance");
 
-                cameraFollow_yOffset = (float)getFloatFromTweakData(tweaker, "cameraFollow_yOffset");
+                global_cameraFollow_yOffset = (float)getFloatFromTweakData(tweaker, "cameraFollow_yOffset");
 
                 for(int i = 0; i < manager->entities.count; ++i) {
                     Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -1057,10 +1102,10 @@ int main(int argc, char *args[]) {
                 }
 
                 {//update y position
-                    float distance = absVal(worldP.y - cameraFollow_yOffset - camera.hidden_pos.y);
+                    float distance = absVal(worldP.y - global_cameraFollow_yOffset - camera.hidden_pos.y);
 
                     if(distance > gameState->cameraSnapDistance) {
-                        float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - cameraFollow_yOffset);
+                        float newPosY = lerp(camera.hidden_pos.y, clamp01(appInfo->dt*10.f), worldP.y - global_cameraFollow_yOffset);
                         camera.hidden_pos.y = newPosY;
                     }
                 }
@@ -1075,7 +1120,7 @@ int main(int argc, char *args[]) {
                     float canVal = editorState->lerpTowardsTimer / 0.5f;
 
                     Entity *e = (Entity *)editorState->entitySelected;
-                    camera.pos.xy = lerpV2(editorState->startLerpP, smoothStep01(0, canVal, 1), v3_minus(easyTransform_getWorldPos(&e->T), v3(0, cameraFollow_yOffset, 0)).xy);
+                    camera.pos.xy = lerpV2(editorState->startLerpP, smoothStep01(0, canVal, 1), v3_minus(easyTransform_getWorldPos(&e->T), v3(0, global_cameraFollow_yOffset, 0)).xy);
                     camera.hidden_pos.xy = camera.pos.xy;
 
                     if(canVal >= 1) {
@@ -1155,7 +1200,7 @@ int main(int argc, char *args[]) {
 
 
 
-            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I)) {
+            if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_I) && gameState->gameModeType == GAME_MODE_PLAY) {
                 gameState->isLookingAtItems = !gameState->isLookingAtItems;
                 // gameState->lookingAt_animTimer.current = UI_ITEM_RADIUS_MIN;
                 // gameState->lookingAt_animTimer.target = UI_ITEM_RADIUS_MAX;
@@ -1434,7 +1479,7 @@ int main(int argc, char *args[]) {
 
             AppKeyStates gameKeyStates = appInfo->keyStates;
             AppKeyStates consoleKeyStates = appInfo->keyStates;
-            if(appInfo->console.isInFocus || canCameraMove) {
+            if(appInfo->console.isInFocus || canCameraMove || gameState->gameModeType == GAME_MODE_PAUSE_MENU) {
                 gameKeyStates = {};
             } else if(easyConsole_isOpen(&appInfo->console)) {
                 consoleKeyStates = {};
@@ -1723,8 +1768,8 @@ int main(int argc, char *args[]) {
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup, weatherState);        
-               
+                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup, weatherState, appInfo->saveFolderLocation);        
+                
                    if(e->isDead) {
                        ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                        int *indexToAdd = (int *)arrayInfo.elm;
@@ -2130,8 +2175,10 @@ int main(int argc, char *args[]) {
                            e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0);
                            if(e1->rb) {
                                 e1->rb->dP = e->dP;
+                           }
 
-                                
+                           if(e->rotation > 0) {
+                            e1->T.Q = quaternion_mult(gameState->angledQ, eulerAnglesToQuaternion(0, 0, e->rotation));
                            }
                         }
 
@@ -2286,6 +2333,22 @@ int main(int argc, char *args[]) {
                 
                 renderSetShader(globalRenderGroup, &textureProgram);
 
+                //////////////////////////// The Coin ///////////////////////////////////////////
+                {
+                    float xOffset = 100;
+                    float yOffset = 100;
+                    T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100, 0)), v3(xOffset, fuaxHeight - yOffset, 0.3f));
+
+                    renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+                    setModelTransform(globalRenderGroup, T);
+                    renderDrawSprite(globalRenderGroup, findTextureAsset("coin.png"), COLOR_WHITE);
+
+                    //NOTE: Draw the amount of coins we have
+                    xOffset += 70;
+                    char coinCountString[256];
+                    sprintf(coinCountString, "Coins:%d", gameState->playerSaveProgress.playerInfo.moneyCount);
+                    outputTextNoBacking(gameFont, xOffset, yOffset, 0.3f, gameState->fuaxResolution, coinCountString, InfinityRect2f(), COLOR_WHITE, 1, true, 1);
+                }   
 
                 //////////////////////////// HEALTH BAR //////////////////////////////////////////
 
@@ -2417,7 +2480,8 @@ int main(int argc, char *args[]) {
                     
                     triggerType = (EntityTriggerType)easyEditor_pushList(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings));
 
-                    
+
+
                 }
 
                 WorldTileRotation rotationType = WORLD_TILE_ROTATION_FLAT;
@@ -2435,12 +2499,12 @@ int main(int argc, char *args[]) {
 
                 EasyModel *modelSelected = 0;
 
-                if(editorState->createMode == EDITOR_CREATE_3D_MODEL) {
-                    int modelIndex = easyEditor_pushList(appInfo->editor, "Models: ", modelsLoadedNames, allModelsForEditor.count); 
+                // if(editorState->createMode == EDITOR_CREATE_3D_MODEL) {
+                //     int modelIndex = easyEditor_pushList(appInfo->editor, "Models: ", modelsLoadedNames, allModelsForEditor.count); 
 
-                    modelSelected = allModelsForEditor.array[modelIndex].model;   
+                //     modelSelected = allModelsForEditor.array[modelIndex].model;   
 
-                }   
+                // }   
 
                 WorldTileType tileType;
                 EditorTileOption tilerMode;
@@ -2493,7 +2557,7 @@ int main(int argc, char *args[]) {
                         } break;
                         case EDITOR_CREATE_EMPTY_TRIGGER: {
                             if(pressed) {
-                                editorState->entitySelected = initEmptyTrigger(gameState, manager, hitP, triggerType);
+                                editorState->entitySelected = initEmptyTrigger(gameState, manager, hitP, triggerType, splatTexture);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
@@ -2507,7 +2571,7 @@ int main(int argc, char *args[]) {
                                 }
                                     
                                 if(isDown(gameKeyStates.gameButtons, BUTTON_CTRL)) {
-                                    easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl doen");
+                                    easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl down");
                                     if(wasPressed(gameKeyStates.gameButtons, BUTTON_LEFT_MOUSE)) {
                                         int bouyIndexAt = easyAi_hasSearchBouy(e->aiController, hitP);
                                         if(bouyIndexAt >= 0) {
@@ -2654,23 +2718,23 @@ int main(int argc, char *args[]) {
                                 justCreatedEntity = true;
                             }
                         } break;
-                        case EDITOR_CREATE_3D_MODEL: {
-                            if(pressed) {
-                                editorState->entitySelected = init3dModel(gameState, manager, hitP, modelSelected);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                assert(editorState->entitySelected);
-                                justCreatedEntity = true;
-                            }
-                        } break;
-                        case EDITOR_CREATE_TERRAIN: {
-                            if(pressed) {
-                                editorState->entitySelected = initTerrain(gameState, manager, hitP);
-                                gameState->currentTerrainEntity = editorState->entitySelected; 
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                assert(editorState->entitySelected);
-                                justCreatedEntity = true;
-                            }
-                        } break;
+                        // case EDITOR_CREATE_3D_MODEL: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = init3dModel(gameState, manager, hitP, modelSelected);
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         assert(editorState->entitySelected);
+                        //         justCreatedEntity = true;
+                        //     }
+                        // } break;
+                        // case EDITOR_CREATE_TERRAIN: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = initTerrain(gameState, manager, hitP);
+                        //         gameState->currentTerrainEntity = editorState->entitySelected; 
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         assert(editorState->entitySelected);
+                        //         justCreatedEntity = true;
+                        //     }
+                        // } break;
                         case EDITOR_CREATE_ENTITY_AI_STATE: {
                             if(pressed) {
                                 editorState->entitySelected = initAiAnimation(gameState, manager, hitP);
@@ -2746,14 +2810,14 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
-                        case EDITOR_CREATE_SWORD: {
-                            if(pressed) {
-                                editorState->entitySelected = initSword(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
+                        // case EDITOR_CREATE_SWORD: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = initSword(gameState, manager, hitP);
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         justCreatedEntity = true;
 
-                            }
-                        } break;
+                        //     }
+                        // } break;
                         case EDITOR_CREATE_CHEST: {
                             if(pressed) {
                                 editorState->entitySelected = initChest(gameState, manager, hitP);
@@ -2762,22 +2826,22 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
-                        case EDITOR_CREATE_HORSE: {
-                            if(pressed) {
-                                editorState->entitySelected = initHorse(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
+                        // case EDITOR_CREATE_HORSE: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = initHorse(gameState, manager, hitP);
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         justCreatedEntity = true;
 
-                            }
-                        } break;
-                        case EDITOR_CREATE_SHEILD: {
-                            if(pressed) {
-                                editorState->entitySelected = initSheild(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
+                        //     }
+                        // } break;
+                        // case EDITOR_CREATE_SHEILD: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = initSheild(gameState, manager, hitP);
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         justCreatedEntity = true;
 
-                            }
-                        } break;
+                        //     }
+                        // } break;
                         case EDITOR_CREATE_SIGN: {
                             if(pressed) {
                                 editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
@@ -3045,7 +3109,7 @@ int main(int argc, char *args[]) {
                         easyEditor_pushSlider(appInfo->editor, "Move Speed: ", &e->enemyMoveSpeed, 1, 10);
                     }
 
-                    if(e->type == ENTITY_CHEST) {
+                    if(e->type == ENTITY_CHEST || e->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->chestType, e->T.id, gameState->currentSceneName); e->chestType = (ChestType)easyEditor_pushList_withIds(appInfo->editor, "Chest Type: ", MyEntity_ChestTypeStrings, arrayCount(MyEntity_ChestTypeStrings), e->T.id, gameState->currentSceneName);
                     }
 
@@ -3096,13 +3160,28 @@ int main(int argc, char *args[]) {
 
 
                     if(e->type == ENTITY_TRIGGER || e->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
-                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->triggerType, e->T.id, gameState->currentSceneName); e->triggerType = (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
+
+                        EntityTriggerType entityTriggerType = e->triggerType; 
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->triggerType, e->T.id, gameState->currentSceneName); e->triggerType = (EntityTriggerType)easyEditor_pushList_withIds(appInfo->editor, "Trigger Type: ", MyEntity_TriggerTypeStrings, arrayCount(MyEntity_TriggerTypeStrings), e->T.id, gameState->currentSceneName);
                         
+                        if(entityTriggerType != e->triggerType && e->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
+                            e->isActivated = false; 
+                            
+                            // Move the door down ready to be opened
+                            e->T.pos.z = 1.f;
+                            e->chestIsOpen = true;
+                            e->collider->isActive = false;
+                        }
+                        
+
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->locationSoundType, e->T.id, gameState->currentSceneName); e->locationSoundType = (EntityLocationSoundType)easyEditor_pushList_withIds(appInfo->editor, "Sound Type: ", MyEntity_LocationSoundTypeStrings, arrayCount(MyEntity_LocationSoundTypeStrings), e->T.id, gameState->currentSceneName);
                     
                         if(e->levelToLoad) {
                             e->levelToLoad = easyEditor_pushTextBox_withIds(appInfo->editor, "Scene to load:", e->levelToLoad, e->T.id, gameState->currentSceneName);
                         }
+
+                        easyEditor_pushInt1(appInfo->editor, "PartnerId", &e->partnerId);
+                        easyEditor_pushFloat2(appInfo->editor, "Move Direction for Partner: ", &e->moveDirection.x, &e->moveDirection.y);
                     }
 
                    if(e->type == ENTITY_HOUSE) {
@@ -3255,9 +3334,6 @@ int main(int argc, char *args[]) {
                                 // assert(false);
                                 easyFlashText_addText(&globalFlashTextManager, "Can't copy");
                             } break;
-                            case ENTITY_SKELETON: {
-                                newEntity = initSkeleton(gameState, manager, position);
-                            } break;
                             case ENTITY_HEALTH_POTION_1: {
                                 // assert(false);
                                 easyFlashText_addText(&globalFlashTextManager, "Can't copy");
@@ -3277,6 +3353,14 @@ int main(int argc, char *args[]) {
                             } break;
                             case ENITY_CHECKPOINT: {
                                 newEntity = initCheckPoint(gameState, manager, position);
+                            } break;
+                            case ENTITY_LAMP_POST: {
+                                Animation *animation = 0;
+                                if(e->animationController.parent.next != &e->animationController.parent) {
+                                    animation = e->animationController.parent.next->animation;    
+                                }
+                                
+                                newEntity = initLampPost(gameState, manager, position, e->sprite, animation);
                             } break;
                             default: {
                                 easyFlashText_addText(&globalFlashTextManager, "Can't duplicate yet, please add in editor");
@@ -3443,6 +3527,20 @@ int main(int argc, char *args[]) {
             }
             ///////
 
+            //NOTE: Draw the shop if in the shop
+            if(gameState->gameModeType == GAME_MODE_SHOP) {
+                //Make sure game is paused
+                gameState->gameIsPaused = true;
+
+                updateShop(gameState->current_shop, gameState, (Entity *)manager->player, gameFont, appInfo);
+
+                //NOTE: Exit the shop
+                if(wasPressed(gameKeyStates.gameButtons, BUTTON_ESCAPE)) {
+                    gameState->gameModeType = GAME_MODE_PLAY;
+                    gameState->gameIsPaused = false;
+                    gameState->current_shop = 0;
+                }
+            }
             
             //NOTE(ollie): Make sure the transition is on top
             renderClearDepthBuffer(mainFrameBuffer.bufferId);
@@ -3479,7 +3577,7 @@ int main(int argc, char *args[]) {
 
                 if(gameState->pauseMenu_subType == GAME_PAUSE_MENU_MAIN) {
 
-                    char *pauseMenuItems[] = { "Continue", "Settings", "Exit" };
+                    char *pauseMenuItems[] = { "Continue", "Save", "Settings", "Exit" };
 
                     float yT = fuaxHeight / (float)(arrayCount(pauseMenuItems) + 1);
 
@@ -3492,7 +3590,7 @@ int main(int argc, char *args[]) {
                        if(gameState->currentMenuIndex >= arrayCount(pauseMenuItems)) {
                            gameState->currentMenuIndex = arrayCount(pauseMenuItems) - 1;
                        } else {
-                        playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
+                        playMenuSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
                        }
                     }
 
@@ -3502,7 +3600,7 @@ int main(int argc, char *args[]) {
                         if(gameState->currentMenuIndex < 0) {
                             gameState->currentMenuIndex = 0;
                         } else {
-                            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
+                            playMenuSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_FOREGROUND);
                         }
                     }
 
@@ -3514,6 +3612,8 @@ int main(int argc, char *args[]) {
                             color = COLOR_GOLD;
 
                             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ENTER)) {
+
+
                                 if(gameState->currentMenuIndex == 0) {
                                     gameState->gameModeType = GAME_MODE_PLAY;
                                     gameState->gameIsPaused = false;
@@ -3521,11 +3621,17 @@ int main(int argc, char *args[]) {
 
                                 }
 
-                                if(gameState->currentMenuIndex == 1) { //settings
+                                //NOTE: Save game
+                                if(gameState->currentMenuIndex == 1) {
+                                    playMenuSound(&globalLongTermArena, gameState->saveSuccessSound, 0, AUDIO_FOREGROUND);
+                                    playerGameState_saveProgress(gameState, manager, appInfo->saveFolderLocation);
+                                }
+
+                                if(gameState->currentMenuIndex == 2) { //settings
                                      gameState->pauseMenu_subType = GAME_PAUSE_MENU_SETTINGS;
                                 }
 
-                                if(gameState->currentMenuIndex == 2) { //exit
+                                if(gameState->currentMenuIndex == 3) { //exit
                                     appInfo->running = false;
                                 }
                             }
@@ -3591,7 +3697,7 @@ int main(int argc, char *args[]) {
                }
                ///////////////////////////////////////////
 
-              bool finished = drawAndUpdateMessageSystem(appInfo, gameState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
+              bool finished = drawAndUpdateMessageSystem(appInfo, gameState, manager, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
 
 
               //Exit back to game
@@ -3619,7 +3725,7 @@ int main(int argc, char *args[]) {
                 // renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
                 ////////////////////////////
 
-               drawAndUpdateMessageSystem(appInfo, gameState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
+               drawAndUpdateMessageSystem(appInfo, gameState, manager, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
             }
            //  ///////////////////////////
 
@@ -3895,7 +4001,7 @@ int main(int argc, char *args[]) {
 
                     playerResetData->gameState = gameState;
 
-                    Entity *fireEntity = findEntityById(manager, gameState->lastCheckPointId);
+                    Entity *fireEntity = findEntityById(manager, gameState->playerSaveProgress.playerInfo.lastCheckPointId);
 
                     assert(fireEntity);
 

@@ -3,7 +3,6 @@ FUNC(ENTITY_NULL)\
 FUNC(ENTITY_SCENERY)\
 FUNC(ENTITY_WIZARD)\
 FUNC(ENTITY_PLAYER_PROJECTILE)\
-FUNC(ENTITY_SKELETON)\
 FUNC(ENTITY_HEALTH_POTION_1)\
 FUNC(ENITY_AUDIO_CHECKPOINT)\
 FUNC(ENITY_CHECKPOINT)\
@@ -29,6 +28,8 @@ FUNC(ENTITY_SHOOT_TRIGGER)\
 FUNC(ENTITY_ENEMY_PROJECTILE)\
 FUNC(ENTITY_TRIGGER_WITH_RIGID_BODY)\
 FUNC(ENTITY_KEY)\
+FUNC(ENTITY_BOMB)\
+FUNC(ENTITY_ARROW)\
 
 
 typedef enum {
@@ -38,6 +39,7 @@ typedef enum {
 	GAME_MODE_MAIN_MENU,
 	GAME_MODE_PAUSE_MENU,
 	GAME_MODE_ITEM_COLLECT,
+	GAME_MODE_SHOP,
 } GameModeType;
 
 typedef enum {
@@ -67,6 +69,11 @@ FUNC(ENTITY_TRIGGER_LOAD_SCENE)\
 FUNC(ENTITY_TRIGGER_SAVE_BY_FIRE)\
 FUNC(ENTITY_TRIGGER_FIRE_POST)\
 FUNC(ENTITY_TRIGGER_OPEN_GATE_WITH_KEY)\
+FUNC(ENTITY_TRIGGER_BUTTON_FOR_DOOR)\
+FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON)\
+FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE)\
+FUNC(ENTITY_TRIGGER_ENTER_SHOP)\
+
 
 
 typedef enum {
@@ -77,12 +84,14 @@ static char *MyEntity_TriggerTypeStrings[] = { MY_TRIGGER_TYPE(STRING) };
 
 /////////////////////////////////////////////////////////////////
 
+//NOTE: We store the shop type on the chest type so we're not storing more types in the entity
+
 //// Entity Trigger Types ////////////
 #define MY_CHEST_TYPE(FUNC) \
 FUNC(CHEST_TYPE_HEALTH_POTION)\
 FUNC(CHEST_TYPE_STAMINA_POTION)\
 FUNC(CHEST_TYPE_KEY)\
-
+FUNC(CHEST_TYPE_SHOP_1)\
 
 typedef enum {
     MY_CHEST_TYPE(ENUM)
@@ -133,6 +142,7 @@ typedef struct {
 	EntityType type;
 	int count; //number of items you have
 	bool isDisposable; //decrements each time you use it. 
+	float cost; //since we use this for the shop aswell
 } ItemInfo;
 
 typedef struct {
@@ -229,6 +239,74 @@ typedef struct {
 	WorldTile tiles[10000];
 } TileSheet;
 
+
+#define MAX_CHARS_SCENE_NAME 128
+
+#pragma pack(push, 1)
+
+
+typedef struct {
+	V3 pos;
+
+	float health;
+	float stamina;
+	bool isOpen;
+	bool isDead;
+	bool isActivated;
+
+	bool colliderActive;
+} EntitySaveStateData;
+
+typedef struct {
+	int id;
+	u32 sceneNameHash;
+
+	//NOTE: All the specific stuff we want to save per entity
+	EntitySaveStateData data;
+	/////////////////////////////////////////////////////
+
+	char sceneName[MAX_CHARS_SCENE_NAME];
+} SaveStateEntity;
+
+typedef struct {
+	bool isValid;
+	//NOTE: Player last position and scene
+	V3 position;
+	int health;
+	int stamina;
+	int moneyCount;
+	char sceneName[MAX_CHARS_SCENE_NAME];
+	///////////////////////////////////////
+
+	bool hasShownFireplaceTutorial;
+
+	//NOTE: For the fire places
+	int lastCheckPointId;
+	char lastCheckPointSceneName[MAX_CHARS_SCENE_NAME];
+
+} SaveEntity_PlayerInfo;
+#pragma pack(pop)
+
+
+typedef struct {
+	InfiniteAlloc saveStateEntities; 
+
+	SaveEntity_PlayerInfo playerInfo;
+} PlayerSaveProgress;
+
+#define MAX_SHOP_ITEM_COUNT 16
+
+typedef struct {
+	int itemCount;
+	ItemInfo items[MAX_SHOP_ITEM_COUNT];
+
+	ItemGrowTimerUI animationItemTimers[MAX_SHOP_ITEM_COUNT];
+
+	float inventoryBreathSelector;
+	int itemIndex;
+} Game_Shop;
+
+
 typedef struct {
 	Matrix4 orthoFuaxMatrix;
 	V2 fuaxResolution;
@@ -288,6 +366,12 @@ typedef struct {
 	Animation sandWaterTileAnimation;
 
 	/////
+	V2 moveDirectionAfterSceneLoad;
+	float preventSceneLoadTimer;
+	//////////////
+
+	PlayerSaveProgress playerSaveProgress;
+
 
 	Texture *playerTexture;
 
@@ -304,10 +388,13 @@ typedef struct {
 	V4 playerPotionParticleSystemColor;
 	char *emptyString;
 
-	int lastCheckPointId;
-	char *lastCheckPointSceneName;
-
 	float gameOverHoverScale;
+
+	//////////// The shop we're shopping at ///////////////
+	Game_Shop *townShop;
+	Game_Shop *current_shop; 
+
+	///////////////////////////
 	
 
 	///// INVENTORY MENU attributes ///////
@@ -360,6 +447,10 @@ typedef struct {
 	WavFile *seagullsSound;
 	WavFile *blockSlideSound;
 	WavFile *dartSound;
+	WavFile *metalDoorSlamSound;
+	WavFile *saveSuccessSound;
+	WavFile *exitUiSound;
+	WavFile *bowArrowSound;
 	////
 
 	float werewolf_attackSpeed;
@@ -464,6 +555,11 @@ typedef struct {
 
 } GameState; 
 
+
+//Define above where it's implemented
+void initAllShopsWithItems(GameState *gameState);
+void enterGameShop(Game_Shop *shop, GameState *gameState);
+
 static GameState *initGameState(float yOverX_aspectRatio) {
 	GameState *state = pushStruct(&globalLongTermArena, GameState);
 
@@ -502,7 +598,20 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->seagullsSound = findSoundAsset("seaside.wav");
 	state->blockSlideSound = findSoundAsset("slideBlock.wav");
 	state->dartSound = findSoundAsset("dart.wav");
+	state->metalDoorSlamSound = easyAudio_findSound("metal_door_slam.wav");
 
+	state->saveSuccessSound = easyAudio_findSound("save_success.wav");
+	state->exitUiSound = easyAudio_findSound("ui_lock.wav");
+
+	state->bowArrowSound = easyAudio_findSound("bow_and_arrow.wav");
+
+	//NOTE: Save progress of player through the level
+	state->playerSaveProgress.saveStateEntities = initInfinteAlloc(SaveStateEntity);
+	state->playerSaveProgress.saveStateEntities.expandCount = 8;
+	state->playerSaveProgress.playerInfo.sceneName[0] = '\0';
+	state->playerSaveProgress.playerInfo.isValid = false;
+	state->playerSaveProgress.playerInfo.moneyCount = 0;
+	//
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
 	state->angledQ = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
@@ -518,6 +627,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->alphaSpritesToRender = initInfinteAlloc(EntityRender_Alpha);
 	state->alphaSpritesToRender.expandCount = 8;
+
+	state->preventSceneLoadTimer = -1;
 
 
 	//NOTE: Initialize the ui item pickers to nothing
@@ -569,8 +680,8 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->successSound = findSoundAsset("success.wav");
 	state->gongSound = findSoundAsset("success_gong.wav");
 
-	state->lastCheckPointId = -1;
-	state->lastCheckPointSceneName = 0;
+	state->playerSaveProgress.playerInfo.lastCheckPointId = -1;
+	state->playerSaveProgress.playerInfo.lastCheckPointSceneName[0] = '\0';
 	state->gameOverHoverScale = 0;
 
 	state->terrainPacket.textureCount = 4;;
@@ -665,8 +776,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
     state->emptyString = "emptyString"; //string used for entities that the string is altered using textboxes in editor, but just need it to not be null to preload the textbox
     
+    initAllShopsWithItems(state);
 
-
+    enterGameShop(state->townShop, state);
 	return state;
 }	
 
