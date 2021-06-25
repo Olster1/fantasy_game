@@ -19,6 +19,7 @@ static void addItemToShop(Game_Shop *shop, EntityType type,int count, bool isDis
 	newItem.count = count;
 	newItem.isDisposable = isDisposable;
 	newItem.cost = cost;
+	newItem.maxCount = count;
 
 	shop->items[shop->itemCount++] = newItem;
 }
@@ -52,6 +53,16 @@ static void enterGameShop(Game_Shop *shop, GameState *gameState) {
 	gameState->gameModeType = GAME_MODE_SHOP;
 	gameState->current_shop = shop;
 	gameState->gameIsPaused = true;
+}
+
+static void updateShop(Game_Shop *shop, float dt) {
+	shop->timeSinceLastRefill += dt;
+
+	if(shop->timeSinceLastRefill > 60*3) { //3 minutes
+		for(int i = 0; i < shop->itemCount; ++i) {
+			shop->items[i].count = shop->items[i].maxCount;
+		}
+	}
 }
 
 static void updateShop(Game_Shop *shop, GameState *gameState, Entity *player, EasyFont_Font *gameFont, OSAppInfo *appInfo) {
@@ -167,14 +178,16 @@ static void updateShop(Game_Shop *shop, GameState *gameState, Entity *player, Ea
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
                 
                 //NOTE: BUY the item
-                if(itemI->cost <= gameState->playerSaveProgress.playerInfo.moneyCount) {
+                if(itemI->cost <= gameState->playerSaveProgress.playerInfo.moneyCount && itemI->count > 0) {
 
     	            //NOTE: "Buy" sound
 	                playGameSound(&globalLongTermArena, gameState->saveSuccessSound, 0, AUDIO_BACKGROUND);
 
 	                gameState->playerSaveProgress.playerInfo.moneyCount -= itemI->cost;
+	                itemI->count--;
 
 	                //NOTE: Add to the player inventory
+	                addItemToPlayer(gameState, itemI->type, 1, itemI->isDisposable);
 
 	
                 } else {

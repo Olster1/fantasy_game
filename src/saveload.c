@@ -314,15 +314,17 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("Castle.wav"), 0, AUDIO_BACKGROUND);
         EasySound_LoopSound(gameState->currentBackgroundSound);
 
-        gameWeather->timeOfDay = 0;
-        gameWeather->timeOfDaySpeed = 0;
 
-    } else {
+    } else if(easyString_stringsMatch_nullTerminated("new", gameState->currentSceneName)) {
         gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("dark_forest.wav"), 0, AUDIO_BACKGROUND);
         EasySound_LoopSound(gameState->currentBackgroundSound);
         
-        gameWeather->timeOfDay = 0.5f;
-        gameWeather->timeOfDaySpeed = DEFAULT_DAY_NIGHT_SPEED;
+    } else if(easyString_stringsMatch_nullTerminated("home", gameState->currentSceneName)) {
+        //No sounds
+    } else if(easyString_stringsMatch_nullTerminated("shop", gameState->currentSceneName)) {
+        gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("potion_shop.wav"), 0, AUDIO_BACKGROUND);
+        EasySound_LoopSound(gameState->currentBackgroundSound);
+        
     }
 
     //////////////////////////////////////////////////////////////

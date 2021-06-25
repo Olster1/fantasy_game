@@ -45,11 +45,11 @@ static Texture *getInvetoryTexture(EntityType type) {
     Texture *t = 0;
     switch(type) {
         case ENTITY_HEALTH_POTION_1: {
-            t = findTextureAsset("blue_jar.png");
+            t = findTextureAsset("green_potion.png");
             // assert(false);
         } break;
         case ENTITY_STAMINA_POTION_1: {
-            t = findTextureAsset("potionyelow.png");
+            t = findTextureAsset("yellow_potion.png");
             // assert(false);
         } break;
         case ENTITY_KEY: {
@@ -143,6 +143,8 @@ static WorldTileType getTileTypeBasedOnSprite(GameState *gameState, int tileInde
         result = WORLD_TILE_PATH_NUB4;
     } else if(easyString_stringsMatch_nullTerminated(name, "brick")) {
         result = WORLD_TILE_BRICK;
+    } else if(easyString_stringsMatch_nullTerminated(name, "wood_floor_tile")) {
+        result = WORLD_TILE_WOOD_FLOOR;
     } else {
         result = WORLD_TILE_NULL;
     }
@@ -230,9 +232,15 @@ void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sce
 
 
 
-static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, EntityManager *manager, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
+static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, EntityManager *manager, GameWeatherState *weatherState, EasyTransitionState *transitionState, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
+
+    if(gameState->enteredTalkModeThisFrame) {
+        //NOTE Clear the queued dialog
+        gameState->queuedActionAfterDialog = DIALOG_ACTION_NULL;
+    }
 
     bool isCompletelyFinished = false;
+    bool endMessagesImmediately = false;
 
     EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
@@ -243,6 +251,8 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
 
     float xOffset_leftColumn = 0;
     float xOffset_rightColumn = 0;
+
+    GameModeType nextModeToGoTo = GAME_MODE_PLAY; 
 
     float alpha = 0.0f;
 
@@ -358,9 +368,28 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
                 playMenuSound(&globalLongTermArena, gameState->saveSuccessSound, 0, AUDIO_FOREGROUND);
             } else if(actionType == DIALOG_ACTION_EXIT_DIALOG) {
                 playMenuSound(&globalLongTermArena, gameState->exitUiSound, 0, AUDIO_FOREGROUND);
+            } else if(actionType == DIALOG_ACTION_GO_TO_SHOP) {
+                enterGameShop(gameState->townShop, gameState);
+
+               endMessagesImmediately = true;
+
+               nextModeToGoTo = GAME_MODE_SHOP;
+                    
+                // gameState->queuedActionAfterDialog = DIALOG_ACTION_GO_TO_SHOP;
+                playMenuSound(&globalLongTermArena, gameState->exitUiSound, 0, AUDIO_FOREGROUND);
+            } else if(actionType == DIALOG_ACTION_SLEEP) {
+                //NOTE: Play animation of getting in bed? 
+                //Fade out briefly
+                EntitySleepInBedData *data = (EntitySleepInBedData *)easyPlatform_allocateMemory(sizeof(EntitySleepInBedData), EASY_PLATFORM_MEMORY_ZERO);
+                data->weatherState = weatherState;
+                data->gameState = gameState;
+                data->hoursToSleep = 8;
+
+                EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, sleepInBed, data, EASY_TRANSITION_FADE);
+                transition->shouldHold = true;
+                gameState->queuedActionAfterDialog = DIALOG_ACTION_SLEEP; 
+
             }
-
-
 
             //NOTE: Move to the next node
              nextTalkNode = gameState->currentTalkText->next[gameState->choiceOptionIndex];
@@ -477,22 +506,40 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
              gameState->gameModeSubType = GAME_MODE_SUBTYPE_TALKING_CHOOSE_OPTION;
              easyFontWriter_finishFontWriter(&gameState->fontWriter, currentTalkText); 
          } else {
-             //finished
-             gameState->gameModeType = GAME_MODE_PLAY;
-             gameState->gameIsPaused = false;
-             // gameState->talkingNPC = 0;
-             //go back to start just to make sure the next time someone else tries to play it
-             gameState->messageIndex = 0;
-             isCompletelyFinished = true;
-             assert(!nextTalkNode);
-
-             if(gameState->gameDialogs.perDialogArenaMark.arena) {
-                releaseMemoryMark(&gameState->gameDialogs.perDialogArenaMark);
-                //clear the arena to make sure we don't enter here again if user hasn't specifically set memory mark
-                easyMemory_zeroStruct(&gameState->gameDialogs.perDialogArenaMark, MemoryArenaMark);
-             }
+            endMessagesImmediately = true;
          }
      }
+
+     if(endMessagesImmediately) {
+          //finished
+          gameState->gameModeType = nextModeToGoTo;
+          
+          if(nextModeToGoTo == GAME_MODE_PLAY) {
+              gameState->gameIsPaused = false;
+          }
+          // gameState->talkingNPC = 0;
+          //go back to start just to make sure the next time someone else tries to play it
+          gameState->messageIndex = 0;
+          isCompletelyFinished = true;
+          assert(!nextTalkNode);
+
+          if(gameState->queuedActionAfterDialog == DIALOG_ACTION_SLEEP) {
+             gameState->gameIsPaused = true;
+         }
+
+          gameState->dialogChoiceTimer = -1;
+          gameState->messageIndex = 0;
+          gameState->dialogChoiceTimerReturn = -1;
+
+         //Clear the queued action
+         gameState->queuedActionAfterDialog = DIALOG_ACTION_NULL;
+
+          if(gameState->gameDialogs.perDialogArenaMark.arena) {
+             releaseMemoryMark(&gameState->gameDialogs.perDialogArenaMark);
+             //clear the arena to make sure we don't enter here again if user hasn't specifically set memory mark
+             easyMemory_zeroStruct(&gameState->gameDialogs.perDialogArenaMark, MemoryArenaMark);
+          }
+      }
 
      if(nextTalkNode) {
          //Store the previous node   
@@ -1479,7 +1526,7 @@ int main(int argc, char *args[]) {
 
             AppKeyStates gameKeyStates = appInfo->keyStates;
             AppKeyStates consoleKeyStates = appInfo->keyStates;
-            if(appInfo->console.isInFocus || canCameraMove || gameState->gameModeType == GAME_MODE_PAUSE_MENU) {
+            if(appInfo->console.isInFocus || canCameraMove || gameState->gameModeType == GAME_MODE_PAUSE_MENU || gameState->gameIsPaused) {
                 gameKeyStates = {};
             } else if(easyConsole_isOpen(&appInfo->console)) {
                 consoleKeyStates = {};
@@ -1764,6 +1811,10 @@ int main(int argc, char *args[]) {
                 // easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl doen");
            // }
            ////////////////////////
+           //NOTE: Update the shops
+           if(gameState->gameIsPaused) {
+                updateShop(gameState->townShop, appInfo->dt);
+           }
 
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
@@ -1819,6 +1870,8 @@ int main(int argc, char *args[]) {
                         sprite = &globalPinkTexture;
                     } else if(t->type == WORLD_TILE_GRASS) {
                         sprite = findTextureAsset("grass_tile.png");
+                    } else if(t->type == WORLD_TILE_WOOD_FLOOR) {
+                        sprite = findTextureAsset("wood_floor_tile.png");
                     } else if(t->type == WORLD_TILE_BRICK) {
                         sprite = findTextureAsset("brick.png");
                     } else if(t->type == WORLD_TILE_DIRT) {
@@ -3535,7 +3588,7 @@ int main(int argc, char *args[]) {
                 updateShop(gameState->current_shop, gameState, (Entity *)manager->player, gameFont, appInfo);
 
                 //NOTE: Exit the shop
-                if(wasPressed(gameKeyStates.gameButtons, BUTTON_ESCAPE)) {
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ESCAPE)) {
                     gameState->gameModeType = GAME_MODE_PLAY;
                     gameState->gameIsPaused = false;
                     gameState->current_shop = 0;
@@ -3697,7 +3750,7 @@ int main(int argc, char *args[]) {
                }
                ///////////////////////////////////////////
 
-              bool finished = drawAndUpdateMessageSystem(appInfo, gameState, manager, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
+              bool finished = drawAndUpdateMessageSystem(appInfo, gameState, manager, weatherState, appInfo->transitionState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
 
 
               //Exit back to game
@@ -3725,7 +3778,7 @@ int main(int argc, char *args[]) {
                 // renderSetFrameBuffer(endBuffer->bufferId, globalRenderGroup);
                 ////////////////////////////
 
-               drawAndUpdateMessageSystem(appInfo, gameState, manager, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
+               drawAndUpdateMessageSystem(appInfo, gameState, manager, weatherState, appInfo->transitionState, tweakY, tweakWidth, tweakSpacing, gameFont, &mainFrameBuffer);
             }
            //  ///////////////////////////
 
@@ -3878,7 +3931,16 @@ int main(int argc, char *args[]) {
                             if(itemI->type != ENTITY_NULL) {
                                 renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
                                 Texture *inventoryTexture = getInvetoryTexture(itemI->type);
-                                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(circleSize, inventoryTexture->aspectRatio_h_over_w*circleSize, 0)), v3(x, y, 0.2f));
+
+                                float tWidth = circleSize;
+                                float tHeight = circleSize*inventoryTexture->aspectRatio_h_over_w;
+
+                                if(tWidth < tHeight) {
+                                    tWidth = circleSize/inventoryTexture->aspectRatio_h_over_w;
+                                    tHeight = circleSize;
+                                }
+
+                                 T = Matrix4_translate(Matrix4_scale(mat4(), v3(tWidth, tHeight, 0)), v3(x, y, 0.2f));
                                  setModelTransform(globalRenderGroup, T);
                                 renderDrawSprite(globalRenderGroup, inventoryTexture, COLOR_WHITE);
                                 renderSetShader(globalRenderGroup, mainShader);

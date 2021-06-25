@@ -142,7 +142,10 @@ typedef struct {
 	EntityType type;
 	int count; //number of items you have
 	bool isDisposable; //decrements each time you use it. 
+
+	//Shop items
 	float cost; //since we use this for the shop aswell
+	int maxCount;
 } ItemInfo;
 
 typedef struct {
@@ -201,8 +204,7 @@ FUNC(WORLD_TILE_PIER_SEA_CORNER_RIGHT)\
 FUNC(WORLD_TILE_PIER_SEA_CORNER_LEFT)\
 FUNC(WORLD_TILE_DIRT)\
 FUNC(WORLD_TILE_BRICK)\
-
-
+FUNC(WORLD_TILE_WOOD_FLOOR)\
 
 
 typedef enum {
@@ -304,6 +306,8 @@ typedef struct {
 
 	float inventoryBreathSelector;
 	int itemIndex;
+
+	float timeSinceLastRefill;
 } Game_Shop;
 
 
@@ -498,6 +502,7 @@ typedef struct {
 	// PlayingSound *talkingNPC;
 	////////////////////////////////////////
 
+	DialogActionType queuedActionAfterDialog;
 	EasyFontWriter fontWriter;
 
 	InfiniteAlloc splatListAnimations;
@@ -559,6 +564,7 @@ typedef struct {
 //Define above where it's implemented
 void initAllShopsWithItems(GameState *gameState);
 void enterGameShop(Game_Shop *shop, GameState *gameState);
+void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool isDisposable);
 
 static GameState *initGameState(float yOverX_aspectRatio) {
 	GameState *state = pushStruct(&globalLongTermArena, GameState);
@@ -610,7 +616,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->playerSaveProgress.saveStateEntities.expandCount = 8;
 	state->playerSaveProgress.playerInfo.sceneName[0] = '\0';
 	state->playerSaveProgress.playerInfo.isValid = false;
-	state->playerSaveProgress.playerInfo.moneyCount = 0;
+	state->playerSaveProgress.playerInfo.moneyCount = 1000;
 	//
 
 	//NOTE: This is used for the key prompts in a IMGUI fashion
@@ -778,7 +784,9 @@ static GameState *initGameState(float yOverX_aspectRatio) {
     
     initAllShopsWithItems(state);
 
-    enterGameShop(state->townShop, state);
+    addItemToPlayer(state, ENTITY_BOMB, 5, true);
+
+    // enterGameShop(state->townShop, state);
 	return state;
 }	
 

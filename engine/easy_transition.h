@@ -15,6 +15,8 @@ typedef struct EasySceneTransition {
 
     Timer timer;
     bool direction; //true for in //false for out
+    bool hold; //To hold the transition fully black for 1 second 
+    bool shouldHold; //Wehter to apply the hold
 
     EasyTransitionType type;
 
@@ -62,6 +64,8 @@ EasySceneTransition *EasyTransition_PushTransition(EasyTransitionState *state, t
     trans->callback = callback;
     trans->direction = true;
     trans->type = type;
+    trans->hold = false;
+    trans->shouldHold = false;
 
 
 
@@ -104,6 +108,11 @@ static bool EasyTransition_updateTransitions(EasyTransitionState *transState, V2
             tValue = 1.0f - timeInfo.canonicalVal;
         }
 
+        if(trans->hold) {
+            //NOTE:  Hold the screen black for a bit
+            tValue = 1;
+        }
+
         switch(trans->type) {
             case EASY_TRANSITION_BLINDERS: {
                 float transWidth = smoothStep01(0, tValue, halfScreen);   
@@ -132,21 +141,30 @@ static bool EasyTransition_updateTransitions(EasyTransitionState *transState, V2
         
 
         if(timeInfo.finished) {
-            if(trans->direction) {
-                if(trans->callback) {
-                    assert(trans->data);
-                    trans->callback(trans->data);
-    
-                }
-                
-                trans->direction = false;
+            if(trans->hold) {
+                trans->hold = false;
                 turnTimerOn(&trans->timer);
-                
             } else {
-                //finished the transition
-                transState->currentTransition = trans->next;
-                trans->next = transState->freeListTransitions;
-                transState->freeListTransitions = trans;
+                if(trans->direction) {
+                    if(trans->callback) {
+                        assert(trans->data);
+                        trans->callback(trans->data);
+        
+                    }
+                    
+                    trans->direction = false;
+                    if(trans->shouldHold) {
+                        trans->hold = true;    
+                    }
+                    
+                    turnTimerOn(&trans->timer);
+                    
+                } else {
+                    //finished the transition
+                    transState->currentTransition = trans->next;
+                    trans->next = transState->freeListTransitions;
+                    transState->freeListTransitions = trans;
+                }
             }
         }
     

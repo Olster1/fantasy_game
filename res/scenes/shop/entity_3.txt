@@ -1,0 +1,27 @@
+{
+
+	id: 3;
+	type: "ENTITY_SIGN";
+	position: 19.026556 3.373936 -0.500000;
+	scale: 0.960937 1.500000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	enemyType: "ENEMY_SKELETON";
+	colliderScale: 0.500000 0.500000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	colliderScale2: 1.800000 1.000000;
+	colliderOffset2: 0.000000 -1.300000 0.000000;
+	partnerId: 0;
+	moveDirection: 0.000000 0.000000;
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_ENTER_SHOP";
+	rateOfCreation: 3.000000;
+	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
+	animationName: "talkMan_6.png";
+}
+

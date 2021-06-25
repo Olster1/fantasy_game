@@ -8,6 +8,8 @@ FUNC(ENTITY_DIALOG_HOUSE)\
 FUNC(ENTITY_DIALOG_FOREST_RIP)\
 FUNC(ENTITY_DIALOG_LADY_CASTLE)\
 FUNC(ENTITY_DIALOG_ASK_USER_TO_SAVE)\
+FUNC(ENTITY_DIALOG_ENTER_SHOP)\
+FUNC(ENTITY_DIALOG_SLEEP_IN_BED)\
 
 typedef enum {
     MY_DIALOG_TYPE(ENUM)
@@ -19,7 +21,9 @@ static char *MyDialog_DialogTypeStrings[] = { MY_DIALOG_TYPE(STRING) };
 typedef enum {
 	DIALOG_ACTION_NULL,
 	DIALOG_ACTION_SAVE_PROGRESS,
-	DIALOG_ACTION_EXIT_DIALOG //TO play sound to make it more obvious you exited
+	DIALOG_ACTION_EXIT_DIALOG, //TO play sound to make it more obvious you exited
+	DIALOG_ACTION_GO_TO_SHOP,
+	DIALOG_ACTION_SLEEP
 } DialogActionType;
 
 typedef struct EntityDialogNode EntityDialogNode;
@@ -75,6 +79,8 @@ typedef struct {
 	EntityDialogNode *ladyOutsideCastle;
 	EntityDialogNode *errorDialogForDebugging;
 	EntityDialogNode *promptUserSaveAtFire;
+	EntityDialogNode *enterShopDialog;
+	EntityDialogNode *promptSleepInBed;
 
 	Arena perDialogArena;
 	MemoryArenaMark perDialogArenaMark;
@@ -221,8 +227,48 @@ static void initDialogTrees(GameDialogs *gd) {
 		pushConnectionNode(n, n2, 1);
 		
 	}
-	
 
+	{
+		EntityDialogNode *n = pushEmptyNode_longTerm();
+		gd->enterShopDialog = n;
+
+		pushTextToNode(n, "{s: 3}Hi, back again for some supplies?");
+		pushChoiceToNode(n, "Yes");
+		pushChoiceToNode(n, "No");
+
+		dialog_pushActionForChoice(n, 0, DIALOG_ACTION_GO_TO_SHOP);
+		dialog_pushActionForChoice(n, 1, DIALOG_ACTION_EXIT_DIALOG);
+		
+		EntityDialogNode *n2 = pushEmptyNode_longTerm();
+		n2->isEndNode = true;
+		pushTextToNode(n2, "");
+
+		pushConnectionNode(n, n2, 1);
+		
+
+	}
+
+	//NOTE: Sleep in bed
+	{
+		EntityDialogNode *n = pushEmptyNode_longTerm();
+		gd->promptSleepInBed = n;
+
+		pushTextToNode(n, "{s: 3}Would you like to sleep?");
+		pushChoiceToNode(n, "Yes");
+		pushChoiceToNode(n, "No");
+
+		dialog_pushActionForChoice(n, 0, DIALOG_ACTION_SLEEP);
+		dialog_pushActionForChoice(n, 1, DIALOG_ACTION_EXIT_DIALOG);
+		
+		EntityDialogNode *n2 = pushEmptyNode_longTerm();
+		n2->isEndNode = true;
+		pushTextToNode(n2, "");
+
+		pushConnectionNode(n, n2, 0);
+		pushConnectionNode(n, n2, 1);
+		
+
+	}
 
 	//Philosophy dialog
 	{
@@ -279,6 +325,10 @@ static EntityDialogNode *findDialogInfo(DialogInfoType type, GameDialogs *gd) {
 		result = gd->ladyOutsideCastle;
 	} else if(type == ENTITY_DIALOG_ASK_USER_TO_SAVE) {
 		result = gd->promptUserSaveAtFire;
+	} else if(type == ENTITY_DIALOG_ENTER_SHOP) {
+		result = gd->enterShopDialog;
+	} else if(type == ENTITY_DIALOG_SLEEP_IN_BED) {
+		result = gd->promptSleepInBed;
 	}
 
 	return result;

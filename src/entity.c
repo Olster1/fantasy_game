@@ -616,25 +616,28 @@ static ParticleSystemListItem *getParticleSystem(EntityManager *m, Entity *entit
 
 
 static void renderKeyPromptHover(GameState *gameState, Texture *keyTexture, Entity *entity, float dt, bool useScaleY, RenderGroup *group) {
-	entity->tBob += dt;
+	if(!gameState->gameIsPaused) {
+		// easyConsole_addToStream(DEBUG_globalEasyConsole, "RENDER PROMPT");
+		entity->tBob += dt;
 
-	V3 scale = easyTransform_getWorldScale(&entity->T);
+		V3 scale = easyTransform_getWorldScale(&entity->T);
 
-	float sy = 0.11f;
-	if(useScaleY) {
-		sy = scale.y + 0.01f;
+		float sy = 0.11f;
+		if(useScaleY) {
+			sy = scale.y + 0.01f;
+		}
+
+		V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(sy + 0.1f*sin(entity->tBob))));
+
+		gameState->tempTransform.pos = position;
+		float width = 0.5f;
+		float height = keyTexture->aspectRatio_h_over_w*width;
+
+		gameState->tempTransform.scale.xy = v2(width, height);
+
+		setModelTransform(group, easyTransform_getTransform(&gameState->tempTransform));
+		renderDrawSprite(group, keyTexture, COLOR_WHITE);
 	}
-
-	V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -(sy + 0.1f*sin(entity->tBob))));
-
-	gameState->tempTransform.pos = position;
-	float width = 0.5f;
-	float height = keyTexture->aspectRatio_h_over_w*width;
-
-	gameState->tempTransform.scale.xy = v2(width, height);
-
-	setModelTransform(group, easyTransform_getTransform(&gameState->tempTransform));
-	renderDrawSprite(group, keyTexture, COLOR_WHITE);
 
 }
 
@@ -884,6 +887,27 @@ static inline void entity_useItem(EntityManager *manager, GameState *gameState, 
 			
 			
 		} break;
+		case ENTITY_BOMB: {
+
+			float offsetX = 0;
+			float offsetY = 0;
+
+			if(entity->direction == ENTITY_DIRECTION_LEFT) {
+				offsetX = -0.5f;
+			} else if(entity->direction == ENTITY_DIRECTION_RIGHT) {
+				offsetX = 0.5f;
+			} else if(entity->direction == ENTITY_DIRECTION_UP) {
+				offsetY = 0.5f;
+			} else if(entity->direction == ENTITY_DIRECTION_DOWN) {
+				offsetY = -0.5f;
+			}
+
+			ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
+			EntityToAdd *entityToAdd = (EntityToAdd *)arrayInfo.elm;
+			easyMemory_zeroStruct(entityToAdd, EntityToAdd);
+			entityToAdd->type = ENTITY_BOMB;
+			entityToAdd->position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(offsetX, offsetY, 0));
+		} break;
 		case ENTITY_SWORD: {
 			easyConsole_pushInt(DEBUG_globalEasyConsole, (int)entity->shieldInUse);
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Used Sword");
@@ -985,6 +1009,35 @@ static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics
 	manager->player = 0;
 }
 
+typedef struct {
+	GameWeatherState *weatherState;
+	GameState *gameState;
+
+	float hoursToSleep;
+} EntitySleepInBedData;
+
+static void sleepInBed(void *data_) {
+	EntitySleepInBedData *data = (EntitySleepInBedData *)data_;
+
+	easyConsole_pushFloat(DEBUG_globalEasyConsole, data->weatherState->timeOfDay);
+
+
+	//NOTE: add hours to weather state
+	data->weatherState->timeOfDay += data->hoursToSleep/24.f;
+
+	while(data->weatherState->timeOfDay > 1.f) {
+		data->weatherState->timeOfDay -= 1.f;
+	}
+
+
+	easyConsole_pushFloat(DEBUG_globalEasyConsole, data->weatherState->timeOfDay);
+
+
+	data->gameState->gameIsPaused = false; 
+
+	//////////////
+	free(data_);
+}
 
 
 typedef struct {
@@ -1014,7 +1067,7 @@ static void loadScene(void *data_) {
 		if(partnerEntity) {
 			V3 pos = easyTransform_getWorldPos(&partnerEntity->T);
 			Entity *player = (Entity *)data->manager->player;
-			player->T.pos = pos;
+			player->T.pos.xy = pos.xy;
 
 			setCameraPosition(data->camera, pos);
 		}
@@ -1177,7 +1230,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->flags |= (u64)ENTITY_SHOW_HEALTH_BAR;
 	}
 
-	if(type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SEAGULL) {
+	if(type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SEAGULL || type == ENTITY_BOMB) {
 
 	} else {
 		entity->flags |= (u64)ENTITY_SHOULD_SAVE;
@@ -1218,7 +1271,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY || type == ENTITY_PLAYER_PROJECTILE) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY || type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_BOMB) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -1235,6 +1288,9 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 
 
 		switch(entity->type) {
+			case ENTITY_BOMB: {
+				entity->collider->layer = EASY_COLLISION_LAYER_WORLD;
+			} break;
 			case ENTITY_TRIGGER_WITH_RIGID_BODY: {
 				entity->collider->layer = EASY_COLLISION_LAYER_WORLD;
 			} break;
@@ -2282,15 +2338,15 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					} 
 				}
 			}
-		} else if(entity->triggerType == ENTITY_TRIGGER_ENTER_SHOP) {
-			if(wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !gameState->gameIsPaused) {
-				//Enter the shop
-				if(entity->chestType == CHEST_TYPE_SHOP_1) {
-					enterGameShop(gameState->townShop, gameState);
-				}
-			}
-
-		}
+		} 
+			// else if(entity->triggerType == ENTITY_TRIGGER_ENTER_SHOP) {
+		// 	if(wasPressed(keyStates->gameButtons, BUTTON_SPACE) && !gameState->gameIsPaused) {
+		// 		//Enter the shop
+		// 		if(entity->chestType == CHEST_TYPE_SHOP_1) {
+		// 			enterGameShop(gameState->townShop, gameState);
+		// 		}
+		// 	}
+		// }
 	}
 
 	if(entity->type == ENTITY_TRIGGER) {
@@ -2573,6 +2629,29 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 	}
 
+	if(entity->type == ENTITY_BOMB) {
+		entity->lifeSpanLeft -= dt;
+
+		if(entity->lifeSpanLeft <= 0) {
+			if(entity->sprite) {
+				entity->sprite = 0;
+				entity->isDying = true;
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "bomb_explosion_9.png"), 0.02f);		
+				
+				playGameSound(&globalLongTermArena, easyAudio_findSound("bomb_explosion.wav"), 0, AUDIO_FOREGROUND);
+
+				entity->colorTint = COLOR_WHITE;
+			}
+		} else {
+			float timerValue = (1 / (entity->lifeSpanLeft / 3.f));
+			entity->colorTint = smoothStep01010V4(COLOR_WHITE, timerValue, COLOR_RED);
+		}
+
+		
+
+
+	}
+
 	if(entity->type == ENTITY_SEAGULL) {
 		entity->T.pos = v3_plus(entity->T.pos, v3_scale(dt, v3(-2.0f, 0, 0))); 
 
@@ -2804,6 +2883,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 		//We snap alter the width based on the aspect ratio of the sprite, this is based on that the y is the same across frames
 		entity->T.scale.x = (1.0f / sprite->aspectRatio_h_over_w)*entity->T.scale.y;
+
+		if(entity->type == ENTITY_BOMB && entity->animationController.finishedAnimationLastUpdate) {
+			assert(entity->isDying);
+			entity->isDead = true;
+		}
 
 		if(entity->type == ENTITY_ENEMY) {
 			Animation *deathAnimation = getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, entity->enemyType);
@@ -3191,6 +3275,43 @@ static Entity *initShootTrigger(GameState *gameState, EntityManager *manager, V3
 	return e;
 }
 
+static Entity *initBomb(GameState *gameState, EntityManager *manager, V3 worldP) {
+	Texture *bombTexture = findTextureAsset("bomb_world.png");
+
+    Entity *e =  initEntity(manager, 0, worldP, v2(2.5f, 2.5f*bombTexture->aspectRatio_h_over_w), v2(0.3f, 0.3f), gameState, ENTITY_BOMB, 0, bombTexture, COLOR_WHITE, -1, true);
+    e->triggerType = ENTITY_TRIGGER_NULL;
+    e->collider1->dim2f = v2(4, 4);
+    e->T.pos.z = -0.4f;
+
+    e->currentSound = playLocationSound(&globalLongTermArena, easyAudio_findSound("bomb_fuse.wav"), 0, AUDIO_FOREGROUND, easyTransform_getWorldPos(&e->T));
+    e->currentSound->volume = 3.f;
+	e->currentSound->outerRadius = 5.0f;;
+
+    e->lifeSpanLeft = 3.0f;
+
+    ParticleSystemListItem *ps = getParticleSystem(manager, e);
+
+    // ps->ps.Set.VelBias = rect3f(-0.4f, -0.1f, -1, 0.4f, 0.1f, -0.4f);
+    ps->ps.Set.VelBias = rect3f(0, 0, -0.3f, 0, 0, -0.7f);
+    ps->ps.Set.posBias = rect3f(0, -0.1f, 0, 0, 0.1f, 0);
+    ps->ps.Set.bitmapScale = 0.1f;
+
+    easyParticles_setSystemLifeSpan(&ps->ps, 30.0f);
+    setParticleLifeSpan(&ps->ps, 1.6f);
+
+    ps->color = v4(0.3f, 0.3f, 0.3f, 1);
+    ps->ps.Set.Loop = true;
+
+    Reactivate(&ps->ps);
+
+    ps->position = &e->T.pos;
+    ps->offset = v3(0, 0, -0.1f);
+
+
+
+    return e;
+}
+
 
 static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 worldP) {
 	float blockDim = 1.0;
@@ -3253,6 +3374,8 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 		case ENTITY_WIZARD: {
 			newEntity = initWizard(gameState, manager, position);
 			manager->player = newEntity;
+
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, newEntity->T.pos.z);
 
             easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
 
@@ -3334,6 +3457,9 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
         } break;
         case ENTITY_ENEMY_PROJECTILE: {
         	newEntity = initEnemyProjectile(gameState, manager, position);
+        } break;
+        case ENTITY_BOMB: {
+        	newEntity = initBomb(gameState, manager, position);
         } break;
 		default: {
 			//do nothing
