@@ -61,7 +61,8 @@ typedef enum  {
 		EASY_EDITOR_INTERACT_SLIDER,
 		EASY_EDITOR_INTERACT_BUTTON,
 		EASY_EDITOR_INTERACT_DROP_DOWN_LIST,
-		EASY_EDITOR_INTERACT_CHECK_BOX
+		EASY_EDITOR_INTERACT_CHECK_BOX,
+		EASY_EDITOR_INTERACT_WINDOW_SCROLL_BAR,
 } EasyEditorInteractType;
 
 typedef struct {
@@ -76,9 +77,12 @@ typedef struct {
 			char *name;
 			Rect2f margin;
 
+			V2 topCorner_;
 			V2 topCorner;
 			V2 at;
 			float maxX;
+
+			float yOffset; //NOTE: From the scroll
 
 			//NOTE(ollie): To see if it docks anywhere
 			EasyEditor_WindowDockType dockType; 
@@ -217,7 +221,7 @@ static inline EasyEditorState *easyEditor_hasState(EasyEditor *e, int lineNumber
 	EasyEditorState *result = 0;
 	for(int i = 0; i < e->stateCount && !result; ++i) {
 		EasyEditorState *w = e->states + i;
-		if(easyEditor_idEqual(w->id, lineNumber, fileName, index, id1, id2)) {
+		if(easyEditor_idEqual(w->id, lineNumber, fileName, index, id1, id2) && type == w->type) {
 			result = w;
 			assert(result->type == type);
 			break;
@@ -325,15 +329,16 @@ static inline void easyEditor_startWindow_(EasyEditor *e, char *name, float x, f
 		w = addState(e, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_WINDOW);
 
 		w->margin = InfinityRect2f();
-		w->topCorner = v2(x, y); //NOTE: Default top corner
+		w->topCorner_ = w->topCorner = v2(x, y); //NOTE: Default top corner
 		w->isOpen = true;
+		w->yOffset = 0;
 		
 		if(dockType != EASY_EDITOR_DOCK_NONE) {
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "NOT NOW");
 			//just default the position to out of the screen since we calculate the position at the end of the window
 			//NOTE: Couldn't use INFINITY_VALUE since the margin for the text output is using these values and the span of that react was 
 			//		between -INFINITY & INFINITY & Y was clamped to onscreen values.  
-			w->topCorner = v2(3000.0f, 3000.0f);
+			w->topCorner = w->topCorner_ = v2(3000.0f, 3000.0f);
 
 		} else {	
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "YEA");
@@ -351,12 +356,14 @@ static inline void easyEditor_startWindow_(EasyEditor *e, char *name, float x, f
 
 		w->dockType = dockType;
 		
+		w->topCorner.y = w->topCorner_.y - w->yOffset;
+
 		w->at = w->topCorner; 
+
 		w->maxX = w->topCorner.x;
 		w->at.y += EASY_EDITOR_MARGIN;
 	}
 	e->currentWindow = w; 
-
 }
 
 
@@ -364,18 +371,19 @@ static inline void easyEditor_startWindow_(EasyEditor *e, char *name, float x, f
 static inline void easyEditor_endWindow(EasyEditor *e) {
 	assert(e->currentWindow);
 	EasyEditorState *w = e->currentWindow;
+
 	
 	int lineNumber = w->id.lineNumber;
 	char *fileName = w->id.fileName;
 
 	//update the handle
 
-	Rect2f rect = outputTextNoBacking(e->font, w->topCorner.x, w->topCorner.y - e->font->fontHeight - 2*EASY_EDITOR_MARGIN, 1, e->fuaxResolution, w->name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
+	Rect2f rect = outputTextNoBacking(e->font, w->topCorner_.x, w->topCorner_.y - e->font->fontHeight - 2*EASY_EDITOR_MARGIN, 1, e->fuaxResolution, w->name, w->margin, COLOR_WHITE, 1, true, e->screenRelSize);
 
 		
-			//explicilty set the top handle to the right size 
-		rect.maxY = w->topCorner.y - e->font->fontHeight;
-		rect.minX = w->topCorner.x - EASY_EDITOR_MARGIN;
+		//explicilty set the top handle to the right size 
+		rect.maxY = w->topCorner_.y - e->font->fontHeight;
+		rect.minX = w->topCorner_.x - EASY_EDITOR_MARGIN;
 		if(w->isOpen) {
 			w->at.x += getDim(rect).x;
 		}
@@ -390,34 +398,107 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 		
 		if(w->isOpen) {
 		///////////////////////************** We set the position depending on the dock type ***********////////////////////
-		float windowHeight = w->at.y - w->topCorner.y;
+		float windowHeight = w->at.y - w->topCorner_.y;
 		float windowWidth = w->maxX - rect.minX;
 
 		float maxExtent = w->maxX + EASY_EDITOR_MARGIN;
 
 		switch(w->dockType) {
 			case EASY_EDITOR_DOCK_BOTTOM_LEFT: {
-				w->topCorner = v2(0, e->fuaxResolution.y - windowHeight);
+				w->topCorner = w->topCorner_ = v2(0, e->fuaxResolution.y - windowHeight);
 			} break;
 			case EASY_EDITOR_DOCK_BOTTOM_RIGHT: {
-				w->topCorner = v2(e->fuaxResolution.x - windowWidth, e->fuaxResolution.y - windowHeight);
+				w->topCorner_ = w->topCorner = v2(e->fuaxResolution.x - windowWidth, e->fuaxResolution.y - windowHeight);
 				maxExtent = e->fuaxResolution.x;
 			} break;
 			case EASY_EDITOR_DOCK_TOP_LEFT: {
-				w->topCorner = v2(0, 2*e->font->fontHeight);
+				w->topCorner_ = w->topCorner = v2(0, 2*e->font->fontHeight);
 			} break;
 			case EASY_EDITOR_DOCK_TOP_RIGHT: {
-				w->topCorner = v2(e->fuaxResolution.x - windowWidth, 2.0f*e->font->fontHeight + 0.4f*EASY_EDITOR_MARGIN);
+				w->topCorner_ = w->topCorner = v2(e->fuaxResolution.x - windowWidth, 2.0f*e->font->fontHeight + 0.4f*EASY_EDITOR_MARGIN);
 				maxExtent = e->fuaxResolution.x;
 			} break;
 			default: {
 				//do nothing
 			}
+		} //END SWITCH STATEMENT
+
+
+
+		float totalHeightOfWindow = w->at.y - w->topCorner_.y + 2*EASY_EDITOR_MARGIN + e->font->fontHeight + w->yOffset;
+		if(totalHeightOfWindow > e->fuaxResolution.y) 
+		{ //bigger than the screen
+			EasyEditorState *sh = easyEditor_hasState(e, w->id.lineNumber, w->id.fileName, 0, EASY_EDITOR_INTERACT_WINDOW_SCROLL_BAR);
+			if(!sh) {
+				sh = addState(e, w->id.lineNumber, w->id.fileName, 0, EASY_EDITOR_INTERACT_WINDOW_SCROLL_BAR);
+			}
+			float scrollWidth = 50;
+			Rect2f scrollLaneWay = {};
+			//NOTE: Draw the handle
+			if(w->dockType == EASY_EDITOR_DOCK_BOTTOM_LEFT || w->dockType == EASY_EDITOR_DOCK_TOP_LEFT) {
+				//NOTE: Draw the handle on the right hand side
+				scrollLaneWay = rect2fMinDim(maxExtent, rect.minY, scrollWidth, e->fuaxResolution.y - rect.minY); 
+			} else {
+				//NOTE: Put it on the right hand size for all the others
+				scrollLaneWay = rect2fMinDim(rect.minX - scrollWidth, rect.minY, scrollWidth, e->fuaxResolution.y - rect.minY); 
+			}
+
+			renderDrawRect(scrollLaneWay, 10, COLOR_GOLD, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
+
+
+			float overhang = totalHeightOfWindow - e->fuaxResolution.y;
+			float scrollHeight = e->fuaxResolution.y - rect.minY;
+
+			Rect2f scrollHandle = scrollLaneWay;
+			scrollHandle.minY = ((sh->value * overhang) + rect.minY);
+			scrollHandle.maxY = scrollHandle.minY + (scrollHeight - overhang);
+
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, w->at.y);
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, totalHeightOfWindow);
+			easyConsole_pushFloat(DEBUG_globalEasyConsole, overhang);
+
+			//NOTE: Draw the handle
+			V4 color = COLOR_BLUE;
+
+			if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), scrollHandle, BOUNDS_RECT) && !e->interactingWith.item) {
+				color = COLOR_YELLOW;
+				e->isHovering_unstable = true;
+				if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+					easyEditor_startInteracting(e, w, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_WINDOW_SCROLL_BAR);
+
+					e->interactingWith.dragOffset = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), scrollHandle.min);
+				} 
+			}
+
+
+			if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0) && e->interactingWith.type == EASY_EDITOR_INTERACT_WINDOW_SCROLL_BAR) {
+				e->interactingWith.visitedThisFrame = true;
+				color = COLOR_GREEN;
+
+				if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
+					easyEditor_stopInteracting(e);
+				} else {
+					//NPTE: Move the scroll bar
+					sh->value = (v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), e->interactingWith.dragOffset).y -  rect.minY) / overhang;
+					sh->value = clamp01(sh->value);
+					assert(sh->value >= 0.0f && sh->value <= 1.0f);
+					w->yOffset = sh->value*overhang; 
+
+
+				}
+			}
+
+
+			if(inBounds(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), scrollHandle, BOUNDS_RECT)) {
+				e->isHovering_unstable = true;
+			} 
+
+			renderDrawRect(scrollHandle, 1, color, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);	
 		}
 
 	
 		//NOTE(ollie): Draw the backing
-		bounds = rect2fMinMax(w->topCorner.x - EASY_EDITOR_MARGIN, w->topCorner.y - e->font->fontHeight, maxExtent, w->at.y); 
+		bounds = rect2fMinMax(w->topCorner_.x - EASY_EDITOR_MARGIN, w->topCorner_.y - e->font->fontHeight, maxExtent, w->at.y); 
 		if(w->drawnYet) {
 			renderDrawRect(bounds, 10, COLOR_BLACK, 0, mat4TopLeftToBottomLeft(e->fuaxResolution.y), e->orthoMatrix);
 		}
@@ -431,19 +512,19 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 			if(wasPressed(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
 				easyEditor_startInteracting(e, w, lineNumber, fileName, 0, EASY_EDITOR_INTERACT_WINDOW);
 
-				e->interactingWith.dragOffset = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), w->topCorner);
+				e->interactingWith.dragOffset = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), w->topCorner_);
 			} 
 		}
 
 
-		if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0)) {
+		if(e->interactingWith.item && easyEditor_idEqual(e->interactingWith.id, lineNumber, fileName, 0) &&  e->interactingWith.type == EASY_EDITOR_INTERACT_WINDOW) {
 			e->interactingWith.visitedThisFrame = true;
 			color = COLOR_GREEN;
 
 			if(wasReleased(e->keyStates->gameButtons, BUTTON_LEFT_MOUSE)) {
 				easyEditor_stopInteracting(e);
 			} else {
-				w->topCorner = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), e->interactingWith.dragOffset);
+				w->topCorner_ = w->topCorner = v2_minus(easyInput_mouseToResolution(e->keyStates, e->fuaxResolution), e->interactingWith.dragOffset);
 			}
 		}
 

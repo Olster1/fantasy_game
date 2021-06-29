@@ -2788,14 +2788,14 @@ int main(int argc, char *args[]) {
                         //         justCreatedEntity = true;
                         //     }
                         // } break;
-                        case EDITOR_CREATE_ENTITY_AI_STATE: {
-                            if(pressed) {
-                                editorState->entitySelected = initAiAnimation(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                assert(editorState->entitySelected);
-                                justCreatedEntity = true;
-                            }
-                        } break;
+                        // case EDITOR_CREATE_ENTITY_AI_STATE: {
+                        //     if(pressed) {
+                        //         editorState->entitySelected = initAiAnimation(gameState, manager, hitP);
+                        //         editorState->entityIndex = manager->lastEntityIndex;
+                        //         assert(editorState->entitySelected);
+                        //         justCreatedEntity = true;
+                        //     }
+                        // } break;
                         case EDITOR_CREATE_SHOOT_TRIGGER: {
                             if(pressed) {
                                 editorState->entitySelected = initShootTrigger(gameState, manager, hitP, splatTexture);
@@ -2863,14 +2863,6 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
-                        // case EDITOR_CREATE_SWORD: {
-                        //     if(pressed) {
-                        //         editorState->entitySelected = initSword(gameState, manager, hitP);
-                        //         editorState->entityIndex = manager->lastEntityIndex;
-                        //         justCreatedEntity = true;
-
-                        //     }
-                        // } break;
                         case EDITOR_CREATE_CHEST: {
                             if(pressed) {
                                 editorState->entitySelected = initChest(gameState, manager, hitP);
@@ -2879,22 +2871,6 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
-                        // case EDITOR_CREATE_HORSE: {
-                        //     if(pressed) {
-                        //         editorState->entitySelected = initHorse(gameState, manager, hitP);
-                        //         editorState->entityIndex = manager->lastEntityIndex;
-                        //         justCreatedEntity = true;
-
-                        //     }
-                        // } break;
-                        // case EDITOR_CREATE_SHEILD: {
-                        //     if(pressed) {
-                        //         editorState->entitySelected = initSheild(gameState, manager, hitP);
-                        //         editorState->entityIndex = manager->lastEntityIndex;
-                        //         justCreatedEntity = true;
-
-                        //     }
-                        // } break;
                         case EDITOR_CREATE_SIGN: {
                             if(pressed) {
                                 editorState->entitySelected = initSign(gameState, manager, hitP, splatTexture);
@@ -2913,49 +2889,9 @@ int main(int argc, char *args[]) {
 
                             }
                         } break;
-                        case EDITOR_CREATE_HOUSE: {
-                            if(pressed) {
-                                editorState->entitySelected = initHouse(gameState, manager, hitP, splatTexture);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
-                        case EDITOR_CREATE_CHECKPOINT: {
-                            if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
-                        case EDITOR_CREATE_TORCH: {
-                            if(pressed) {
-                                editorState->entitySelected = initEntity(manager, &gameState->torchAnimation, hitP, v2(1, 1), v2(1, 1), gameState, ENTITY_SCENERY, 0, 0, COLOR_WHITE, -1, false);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
                         case EDITOR_CREATE_ENTITY_CREATOR: {
                             if(pressed) {
                                 editorState->entitySelected = initEntityCreator(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
-                        case EDITOR_CREATE_SEAGULL: {
-                            if(pressed) {
-                                editorState->entitySelected = initSeagull(gameState, manager, hitP);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                justCreatedEntity = true;
-
-                            }
-                        } break;
-                        case EDITOR_CREATE_AUDIO_CHECKPOINT: {
-                            if(pressed) {
-                                editorState->entitySelected = initEntity(manager, 0, hitP, v2(1, 1), v2(1, 1), gameState, ENITY_AUDIO_CHECKPOINT, 0, &globalWhiteTexture, COLOR_BLUE, -1, false);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 justCreatedEntity = true;
 

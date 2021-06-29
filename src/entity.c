@@ -1271,7 +1271,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->rb = EasyPhysics_AddRigidBody(&gameState->physicsWorld, inverse_weight, 0, dragFactor, gravityFactor);
 		entity->collider = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), isTrigger, v3(physicsDim.x, physicsDim.y, 0));
 		
-		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_HOUSE || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY || type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_BOMB) { 
+		if(type == ENTITY_HEALTH_POTION_1 || type == ENTITY_SIGN || type == ENTITY_ENEMY || type == ENTITY_WIZARD || type == ENTITY_HORSE || type == ENTITY_CHEST || type == ENTITY_SHOOT_TRIGGER || type == ENTITY_TRIGGER_WITH_RIGID_BODY || type == ENTITY_PLAYER_PROJECTILE || type == ENTITY_BOMB) { 
 			//Add a TRIGGER aswell
 			entity->collider1 = EasyPhysics_AddCollider(&gameState->physicsWorld, &entity->T, entity->rb, EASY_COLLIDER_RECTANGLE, v3(0, 0, 0), true, v3(physicsDim.x, physicsDim.y, 0));
 			entity->collider1->layer = EASY_COLLISION_LAYER_ITEMS;
@@ -1798,43 +1798,6 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
             	
             }
 		}
-	}
-
-
-	
-
-	if(entity->type == ENTITY_HOUSE) {
-		if(entity->collider1->collisions.count > 0) {
-
-            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_STAY);	
-            if(info.found) {
-
-            	bool canInteractWith = gameState->gameModeType != GAME_MODE_READING_TEXT && !EasyTransition_InTransition(transitionState);
-
-            	if(canInteractWith) {
-            		// renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, false);
-            			
-            		if(isDown(keyStates->gameButtons, BUTTON_UP)) {
-            			//GO inside the house
-            			playGameSound(&globalLongTermArena, gameState->doorSound, 0, AUDIO_FOREGROUND);
-
-            			EntityLoadSceneData *loadSceneData = (EntityLoadSceneData *)easyPlatform_allocateMemory(sizeof(EntityLoadSceneData), EASY_PLATFORM_MEMORY_ZERO);
-            			loadSceneData->gameState = gameState;
-            			loadSceneData->manager = manager;
-            			loadSceneData->sceneToLoad = entity->levelToLoad;
-            			loadSceneData->editorState = editorState;
-            			loadSceneData->weatherState = weatherState;
-
-
-            			easyConsole_addToStream(DEBUG_globalEasyConsole, "Push Trasition 2");
-
-            			EasySceneTransition *transition = EasyTransition_PushTransition(transitionState, loadScene, loadSceneData, EASY_TRANSITION_CIRCLE_N64);
-            			gameState->gameIsPaused = true;	
-            		}
-        			
-            	}
-            }
-        }
 	}
 
 
@@ -2960,7 +2923,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	
 	bool shouldDrawForShadows = true;
 
-	if(easyString_stringsMatch_nullTerminated(sprite->name, "grass_splat")) {
+	if(sprite && easyString_stringsMatch_nullTerminated(sprite->name, "grass_splat")) {
 		shouldDrawForShadows = false;
 	}
 
@@ -3166,27 +3129,6 @@ static Entity *init3dModel(GameState *gameState, EntityManager *manager, V3 worl
 static Entity *initSign(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SIGN, 0, splatTexture, COLOR_WHITE, -1, true);
 	e->flags |= ENTITY_SHOULD_SAVE_ANIMATION;
-	return e;
-}
-
-static Entity *initHouse(GameState *gameState, EntityManager *manager, V3 worldP, Texture *splatTexture) {
-	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_HOUSE, 0, splatTexture, COLOR_WHITE, -1, true);
-	float w = 6.0f;
-	float h = e->sprite->aspectRatio_h_over_w*w;
-	e->T.scale = v3(w,  h, 1);
-	e->T.pos.z = -0.5f*h;
-
-	e->collider->offset.y = -0.5f*w;
-	e->collider->dim2f.y = 0.5f;
-	e->collider->dim2f.x = 1.1f;
-
-
-	e->collider1->offset.y = -w - 0.5f;
-	e->collider1->dim2f = v2(0.3f, 0.1f);
-
-	e->levelToLoad = gameState->emptyString;
-	
-
 	return e;
 }
 
@@ -3429,9 +3371,6 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 		} break;
         case ENTITY_LAMP_POST: {
             newEntity = initLampPost(gameState, manager, position, splatTexture, animation);
-        } break;
-        case ENTITY_HOUSE: {
-            newEntity = initHouse(gameState, manager, position, splatTexture);
         } break;
         case ENTITY_ENEMY: {
             newEntity = initEnemy(gameState, manager, position);

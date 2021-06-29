@@ -322,7 +322,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     } else if(easyString_stringsMatch_nullTerminated("home", gameState->currentSceneName)) {
         //No sounds
     } else if(easyString_stringsMatch_nullTerminated("shop", gameState->currentSceneName)) {
-        gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("potion_shop.wav"), 0, AUDIO_BACKGROUND);
+        gameState->currentBackgroundSound = playGameSound(&globalLongTermArena, easyAudio_findSound("shop.wav"), 0, AUDIO_BACKGROUND);
         EasySound_LoopSound(gameState->currentBackgroundSound);
         
     }
