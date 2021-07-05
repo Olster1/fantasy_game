@@ -453,9 +453,9 @@ static inline void easyEditor_endWindow(EasyEditor *e) {
 			scrollHandle.minY = ((sh->value * overhang) + rect.minY);
 			scrollHandle.maxY = scrollHandle.minY + (scrollHeight - overhang);
 
-			easyConsole_pushFloat(DEBUG_globalEasyConsole, w->at.y);
-			easyConsole_pushFloat(DEBUG_globalEasyConsole, totalHeightOfWindow);
-			easyConsole_pushFloat(DEBUG_globalEasyConsole, overhang);
+			// easyConsole_pushFloat(DEBUG_globalEasyConsole, w->at.y);
+			// easyConsole_pushFloat(DEBUG_globalEasyConsole, totalHeightOfWindow);
+			// easyConsole_pushFloat(DEBUG_globalEasyConsole, overhang);
 
 			//NOTE: Draw the handle
 			V4 color = COLOR_BLUE;

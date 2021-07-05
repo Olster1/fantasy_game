@@ -147,6 +147,7 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             addVar(&fileContents, &e->renderFirstPass, "renderFirstPass", VAR_INT);    
 
+            addVar(&fileContents, MyEntity_AnimalTypeStrings[(int)e->animalType], "animalType", VAR_CHAR_STAR);
 
             addVar(&fileContents, MyDialog_DialogTypeStrings[(int)e->dialogType], "dialogType", VAR_CHAR_STAR);
 
@@ -405,6 +406,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 int partnerId = -1;
                 V2 moveDirection = v2(0, 0);
 
+                EntityAnimalType animalType = ENTITY_ANIMAL_NULL;
+
 
         		// s32 teleporterIds[256];
         		// Entity *teleportEnts[256];
@@ -612,9 +615,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                                 dialogType = (DialogInfoType)findEnumValue(typeString, MyDialog_DialogTypeStrings, arrayCount(MyDialog_DialogTypeStrings));
 
-                                if(dialogType == ENTITY_DIALOG_WELCOME_SIGN) {
-                                    int j = 0;
-                                }
+                            }
+
+                            if(stringsMatchNullN("animalType", token.at, token.size)) {
+                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
+
+                                animalType = (EntityAnimalType)findEnumValue(typeString, MyEntity_AnimalTypeStrings, arrayCount(MyEntity_AnimalTypeStrings));
 
                             }
 
@@ -739,7 +745,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 } else {    
 
         			//Make the entity
-        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile, animation);
+        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile, animation, animalType);
 
                     newEntity->chestType = chestType;
 
@@ -868,6 +874,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		audioFile = 0;
                 aiController = 0;
                 chestType = CHEST_TYPE_HEALTH_POTION;
+
+                animalType = ENTITY_ANIMAL_NULL;
 
         		subtype = ENTITY_SUB_TYPE_NONE;
         		// if(wasTeleporter) {

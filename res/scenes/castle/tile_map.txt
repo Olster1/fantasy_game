@@ -253,5 +253,13 @@
 	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
 	tileYAxis: 0.000000;
 	tilePos: 13.000000 2.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 18.000000 18.000000 0.000000;
+	tileType: "WORLD_TILE_COBBLE";
+	tileRotationType: "WORLD_TILE_ROTATION_FLAT";
+	tileYAxis: 0.000000;
+	tilePos: 18.000000 19.000000 0.000000;
 }
 

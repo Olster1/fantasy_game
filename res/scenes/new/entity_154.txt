@@ -1,22 +1,26 @@
 {
 
-	id: 134;
-	type: "ENTITY_SCENERY";
-	position: 2.031071 3.330353 -0.120000;
-	scale: 0.300000 0.342857 1.000000;
+	id: 154;
+	type: "ENTITY_TRIGGER";
+	position: 0.000000 -12.000000 0.000000;
+	scale: 1.000000 1.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
-	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	rotation: 1.000000 0.000000 0.000000 0.000000;
 	layer: -1.000000;
 	subtype: 0;
 	enemyType: "ENEMY_SKELETON";
-	spriteName: "grass_splat";
-	partnerId: -1;
+	spriteName: "cobble_unstable";
+	colliderScale: 1.000000 1.000000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	levelToLoad: "emptyString";
+	partnerId: 0;
 	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;
 	animalType: "ENTITY_ANIMAL_NULL";
 	dialogType: "ENTITY_DIALOG_NULL";
+	triggerType: "ENTITY_TRIGGER_FALL_THROUGH_FALL_ON_TIMER";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";
 	shouldNotRender: false;

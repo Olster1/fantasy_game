@@ -2,7 +2,7 @@
 
 	id: 114;
 	type: "ENTITY_ENEMY";
-	position: -2.187526 -2.298422 -0.200000;
+	position: -2.183934 -1.806722 -0.200000;
 	scale: 1.750000 1.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
@@ -21,6 +21,7 @@
 	lightIntensity: 2.000000;
 	enemyMoveSpeed: 5.710000;
 	renderFirstPass: 0;
+	animalType: "ENTITY_ANIMAL_NULL";
 	dialogType: "ENTITY_DIALOG_NULL";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";

@@ -30,6 +30,7 @@ FUNC(ENTITY_TRIGGER_WITH_RIGID_BODY)\
 FUNC(ENTITY_KEY)\
 FUNC(ENTITY_BOMB)\
 FUNC(ENTITY_ARROW)\
+FUNC(ENTITY_ANIMAL)\
 
 
 typedef enum {
@@ -73,6 +74,7 @@ FUNC(ENTITY_TRIGGER_BUTTON_FOR_DOOR)\
 FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON)\
 FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE)\
 FUNC(ENTITY_TRIGGER_ENTER_SHOP)\
+FUNC(ENTITY_TRIGGER_FALL_THROUGH_FALL_ON_TIMER)\
 
 
 
@@ -83,6 +85,19 @@ typedef enum {
 static char *MyEntity_TriggerTypeStrings[] = { MY_TRIGGER_TYPE(STRING) };
 
 /////////////////////////////////////////////////////////////////
+
+//// Entity Animal Types ////////////
+#define MY_ANIMAL_TYPE(FUNC) \
+FUNC(ENTITY_ANIMAL_NULL)\
+FUNC(ENTITY_ANIMAL_CHICKEN)\
+
+
+typedef enum {
+    MY_ANIMAL_TYPE(ENUM)
+} EntityAnimalType;
+
+static char *MyEntity_AnimalTypeStrings[] = { MY_ANIMAL_TYPE(STRING) };
+////////////////
 
 //NOTE: We store the shop type on the chest type so we're not storing more types in the entity
 
@@ -205,7 +220,6 @@ FUNC(WORLD_TILE_PIER_SEA_CORNER_LEFT)\
 FUNC(WORLD_TILE_DIRT)\
 FUNC(WORLD_TILE_BRICK)\
 FUNC(WORLD_TILE_WOOD_FLOOR)\
-
 
 typedef enum {
     MY_TILE_TYPE(ENUM)
@@ -356,6 +370,8 @@ typedef struct {
 	Animation skeltonShield;
 	Animation skeltonHit;
 	Animation skeltonWalk;
+
+	Animation *cobbleFalling;
 
 
 	Animation barrelWater;
@@ -880,4 +896,22 @@ static inline bool addWorldTile(GameState *gameState, float x, float y, float z,
 	}
 
 	return didAdd;
+} 
+
+
+
+static inline WorldTile *findWorldTile(GameState *gameState, float x, float y, float z, WorldTileRotation rotation) {
+
+	WorldTile *foundTile = 0;
+	//look for tile first
+	for(int i = 0; i < gameState->tileSheet.tileCount && !foundTile; ++i) {
+	    WorldTile *t = gameState->tileSheet.tiles + i;
+
+	    if(t->x == x && t->y == y && t->z == z && t->rotation == rotation) {
+	    	foundTile = t;
+	    	break;
+	    }
+	}
+
+	return foundTile;
 } 

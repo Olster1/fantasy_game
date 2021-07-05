@@ -9,7 +9,6 @@
 	layer: -1.000000;
 	subtype: 0;
 	enemyType: "ENEMY_SKELETON";
-	spriteName: "firePost";
 	colliderScale: 0.300000 0.100000;
 	colliderOffset: 0.000000 -0.800000 0.000000;
 	colliderScale2: 1.000000 0.800000;
@@ -19,6 +18,7 @@
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;
+	animalType: "ENTITY_ANIMAL_NULL";
 	dialogType: "ENTITY_DIALOG_NULL";
 	triggerType: "ENTITY_TRIGGER_FIRE_POST";
 	rateOfCreation: 3.000000;

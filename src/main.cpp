@@ -8,7 +8,9 @@ Engine:
 
 Gameplay:
 
-1. Shop where you can choose items to buy
+
+1. Mini game for the player in the shop to make money
+
 2. cut grass to find potions and coins
 3. When pick up item in the wild, if haven't picked it up before, breifly display above the head of the player
 
@@ -855,6 +857,9 @@ int main(int argc, char *args[]) {
 
 
         }
+
+
+        // gameState->cobbleFalling = gameState_findSplatAnimation(gameState, "cobble_falling_11.png");
 
 
         // char *tempStr = easy_createString_printf(&globalPerFrameArena, "%d %d %s", 1, 2, "HELLO");
@@ -1807,6 +1812,10 @@ int main(int argc, char *args[]) {
                
            }
 
+
+           renderDisableBatchOnZ(globalRenderGroup);
+           renderDisableBatchOnZ(entitiesRenderGroup);
+
            // if(isDown(gameKeyStates.gameButtons, BUTTON_CTRL)) {
                 // easyConsole_addToStream(DEBUG_globalEasyConsole, "ctrl doen");
            // }
@@ -1832,8 +1841,6 @@ int main(int argc, char *args[]) {
            drawRenderGroup(shadowMapRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
            /////////////////////////////////////////////////////////////////////
 
-
-           renderDisableBatchOnZ(globalRenderGroup);
 
            //  //DRAW THE TERRATIN FIRST
             if(gameState->currentTerrainEntity && DEBUG_DRAW_TERRAIN) {
@@ -1881,6 +1888,7 @@ int main(int argc, char *args[]) {
                         sprite = findTextureAsset("lava_tile.png");
                     } else if(t->type == WORLD_TILE_ROCK) {
                         sprite = findTextureAsset("lava_tile.png");
+
                     } else if(t->type == WORLD_TILE_COBBLE) {
                         sprite = findTextureAsset("cobble.png");
 
@@ -1959,20 +1967,22 @@ int main(int argc, char *args[]) {
                         gameState->tempTransform.Q = gameState->angledQ;;//eulerAnglesToQuaternion(-PI32, 0, 0);
 
                         Entity *playerEnt = (Entity *)manager->player;
-                        if(playerEnt->T.pos.y > t->yAxis) {
-                            color.w = 0.3f;
 
-                            EntityRender_Alpha alphaStruct = {};
-                            alphaStruct.sprite = sprite;
-                            alphaStruct.T = easyTransform_getTransform(&gameState->tempTransform);
-                            alphaStruct.shader = &pixelArtProgram;
-                            alphaStruct.colorTint = color; 
+                        //NOTE: If we want the standing tiles to fade out a bit
+                        // if(playerEnt->T.pos.y > t->yAxis) {
+                        //     color.w = 0.3f;
 
-                            addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
+                        //     EntityRender_Alpha alphaStruct = {};
+                        //     alphaStruct.sprite = sprite;
+                        //     alphaStruct.T = easyTransform_getTransform(&gameState->tempTransform);
+                        //     alphaStruct.shader = &pixelArtProgram;
+                        //     alphaStruct.colorTint = color; 
 
-                            draw = false;
+                        //     addElementInfinteAlloc_notPointer(&gameState->alphaSpritesToRender, alphaStruct);
+
+                        //     draw = false;
                             
-                        } 
+                        // } 
 
                     } 
 
@@ -2034,7 +2044,7 @@ int main(int argc, char *args[]) {
 
             drawRenderGroup(globalRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
 
-            renderEnableBatchOnZ(globalRenderGroup);
+            // renderEnableBatchOnZ(globalRenderGroup);
             
             drawRenderGroup(entitiesRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             
@@ -2097,10 +2107,12 @@ int main(int argc, char *args[]) {
 
             }
 
-            renderEnableBatchOnZ(globalRenderGroup);
+            
             
             drawRenderGroup(entitiesRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
             
+            renderEnableBatchOnZ(globalRenderGroup);
+            renderEnableBatchOnZ(entitiesRenderGroup);
 
 
             { //NOTE: Update the damage numbers
@@ -2225,7 +2237,7 @@ int main(int argc, char *args[]) {
 
                             
                         } else {
-                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0);
+                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0, e->animalType);
                            if(e1->rb) {
                                 e1->rb->dP = e->dP;
                            }
@@ -2680,7 +2692,7 @@ int main(int argc, char *args[]) {
                                             if(rotationType == WORLD_TILE_ROTATION_FLAT) {
                                                 createP = roundToGridBoard(createP, GLOBAL_WORLD_TILE_SIZE);
                                                 editorState->lastcreatedTileP_onGround = createP;
-                                                easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->lastcreatedTileP_onGround);
+                                                // easyConsole_pushV3(DEBUG_globalEasyConsole, editorState->lastcreatedTileP_onGround);
                                             } else {
 
                                                 createP = v3_minus(createP, plane.origin);
@@ -2799,6 +2811,14 @@ int main(int argc, char *args[]) {
                         case EDITOR_CREATE_SHOOT_TRIGGER: {
                             if(pressed) {
                                 editorState->entitySelected = initShootTrigger(gameState, manager, hitP, splatTexture);
+                                editorState->entityIndex = manager->lastEntityIndex;
+                                assert(editorState->entitySelected);
+                                justCreatedEntity = true;
+                            }
+                        } break;
+                        case EDITOR_CREATE_ANIMAL: {
+                            if(pressed) {
+                                editorState->entitySelected = initAnimal(gameState, manager, hitP, ENTITY_ANIMAL_CHICKEN);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
@@ -3132,6 +3152,14 @@ int main(int argc, char *args[]) {
                         easyEditor_pushSlider(appInfo->editor, "outerRadius: ", &e->currentSound->outerRadius, 0.5, 20);
                     }
 
+
+                    if(e->type == ENTITY_ANIMAL) {
+                        EntityAnimalType lastType = e->animalType;
+                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->animalType, e->T.id, gameState->currentSceneName); e->animalType = (EntityAnimalType)easyEditor_pushList_withIds(appInfo->editor, "Animal Type: ", MyEntity_AnimalTypeStrings, arrayCount(MyEntity_AnimalTypeStrings), e->T.id, gameState->currentSceneName);
+                        if(lastType != e->animalType) {
+                            assignAnimalAttribs(e, gameState, e->animalType);
+                        }
+                    }
                     
                     if(e->type == ENTITY_LAMP_POST || e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) {
                         V4 lColor = {};
@@ -4001,13 +4029,25 @@ int main(int argc, char *args[]) {
 
                     Entity *fireEntity = findEntityById(manager, gameState->playerSaveProgress.playerInfo.lastCheckPointId);
 
-                    assert(fireEntity);
+                    // assert(fireEntity);
+                    if(fireEntity) {
+                        
+                        playerResetData->playerStartP = v3_plus(fireEntity->T.pos, v3(0, -0.5, 0));
+                        playerResetData->player = (Entity *)manager->player;
 
-                    playerResetData->playerStartP = v3_plus(fireEntity->T.pos, v3(0, -0.5, 0));
-                    playerResetData->player = (Entity *)manager->player;
+                        //Add transition 
+                        EasySceneTransition *transition = EasyTransition_PushTransition(appInfo->transitionState, playerDiedReset, playerResetData, EASY_TRANSITION_FADE);
+            
+                    } else {
+                        //NOTE: If no fire to restart at, get last position in save file
+                        entityManager_emptyEntityManager(manager, &gameState->physicsWorld);
+                        letGoOfSelectedEntity(editorState);
+                        gameScene_loadScene(gameState, manager, gameState->currentSceneName, weatherState);
 
-                    //Add transition 
-                    EasySceneTransition *transition = EasyTransition_PushTransition(appInfo->transitionState, playerDiedReset, playerResetData, EASY_TRANSITION_FADE);
+                        gameState->gameModeType = GAME_MODE_PLAY;
+                        gameState->gameIsPaused = false;
+                    }
+
                 }
             }
 

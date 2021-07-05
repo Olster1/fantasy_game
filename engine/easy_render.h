@@ -464,8 +464,9 @@ typedef struct {
     int height;
     float aspectRatio_h_over_w;
 
-    bool isAlpha; //whether the texture is alpha. Used for 2d sprites to work out whether to draw them after the main render loop
+    // bool isAlpha; //whether the texture is alpha. Used for 2d sprites to work out whether to draw them after the main render loop
 
+    bool shouldDrawShadows;
 
     //NOTE(ollie): This is for debugging purposes
     char *name;
@@ -524,6 +525,8 @@ void renderCheckError_(int lineNumber, char *fileName) {
 Texture createTextureOnGPU(unsigned char *image, int w, int h, int comp, RenderTextureFilter filter, bool hasMipMaps) {
     DEBUG_TIME_BLOCK()
     Texture result = {};
+    result.shouldDrawShadows = true;
+
     if(image) {
         
         result.width = w;
@@ -656,6 +659,18 @@ Texture loadImage(char *fileName, RenderTextureFilter filter, bool hasMipMaps, b
 
     //NOTE(ollie): Have to free this when we delete a texture
     result.name = getFileLastPortionWithoutExtension(fileName);
+
+
+    //NOTE: Specific to the game 
+
+    if(easyString_stringsMatch_nullTerminated(result.name, "grass_splat")) {
+        result.shouldDrawShadows = false;                
+    } else if(easyString_stringsMatch_nullTerminated(result.name, "bomb_explosion_9")) {
+        result.shouldDrawShadows = false;                
+    } 
+
+    ///////////////////////////
+
     return result;
 }
 
