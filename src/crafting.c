@@ -176,6 +176,7 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
             easyAnimation_emptyAnimationContoller(&gameState->cauldronAnimationController, &gameState->animationFreeList);
             easyParticles_pauseSystem(&gameState->steamParticleSystem);
             gameState->crafting->usingCauldron = false;
+            playGameSound(&globalLongTermArena, easyAudio_findSound("timer_up.wav"), 0, AUDIO_BACKGROUND);
         }
 
         if(!easyAnimation_isControllerEmpty(&gameState->cauldronAnimationController)) {
@@ -314,7 +315,6 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                         recipe->typeCount++;
                     }
                         
-
                     playGameSound(&globalLongTermArena, easyAudio_findSound("ui_soft.wav"), 0, AUDIO_BACKGROUND);
 
                     itemI->count--;
