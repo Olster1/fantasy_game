@@ -31,6 +31,10 @@ FUNC(ENTITY_KEY)\
 FUNC(ENTITY_BOMB)\
 FUNC(ENTITY_ARROW)\
 FUNC(ENTITY_ANIMAL)\
+FUNC(ENTITY_NETTLE)\
+FUNC(ENTITY_DOCK)\
+FUNC(ENTITY_BOTTLE)\
+FUNC(ENTITY_QUIVER)\
 
 
 typedef enum {
@@ -41,6 +45,7 @@ typedef enum {
 	GAME_MODE_PAUSE_MENU,
 	GAME_MODE_ITEM_COLLECT,
 	GAME_MODE_SHOP,
+	GAME_MODE_CRAFTING,
 } GameModeType;
 
 typedef enum {
@@ -75,6 +80,7 @@ FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON)\
 FUNC(ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE)\
 FUNC(ENTITY_TRIGGER_ENTER_SHOP)\
 FUNC(ENTITY_TRIGGER_FALL_THROUGH_FALL_ON_TIMER)\
+FUNC(ENTITY_TRIGGER_INTERACT_WITH_PLANT)\
 
 
 
@@ -86,17 +92,17 @@ static char *MyEntity_TriggerTypeStrings[] = { MY_TRIGGER_TYPE(STRING) };
 
 /////////////////////////////////////////////////////////////////
 
-//// Entity Animal Types ////////////
-#define MY_ANIMAL_TYPE(FUNC) \
-FUNC(ENTITY_ANIMAL_NULL)\
-FUNC(ENTITY_ANIMAL_CHICKEN)\
+// //// Entity Animal Types ////////////
+// #define MY_ANIMAL_TYPE(FUNC) \
+// FUNC(ENTITY_ANIMAL_NULL)\
+// FUNC(ENTITY_ANIMAL_CHICKEN)\
 
 
-typedef enum {
-    MY_ANIMAL_TYPE(ENUM)
-} EntityAnimalType;
+// typedef enum {
+//     MY_ANIMAL_TYPE(ENUM)
+// } EntityAnimalType;
 
-static char *MyEntity_AnimalTypeStrings[] = { MY_ANIMAL_TYPE(STRING) };
+// static char *MyEntity_AnimalTypeStrings[] = { MY_ANIMAL_TYPE(STRING) };
 ////////////////
 
 //NOTE: We store the shop type on the chest type so we're not storing more types in the entity
@@ -107,6 +113,7 @@ FUNC(CHEST_TYPE_HEALTH_POTION)\
 FUNC(CHEST_TYPE_STAMINA_POTION)\
 FUNC(CHEST_TYPE_KEY)\
 FUNC(CHEST_TYPE_SHOP_1)\
+FUNC(CHEST_TYPE_BOTTLE)\
 
 typedef enum {
     MY_CHEST_TYPE(ENUM)
@@ -157,6 +164,8 @@ typedef struct {
 	EntityType type;
 	int count; //number of items you have
 	bool isDisposable; //decrements each time you use it. 
+
+	bool isCraftable; 
 
 	//Shop items
 	float cost; //since we use this for the shop aswell
@@ -323,6 +332,32 @@ typedef struct {
 
 	float timeSinceLastRefill;
 } Game_Shop;
+
+
+typedef struct {
+	int typeCount;
+	EntityType types[16];
+	int count[16];
+} CraftRecipe;
+
+typedef struct {
+	int itemCount;
+	ItemInfo items[MAX_SHOP_ITEM_COUNT];
+
+	ItemGrowTimerUI animationItemTimers[MAX_SHOP_ITEM_COUNT];
+
+	float inventoryBreathSelector;
+	int itemIndex;
+
+	int uiLevel;
+
+	bool usingCauldron;
+
+	float timeSinceLastRefill;
+
+
+	CraftRecipe currentRecipe;
+} Game_Crafting;
 
 
 typedef struct {
@@ -499,6 +534,7 @@ typedef struct {
 	EntityType itemCollectType;
 	
 	particle_system collectParticleSystem;
+	particle_system steamParticleSystem;
 
 	
 	/////////////////////////
@@ -544,6 +580,8 @@ typedef struct {
 	//Button prompts ////
 	Texture *spacePrompt;
 
+	Game_Crafting *crafting;
+
 	Quaternion angledQ;
 	EasyTransform tempTransform;
 
@@ -574,11 +612,15 @@ typedef struct {
 	WavFile *gongSound;
 	bool gameIsPaused;
 
+	EasyAnimation_Controller cauldronAnimationController;
+
 } GameState; 
 
 
 //Define above where it's implemented
 void initAllShopsWithItems(GameState *gameState);
+void initCrafting(GameState *gameState);
+void enterGameCrafting(GameState *gameState);
 void enterGameShop(Game_Shop *shop, GameState *gameState);
 void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool isDisposable);
 
@@ -746,9 +788,35 @@ static GameState *initGameState(float yOverX_aspectRatio) {
     state->collectParticleSystem.Active = true;
     state->collectParticleSystem.Set.Loop = true;
 
-    prewarmParticleSystem(&state->collectParticleSystem, v3(0, 0, -1));
+    prewarmParticleSystem(&state->collectParticleSystem, v3(0, 0, -1), COLOR_WHITE);
 
     ////////////////////////////////////////////////////////////////////////////
+
+    ps_set = InitParticlesSettings(PARTICLE_SYS_DEFAULT, 3.0f);
+
+    ps_set.VelBias = rect3f(-50, 50, 0, 50, 150, 0);
+    ps_set.posBias = rect3f(-100, -50, 0, 100, 50, 0);
+
+    // ps_set.angleForce = v2(1, 10);
+
+    ps_set.bitmapScale = 15.0f;
+
+    pushParticleBitmap(&ps_set, findTextureAsset("smoke_02.png"), "particle1");
+    // pushParticleBitmap(&ps_set, findTextureAsset("light_01.png"), "particle2");
+
+    InitParticleSystem(&state->steamParticleSystem, &ps_set, 32);
+
+    setParticleLifeSpan(&state->steamParticleSystem, 1.0f);
+
+    state->steamParticleSystem.Active = true;
+    state->steamParticleSystem.Set.Loop = true;
+
+    prewarmParticleSystem(&state->steamParticleSystem, v3(0, 100, 0), COLOR_WHITE);
+
+    easyParticles_pauseSystem(&state->steamParticleSystem);
+
+    ////////////////////////////////////////////////////////////////////////////
+
 
 	/////////////////// USE ITEM PARTICLE SYSTEM//////////////////////////////
 
@@ -800,7 +868,11 @@ static GameState *initGameState(float yOverX_aspectRatio) {
     
     initAllShopsWithItems(state);
 
+    initCrafting(state);
+
     addItemToPlayer(state, ENTITY_BOMB, 5, true);
+    addItemToPlayer(state, ENTITY_NETTLE, 5, true);
+    addItemToPlayer(state, ENTITY_DOCK, 5, true); 
 
     // enterGameShop(state->townShop, state);
 	return state;

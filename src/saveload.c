@@ -68,6 +68,8 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             addVar(&fileContents, MyEntity_EnemyTypeStrings[(int)e->enemyType], "enemyType", VAR_CHAR_STAR);
 
+            addVar(&fileContents, &e->animationRate, "animationRate", VAR_FLOAT);
+
 	        if(e->sprite) {
 	        	addVar(&fileContents, e->sprite->name, "spriteName", VAR_CHAR_STAR);
 	        }
@@ -147,7 +149,6 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
 
             addVar(&fileContents, &e->renderFirstPass, "renderFirstPass", VAR_INT);    
 
-            addVar(&fileContents, MyEntity_AnimalTypeStrings[(int)e->animalType], "animalType", VAR_CHAR_STAR);
 
             addVar(&fileContents, MyDialog_DialogTypeStrings[(int)e->dialogType], "dialogType", VAR_CHAR_STAR);
 
@@ -406,7 +407,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 int partnerId = -1;
                 V2 moveDirection = v2(0, 0);
 
-                EntityAnimalType animalType = ENTITY_ANIMAL_NULL;
+                float animationRate = EASY_ANIMATION_PERIOD;
 
 
         		// s32 teleporterIds[256];
@@ -453,6 +454,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
     						if(stringsMatchNullN("subtype", token.at, token.size)) {
     				    		subtype = (SubEntityType)getIntFromDataObjects(&tokenizer);
     						}
+
+                            if(stringsMatchNullN("animationRate", token.at, token.size)) {
+                                animationRate = getFloatFromDataObjects(&tokenizer);
+                            }
 
 
                             //These are arrays
@@ -617,13 +622,6 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
 
                             }
 
-                            if(stringsMatchNullN("animalType", token.at, token.size)) {
-                                char *typeString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
-
-                                animalType = (EntityAnimalType)findEnumValue(typeString, MyEntity_AnimalTypeStrings, arrayCount(MyEntity_AnimalTypeStrings));
-
-                            }
-
                             if(stringsMatchNullN("model", token.at, token.size)) {
                                 char *modelString = getStringFromDataObjects_lifeSpanOfFrame(&tokenizer);
 
@@ -744,8 +742,12 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     }
                 } else {    
 
+                    if(id == 57) {
+                        int i = 0; //break;
+                    }
+
         			//Make the entity
-        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile, animation, animalType);
+        			Entity *newEntity = initEntityOfType(gameState, manager, position, splatTexture, entType, subtype, colliderSet, triggerType, audioFile, animation);
 
                     newEntity->chestType = chestType;
 
@@ -802,6 +804,8 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     newEntity->aiController = aiController;
                     
                     newEntity->dialogType = dialogType;
+
+                    newEntity->animationRate = animationRate;
                     
                     if(newEntity->type == ENTITY_TERRAIN) {
                         gameState->currentTerrainEntity = newEntity;
@@ -813,7 +817,7 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     }
 
                     if(animation) {
-                        easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+                        easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, animation, newEntity->animationRate);  
                     }
                    
                     newEntity->locationSoundType = locationSoundType;
@@ -843,6 +847,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                     if(newEntity->type == ENTITY_TRIGGER_WITH_RIGID_BODY && newEntity->triggerType == ENTITY_TRIGGER_OPEN_DOOR_WITH_BUTTON_WITH_TRIGGER_CLOSE) {
                         newEntity->T.pos.z = 1;
                         newEntity->collider->isActive = false;
+                    }
+
+                    if(animation) {
+                        assert(&newEntity->animationController.parent != newEntity->animationController.parent.next);
                     }
 
                 }
@@ -875,9 +883,10 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
                 aiController = 0;
                 chestType = CHEST_TYPE_HEALTH_POTION;
 
-                animalType = ENTITY_ANIMAL_NULL;
-
         		subtype = ENTITY_SUB_TYPE_NONE;
+
+                animationRate = EASY_ANIMATION_PERIOD;
+
         		// if(wasTeleporter) {
         		// 	teleportEnts[idCount - 1] = newEntity;
         		// }

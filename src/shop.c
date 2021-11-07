@@ -10,7 +10,7 @@ static Game_Shop *initGameShop_() {
 	return shop;
 }
 
-static void addItemToShop(Game_Shop *shop, EntityType type,int count, bool isDisposable, float cost) {
+static void addItemToShop(Game_Shop *shop, EntityType type,int count, bool isDisposable, float cost, bool isCraftable) {
 	assert(shop->itemCount < MAX_SHOP_ITEM_COUNT);
 
 	ItemInfo newItem = {};
@@ -18,6 +18,7 @@ static void addItemToShop(Game_Shop *shop, EntityType type,int count, bool isDis
 	newItem.type = type;
 	newItem.count = count;
 	newItem.isDisposable = isDisposable;
+    newItem.isCraftable = isCraftable;
 	newItem.cost = cost;
 	newItem.maxCount = count;
 
@@ -30,8 +31,8 @@ static void initAllShopsWithItems(GameState *gameState) {
 	{
 		gameState->townShop = initGameShop_();
 
-		addItemToShop(gameState->townShop, ENTITY_BOMB, 3, true, 10);
-		addItemToShop(gameState->townShop, ENTITY_HEALTH_POTION_1, 5, true, 8);
+		addItemToShop(gameState->townShop, ENTITY_BOMB, 3, true, 10, FALSE);
+		addItemToShop(gameState->townShop, ENTITY_HEALTH_POTION_1, 5, true, 8, FALSE);
 	}
 }
 

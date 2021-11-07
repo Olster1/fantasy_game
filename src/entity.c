@@ -30,10 +30,12 @@ typedef enum {
 } SubEntityType;
 
 
-//// Entity Trigger Types ////////////
+//// Entity Enemy Types (animals are enemies as well) ////////////
 #define MY_ENTITY_ENEMY_TYPE(FUNC) \
 FUNC(ENEMY_SKELETON)\
 FUNC(ENEMY_BOLT_BALL)\
+FUNC(ENEMY_CHICKEN)\
+FUNC(ENEMY_NETTLE)\
 
 typedef enum {
     MY_ENTITY_ENEMY_TYPE(ENUM)
@@ -49,22 +51,6 @@ typedef enum {
 	ENTITY_ANIMATION_DIE,
 } EntityAnimationState;
 
-
-static Animation *getAnimationForAnimal(GameState *gameState, EntityAnimationState state, EntityAnimalType type) {
-	Animation *animation = 0;
-	if(false) {
-
-	} else if(type == ENTITY_ANIMAL_CHICKEN) {
-		switch(state) {
-			case ENTITY_ANIMATION_IDLE: {
-				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
-			} break;
-		}
-		
-	} 
-
-	return animation;
-}
 
 static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationState state, EntityEnemyType type) {
 	Animation *animation = 0;
@@ -101,6 +87,12 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
 			}
 		}
+	} else if(type == ENEMY_CHICKEN) {
+		switch(state) {
+			default: {
+				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
+			} break;
+		}
 	}
 
 	return animation;
@@ -132,6 +124,8 @@ typedef struct {
 	bool isSwimming;
 	bool isFalling; //For player falling through the floor
 
+	float animationRate;
+
 	EntityEnemyType enemyType; 
 
 	//FOr empty triggers that do stuff
@@ -145,8 +139,6 @@ typedef struct {
 	bool chestIsOpen;
 	ChestType chestType;
 	/////
-
-	EntityAnimalType animalType;
 
 	//NOTE: For things that are have a switch that gets turns on and stay on. Using for a door when you exit it it closes.
 	bool isActivated;
@@ -206,6 +198,8 @@ typedef struct {
 	bool isDying;
 	int health;
 	int maxHealth;
+
+	bool wearingGloves;
 
 	
 	/////
@@ -441,12 +435,14 @@ typedef struct {
 	float rotation;
 	EasyTransform *parentT;
 	SubEntityType subType;
-	EntityAnimalType animalType;
 } EntityToAdd;
 
 typedef struct {
 	float aliveTimer;
 	char *str;
+	float size;
+	float speed;
+	float totalLifeFraction;
 	V3 pos;
 } Entity_DamageNumber;
 
@@ -572,6 +568,9 @@ static ChestContents getChestContents(ChestType type) {
 	} else if(type == CHEST_TYPE_KEY) {
 		result.count = 1;
 		result.type = ENTITY_KEY;
+	} else if(type == CHEST_TYPE_BOTTLE) {
+		result.count = 1;
+		result.type = ENTITY_BOTTLE;
 	} else {
 		//nothing
 	}
@@ -659,6 +658,18 @@ static void renderKeyPromptHover(GameState *gameState, Texture *keyTexture, Enti
 
 }
 
+static bool isEntityCraftable(EntityType t) {
+	bool result = false;
+
+	if(t == ENTITY_NETTLE) {
+		result = true;
+	} else if(t == ENTITY_DOCK) {
+		result = true;
+	}
+
+	return result;
+}
+
 static void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool isDisposable) {
 	ItemInfo *info = 0;
 
@@ -688,6 +699,7 @@ static void addItemToPlayer(GameState *state, EntityType t, int numToAdd, bool i
 	info->count += numToAdd;
 	info->isDisposable = isDisposable;
 	info->type = t; 
+	info->isCraftable = isEntityCraftable(t);
 }
 
 
@@ -703,6 +715,10 @@ static inline void createDamageNumbers(EntityManager *manager, float value, V3 p
 
     char *resultStr = 0;
 
+    number->size = 1;
+    number->speed = 1;
+    number->totalLifeFraction = 1;
+
     if(hasFractional) {
     	resultStr = easy_createString_printf(&globalPerFrameArena, "%.1f", (float)value);
     } else {
@@ -712,6 +728,19 @@ static inline void createDamageNumbers(EntityManager *manager, float value, V3 p
     number->str = easyString_copyToHeap(resultStr);
 
 
+}
+
+static inline void createFloatingText(float size, EntityManager *manager, char *text, V3 position) {
+	ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->damageNumbers);
+	Entity_DamageNumber *number = (Entity_DamageNumber *)arrayInfo.elm;
+
+    number->aliveTimer = 0;
+    number->pos = position;
+    number->size = size;
+    number->speed = 0.5f;
+    number->totalLifeFraction = 2.0f;
+    	
+    number->str = easyString_copyToHeap(text);
 }
 
 
@@ -782,9 +811,9 @@ static inline void hurtEnemy(GameState *gameState, EntityManager *manager, float
 		easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit 1");
 		if(enemy->type == ENTITY_ENEMY) {
 			easyAnimation_emptyAnimationContoller(&enemy->animationController, &gameState->animationFreeList);
-			easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, enemy->enemyType), EASY_ANIMATION_PERIOD);	
+			easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_HURT, enemy->enemyType), enemy->animationRate);	
 			if(enemy->health > 0.0f) {
-				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, enemy->enemyType), EASY_ANIMATION_PERIOD);		
+				easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, enemy->enemyType), enemy->animationRate);		
 			}
 			
 			easyConsole_addToStream(DEBUG_globalEasyConsole, "Skeleton Hit");
@@ -800,7 +829,7 @@ static inline void hurtEnemy(GameState *gameState, EntityManager *manager, float
 		easyConsole_addToStream(DEBUG_globalEasyConsole, "ENEMY DEAD");
 		// enemy->isDead = true;
 
-		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, enemy->enemyType), EASY_ANIMATION_PERIOD);	
+		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, enemy->enemyType), enemy->animationRate);	
 
 		//////////////////Release items /////////////////
 		//Add items skelton leaves behind
@@ -998,6 +1027,9 @@ static char *getInventoryCollectString(EntityType type, int count, Arena *arena)
         case ENTITY_SHEILD: {
             result = "Protective shield";
         } break;
+        case ENTITY_BOTTLE: {
+        	result = "A glass bottle. Could be handy to store things?";
+        } break;
         default: {
 
         }
@@ -1129,7 +1161,7 @@ static void entity_turnFireSavePlaceOn(GameState *gameState, EntityManager *mana
 
 	entity->sprite = 0;
 
-	easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, fireAnimation, EASY_ANIMATION_PERIOD);	
+	easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, fireAnimation, entity->animationRate);	
 	
 	entity->chestIsOpen = true;
 
@@ -1151,7 +1183,7 @@ static void entity_turnFireSavePlaceOn(GameState *gameState, EntityManager *mana
 	ps->offset = v3(0, 0, -0.1f);
 
 	if(prewarm) {
-		prewarmParticleSystem(&ps->ps, v3(0, 0, 0));
+		prewarmParticleSystem(&ps->ps, v3(0, 0, 0), COLOR_WHITE);
 	}
 
 
@@ -1189,7 +1221,7 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 		entity->T.Q = eulerAnglesToQuaternion(0, -0.25f*PI32, 0);
 	}
 	if(animation) {
-		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);	
+		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animation, entity->animationRate);	
 	}
 
 	entity->flags = 0;
@@ -1200,8 +1232,6 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->healthBarTimer = -1;
 
 	entity->isDying = false;
-
-	entity->animalType = ENTITY_ANIMAL_NULL;
 
 	entity->travelTimer = -1.0f;
 	
@@ -1216,6 +1246,8 @@ Entity *initEntity(EntityManager *manager, Animation *animation, V3 pos, V2 dim,
 	entity->tBob = 0;
 	entity->chestIsOpen = false;
 	entity->isActivated = false;
+
+	entity->animationRate = EASY_ANIMATION_PERIOD;
 
 	entity->innerRadius = 0.2f;
 	entity->outerRadius = 4.0f;
@@ -1394,7 +1426,11 @@ static void tryPlayFootstep(Entity *entity) {
 ////////////////////////////////////////////////////////////////////
 
 
-void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup, GameWeatherState *weatherState, char *engine_saveFilePath) {
+void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entity, GameState *gameState, float dt, AppKeyStates *keyStates, EasyConsole *console, EasyCamera *cam, Entity *player, bool isPaused, V3 cameraZ_axis, EasyTransitionState *transitionState, EasySound_SoundState *soundState, EditorState *editorState, RenderGroup *shadowMapGroup, RenderGroup *entitiesRenderGroup, GameWeatherState *weatherState, char *engine_saveFilePath) {
+
+	if(entity->T.id == 158)  {
+		int i = 0; //break
+	}
 
 	RenderProgram *shaderProgram = &pixelArtProgram;
 
@@ -1770,11 +1806,11 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 
 			if(!easyAnimation_getCurrentAnimation(&entity->animationController, animToAdd)) {
 				easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);	
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, entity->animationRate);	
 			}
 			
 			if(idleAnimation) {
-				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, idleAnimation, EASY_ANIMATION_PERIOD);		
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, idleAnimation, entity->animationRate);		
 			}
 
 			
@@ -2107,7 +2143,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 	        	if(!easyAnimation_getCurrentAnimation(&entity->animationController, animToAdd)) {
 	        		easyConsole_addToStream(DEBUG_globalEasyConsole, "add anim");
 	        		easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
-	        		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, EASY_ANIMATION_PERIOD);	
+	        		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, entity->animationRate);	
 	        	}
 	        }
     	} else {
@@ -2145,7 +2181,7 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					anim  = gameState_findSplatAnimation(gameState, "cheshire_cat_walking4.png"); 
 					entity->animationIndexOn = 0;
 				}
-				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, anim, EASY_ANIMATION_PERIOD);	
+				easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, anim, entity->animationRate);	
 			}
 		}
 		
@@ -2554,6 +2590,50 @@ void updateEntity(EntityManager *manager, Entity *entity, GameState *gameState, 
 					}
 				}
 			}
+		} else if(entity->triggerType == ENTITY_TRIGGER_INTERACT_WITH_PLANT) {
+
+
+			if(entity->collider->collisions.count > 0) {
+
+	            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider, ENTITY_WIZARD, EASY_COLLISION_STAY);	
+	            if(info.found) {
+
+	            	bool canInteractWith = gameState->gameModeType != GAME_MODE_READING_TEXT;
+
+	            	if(canInteractWith) {
+	            		renderKeyPromptHover(gameState, gameState->spacePrompt, entity, dt, true, entitiesRenderGroup);
+	            		
+	            		
+	            		if(wasPressed(keyStates->gameButtons, BUTTON_SPACE)) 
+	            		{	
+	            			//NOTE: Harvest the plant
+	            			// easyConsole_addToStream(DEBUG_globalEasyConsole, "Harvesting the plant");	
+
+	            			playGameSound(&globalLongTermArena, gameState->blockSlideSound, 0, AUDIO_FOREGROUND);
+
+	            			if(entity->enemyType == ENEMY_NETTLE) {
+	  		          			// easyConsole_addToStream(DEBUG_globalEasyConsole, "Harvested Nettle");
+
+	  		          			V3 playerT = easyTransform_getWorldPos(&player->T);
+
+	  		          			if(!player->wearingGloves) {	
+	  		          				// damagePlayer(manager, player, gameState, cam, 1, playerT);
+	  		          			}
+
+	  		          			float size = 0.6f;
+
+	  		          			char *name = "Harvested Nettle";
+	  		          			playerT.x = playerT.x - 0.5f*getWorldTextWidth(size, gameFont, name);
+
+	  		          			createFloatingText(size, manager, name, playerT); 
+	  		          			addItemToPlayer(gameState, ENTITY_NETTLE, 1, true);
+	            			}
+	        			}
+	        		}
+	        	}
+	        }
+
+
 		}
 	} else if(entity->type == ENTITY_BLOCK_TO_PUSH) {
 
@@ -3123,7 +3203,7 @@ static Entity *initSeagull(GameState *gameState, EntityManager *manager, V3 worl
     Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_SEAGULL, 0, 0, COLOR_WHITE, -1, false);
     e->T.pos.z = -15.0f;
     e->T.scale = v3(2.5f, 2.5f, 2.5f);
-    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, &gameState->seagullAnimation, EASY_ANIMATION_PERIOD);	
+    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, &gameState->seagullAnimation, e->animationRate);	
     e->maxLifeSpan = 30.0f;
     e->lifeSpanLeft = e->maxLifeSpan;
     return e;
@@ -3138,14 +3218,15 @@ static Entity *initEmptyTriggerWithRigidBody(GameState *gameState, EntityManager
     return e;
 }
 
-static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3 worldP, EntityTriggerType triggerType, Texture *t) {
-	if(!t) { t = &globalWhiteTexture; }
+static Entity *initEmptyTrigger(GameState *gameState, EntityManager *manager, V3 worldP, EntityTriggerType triggerType, Texture *t, Animation *animation) {
+	if(!t && !animation) { t = &globalWhiteTexture; }
     Entity *e =  initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_TRIGGER, 0, t, COLOR_WHITE, -1, true);
     e->T.pos.z = -0.5f;
 
     e->triggerType = triggerType;
 
     e->flags |= (int)ENTITY_SHOULD_NOT_RENDER;
+    e->flags |= (int)ENTITY_SHOULD_SAVE_ANIMATION;
 
     e->levelToLoad = gameState->emptyString;
 
@@ -3255,7 +3336,7 @@ static Entity *initLampPost(GameState *gameState, EntityManager *manager, V3 wor
 
 	if(animation) {
 		e->sprite = 0;
-		easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "castle_torch_fire4.png"), EASY_ANIMATION_PERIOD);
+		easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "castle_torch_fire4.png"), e->animationRate);
 		
 		e->innerRadius = 0.2f;
 		e->outerRadius = 3.0f;
@@ -3311,12 +3392,12 @@ static Entity *initEnemyProjectile(GameState *gameState, EntityManager *manager,
 }
 
 
-static void assignAnimalAttribs(Entity *e, GameState *gameState, EntityAnimalType animalType) {
-	if(animalType == ENTITY_ANIMAL_CHICKEN) {
+static void assignAnimalAttribs(Entity *e, GameState *gameState, EntityEnemyType type) {
+	if(type == ENEMY_CHICKEN) {
 		easyAnimation_emptyAnimationContoller(&e->animationController, &gameState->animationFreeList);
 		e->sprite = 0;
-		Animation *animation = getAnimationForAnimal(gameState, ENTITY_ANIMATION_IDLE, animalType);
-		easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);
+		Animation *animation = getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, type);
+		easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, e->animationRate);
 		e->collider->dim2f = v2(0.5f, 0.5f);
 		e->T.scale.xy = v2(0.5f, 0.5f);
 		e->T.pos.z = -0.15f;
@@ -3329,13 +3410,13 @@ static Entity *initShootTrigger(GameState *gameState, EntityManager *manager, V3
 	return e;
 }
 
-static Entity *initAnimal(GameState *gameState, EntityManager *manager, V3 worldP, EntityAnimalType animalType) {
-	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_ANIMAL, 0, &globalPinkTexture, COLOR_WHITE, -1, true);
+// static Entity *initAnimal(GameState *gameState, EntityManager *manager, V3 worldP, EntityAnimalType animalType) {
+// 	Entity *e = initEntity(manager, 0, worldP, v2(1, 1), v2(1, 1), gameState, ENTITY_ANIMAL, 0, &globalPinkTexture, COLOR_WHITE, -1, true);
 
-	assignAnimalAttribs(e, gameState, animalType);
+// 	assignAnimalAttribs(e, gameState, animalType);
 
-	return e;
-}
+// 	return e;
+// }
 
 
 static Entity *initBomb(GameState *gameState, EntityManager *manager, V3 worldP) {
@@ -3416,7 +3497,7 @@ static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 wor
 
 
 
-static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile, Animation *animation, EntityAnimalType animalType) {
+static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile, Animation *animation) {
 	Entity *newEntity = 0;
 
 	switch(entType) {
@@ -3432,13 +3513,13 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 					newEntity = initScenery_noRigidBody(gameState, manager, position, splatTexture);	
 				}	
 			}
-			
+
 		} break;
 		case ENTITY_WIZARD: {
 			newEntity = initWizard(gameState, manager, position);
 			manager->player = newEntity;
 
-            easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);      
+            easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, newEntity->animationRate);      
 
 		} break;
 		case ENTITY_PLAYER_PROJECTILE: {
@@ -3474,7 +3555,7 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
             newEntity = initHorse(gameState, manager, position);
         } break;
         case ENTITY_TRIGGER: {
-            newEntity = initEmptyTrigger(gameState, manager, position, triggerType, splatTexture);
+            newEntity = initEmptyTrigger(gameState, manager, position, triggerType, splatTexture, animation);
         } break;
         case ENTITY_BLOCK_TO_PUSH: {
             newEntity = initPushRock(gameState, manager, position);
@@ -3493,9 +3574,6 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
         } break;
         case ENTITY_ENEMY: {
             newEntity = initEnemy(gameState, manager, position);
-        } break;
-        case ENTITY_ANIMAL: {
-        	newEntity = initAnimal(gameState, manager, position, animalType);
         } break;
 		case ENTITY_HEALTH_POTION_1: {
 			assert(false);

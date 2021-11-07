@@ -47,6 +47,57 @@ typedef struct {
 } OSAppInfo;
 
 
+static u8 *getExePath_as_utf8() {
+	u8 *resourcePath_as_utf8 = 0;
+
+#if _WIN32
+	WCHAR resourcesPath[MAX_PATH]; //NOTE: Use WCHAR type to be unicode compatible 
+	int sizeOfPath = GetModuleFileNameW(NULL, resourcesPath, ARRAYSIZE(resourcesPath));
+
+	//NOTE: Assert if function failed
+	if(sizeOfPath == 0) {
+	    assert(!"get module file name failed");
+	}
+
+	PathRemoveFileSpecW(resourcesPath);
+	PathAppendW(resourcesPath, L"resources\\");
+
+
+	///////////////////////************* Convert the string now to utf8 ************////////////////////
+
+	int bufferSize_inBytes = WideCharToMultiByte(
+	  CP_UTF8,
+	  0,
+	  resourcesPath,
+	  -1,
+	  (LPSTR)resourcePath_as_utf8, 
+	  0,
+	  0, 
+	  0
+	);
+
+
+	resourcePath_as_utf8 = (u8 *)malloc(bufferSize_inBytes);
+
+	u32 bytesWritten = WideCharToMultiByte(
+	  CP_UTF8,
+	  0,
+	  resourcesPath,
+	  -1,
+	  (LPSTR)resourcePath_as_utf8, 
+	  bufferSize_inBytes,
+	  0, 
+	  0
+	);
+
+	assert(bytesWritten == bufferSize_inBytes);
+
+#endif
+
+	return resourcePath_as_utf8;
+}
+
+
 static u8 *easyOs_getSaveFolderLocation() {
 	u8 *result = 0;
 #if _WIN32

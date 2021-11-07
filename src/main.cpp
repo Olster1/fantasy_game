@@ -10,6 +10,8 @@ Gameplay:
 
 
 1. Mini game for the player in the shop to make money
+2. Irish round house with cauldron in it
+3. Crafting herbal potions like chemistry -- find different chemistry notes. Make coal or slime for things that don't work
 
 2. cut grass to find potions and coins
 3. When pick up item in the wild, if haven't picked it up before, breifly display above the head of the player
@@ -66,6 +68,21 @@ static Texture *getInvetoryTexture(EntityType type) {
         } break;
         case ENTITY_BOMB: {
             t = findTextureAsset("bomb.png");
+        } break;
+        case ENTITY_NETTLE: {
+            t = findTextureAsset("nettle_closeup.png");
+        } break;
+        case ENTITY_DOCK: {
+            t = findTextureAsset("dock_closeup.png");
+        } break;
+        case ENTITY_PLAYER_PROJECTILE: {
+            t = findTextureAsset("dart.png");
+        } break;
+        case ENTITY_BOTTLE: {
+            t = findTextureAsset("bottle.png");
+        } break;
+        case ENTITY_QUIVER: {
+            t = findTextureAsset("quiver.png");
         } break;
         default: {
             assert(false);
@@ -177,13 +194,37 @@ static char *getInventoryString(EntityType type) {
             result = "A key to open locks.";
         } break;
         case ENTITY_BOMB: {
-            result = "A bomb.";
+            result = "A bomb";
+        } break;
+        case ENTITY_NETTLE: {
+            result = "Stinging Nettle plant";
+        } break;
+        case ENTITY_DOCK: {
+            result = "Bitter Dock leaf";
         } break;
         default: {
 
         }
     }
     return result;
+}
+
+float getWorldTextWidth(float size, EasyFont_Font *gameFont, char *at) {
+    float fontSize_to_worldSize = size*((float)GLOBAL_DEFINE_defaultMetersPerLetter_floatingText / (float)gameFont->fontHeight);
+
+    float xAt = 0;
+
+    while(*at) {
+
+        unsigned int unicodePoint = easyUnicode_utf8_codepoint_To_Utf32_codepoint((char **)&at, true);
+        
+        EasyFont_Glyph *g = easyFont_findGlyph(gameFont, unicodePoint); 
+        assert(g->codepoint == unicodePoint);
+
+        xAt += (g->texture.width + g->xOffset)*fontSize_to_worldSize;
+    }
+
+    return xAt;
 }
 
 struct ParticleSystemListItem {
@@ -231,6 +272,7 @@ bool gameScene_doesSceneExist(char *sceneName);
 void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sceneName_, GameWeatherState *weatherState);
 #include "entity.c"
 #include "shop.c"
+#include "crafting.c"
 
 
 
@@ -376,6 +418,18 @@ static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState,
                endMessagesImmediately = true;
 
                nextModeToGoTo = GAME_MODE_SHOP;
+                    
+                // gameState->queuedActionAfterDialog = DIALOG_ACTION_GO_TO_SHOP;
+                playMenuSound(&globalLongTermArena, gameState->exitUiSound, 0, AUDIO_FOREGROUND);
+
+            } else if(actionType == DIALOG_ACTION_GO_TO_CRAFTING) {
+                enterGameShop(gameState->townShop, gameState);
+
+               endMessagesImmediately = true;
+
+               enterGameCrafting(gameState);
+
+               nextModeToGoTo = GAME_MODE_CRAFTING;
                     
                 // gameState->queuedActionAfterDialog = DIALOG_ACTION_GO_TO_SHOP;
                 playMenuSound(&globalLongTermArena, gameState->exitUiSound, 0, AUDIO_FOREGROUND);
@@ -975,6 +1029,8 @@ int main(int argc, char *args[]) {
         }
 
 
+
+        easyAnimation_initController(&gameState->cauldronAnimationController);
         
 
         //////////////////////////////////////////////////
@@ -1823,12 +1879,13 @@ int main(int argc, char *args[]) {
            //NOTE: Update the shops
            if(gameState->gameIsPaused) {
                 updateShop(gameState->townShop, appInfo->dt);
+                updateCrafting(gameState->crafting, appInfo->dt);
            }
 
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   updateEntity(manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup, weatherState, appInfo->saveFolderLocation);        
+                   updateEntity(gameFont, manager, e, gameState, appInfo->dt, &gameKeyStates, &appInfo->console, &camera, ((Entity *)(manager->player)), gameState->gameIsPaused, EasyCamera_getZAxis(&camera), appInfo->transitionState, globalSoundState, editorState, shadowMapRenderGroup, entitiesRenderGroup, weatherState, appInfo->saveFolderLocation);        
                 
                    if(e->isDead) {
                        ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
@@ -2122,16 +2179,15 @@ int main(int argc, char *args[]) {
                     if(num) {
                         num->aliveTimer += appInfo->dt;
 
-                        float canVal = num->aliveTimer / 1.0f;
+                        float canVal = num->aliveTimer / (num->totalLifeFraction*1.0f);
 
                         char *at = num->str;
 
                         float xAt = 0; 
 
-                        float defaultMetersPerLetter = 0.5f;
-                        float fontSize_to_worldSize = defaultMetersPerLetter / (float)gameFont->fontHeight;
+                        float fontSize_to_worldSize = num->size*(GLOBAL_DEFINE_defaultMetersPerLetter_floatingText / (float)gameFont->fontHeight);
 
-                        num->pos = v3_plus(num->pos, v3_scale(appInfo->dt, v3(0, 0, -3)));  
+                        num->pos = v3_plus(num->pos, v3_scale(num->speed*appInfo->dt, v3(0, 0, -3)));  
 
                         while(*at) {
 
@@ -2237,7 +2293,7 @@ int main(int argc, char *args[]) {
 
                             
                         } else {
-                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0, e->animalType);
+                           e1 = initEntityOfType(gameState, manager, e->position, 0, e->type, e->subType, false, ENTITY_TRIGGER_NULL, 0, 0);
                            if(e1->rb) {
                                 e1->rb->dP = e->dP;
                            }
@@ -2330,7 +2386,7 @@ int main(int argc, char *args[]) {
             
 
             //DRAW THE PLAYER HUD
-            {
+            if(gameState->gameModeType != GAME_MODE_CRAFTING) {
 
                 EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
 
@@ -2399,7 +2455,7 @@ int main(int argc, char *args[]) {
                 renderSetShader(globalRenderGroup, &textureProgram);
 
                 //////////////////////////// The Coin ///////////////////////////////////////////
-                {
+                { 
                     float xOffset = 100;
                     float yOffset = 100;
                     T = Matrix4_translate(Matrix4_scale(mat4(), v3(100, 100, 0)), v3(xOffset, fuaxHeight - yOffset, 0.3f));
@@ -2531,7 +2587,7 @@ int main(int argc, char *args[]) {
 
 
                 int animationOn = 0;
-                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
+                if(editorState->createMode == EDITOR_CREATE_SCENERY || editorState->createMode == EDITOR_CREATE_SCENERY_RIGID_BODY ||  editorState->createMode == EDITOR_CREATE_SIGN || editorState->createMode == EDITOR_CREATE_EMPTY_TRIGGER || editorState->createMode == EDITOR_CREATE_TRIGGER_WITH_RIGID_BODY || editorState->createMode == EDITOR_CREATE_LAMP_POST) {
                     animationOn = easyEditor_pushList(appInfo->editor, "Animations: ", (char **)gameState->splatListAnimations.memory, gameState->splatListAnimations.count); 
                 }   
 
@@ -2622,10 +2678,22 @@ int main(int argc, char *args[]) {
                         } break;
                         case EDITOR_CREATE_EMPTY_TRIGGER: {
                             if(pressed) {
-                                editorState->entitySelected = initEmptyTrigger(gameState, manager, hitP, triggerType, splatTexture);
+
+                                editorState->entitySelected = initEmptyTrigger(gameState, manager, hitP, triggerType, splatTexture, 0);
                                 editorState->entityIndex = manager->lastEntityIndex;
                                 assert(editorState->entitySelected);
                                 justCreatedEntity = true;
+
+                                if(animationOn > 0) {
+                                    Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
+
+                                    Entity *e = (Entity *)(editorState->entitySelected);
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, e->animationRate);  
+
+                                    e->sprite = 0;
+                                }
+
+
                             }
                         } break;
                         case EDITOR_CREATE_ENTITY_BOARD_MODE: {
@@ -2816,14 +2884,6 @@ int main(int argc, char *args[]) {
                                 justCreatedEntity = true;
                             }
                         } break;
-                        case EDITOR_CREATE_ANIMAL: {
-                            if(pressed) {
-                                editorState->entitySelected = initAnimal(gameState, manager, hitP, ENTITY_ANIMAL_CHICKEN);
-                                editorState->entityIndex = manager->lastEntityIndex;
-                                assert(editorState->entitySelected);
-                                justCreatedEntity = true;
-                            }
-                        } break;
                         case EDITOR_CREATE_ENTITY_FOG: {
                             if(pressed) {
                                 editorState->entitySelected = initFog(gameState, manager, hitP, splatTexture);
@@ -2841,7 +2901,7 @@ int main(int argc, char *args[]) {
                                     Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
 
                                     Entity *e = (Entity *)(editorState->entitySelected);
-                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, e->animationRate);  
 
                                     e->sprite = 0;
                                 }
@@ -2859,7 +2919,7 @@ int main(int argc, char *args[]) {
                                     Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
 
                                     Entity *e = (Entity *)(editorState->entitySelected);
-                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, e->animationRate);  
 
                                     e->sprite = 0;
                                 }
@@ -2900,7 +2960,7 @@ int main(int argc, char *args[]) {
                                     Animation *animation = ((Animation **)(gameState->splatAnimations.memory))[animationOn - 1];
 
                                     Entity *e = (Entity *)(editorState->entitySelected);
-                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, EASY_ANIMATION_PERIOD);  
+                                    easyAnimation_addAnimationToController(&e->animationController, &gameState->animationFreeList, animation, e->animationRate);  
 
                                     e->sprite = 0;
                                 }
@@ -3106,6 +3166,7 @@ int main(int argc, char *args[]) {
                     easyEditor_pushInt1(appInfo->editor, "Subtype: ", &(int)e->subEntityType);
                     
                     easyEditor_pushFloat3(appInfo->editor, "Position: ", &e->T.pos.x, &e->T.pos.y, &e->T.pos.z);
+                    easyEditor_pushSlider(appInfo->editor, "Z Position: ", &e->T.pos.z, -3.0f, 3.0f);
                     easyEditor_pushFloat3(appInfo->editor, "Scale: ", &e->T.scale.x, &e->T.scale.y, &e->T.scale.z);
 
                     if(e->type == ENTITY_ENTITY_CREATOR) {
@@ -3113,9 +3174,26 @@ int main(int argc, char *args[]) {
                         easyEditor_pushFloat1(appInfo->editor, "RateOfCreation: ", &e->rateOfCreation);
                     }
 
-                    if(e->type == ENTITY_ENEMY) {
+                    if(&e->animationController.parent != e->animationController.parent.next) {
+                        easyEditor_pushSlider(appInfo->editor, "Animation Rate: ", &e->animationRate, 0.001f, 3.0f);
+                        // easyEditor_pushFloat1(appInfo->editor, "Animation Rate: ", &e->animationRate);
+
+                        EasyAnimation_ListItem *nextAnimation = e->animationController.parent.next;
+                        while(&e->animationController.parent != nextAnimation) {
+
+                            nextAnimation->timerPeriod = e->animationRate;
+                            nextAnimation = nextAnimation->next;
+                        }
+                    }
+
+                    if(e->type == ENTITY_ENEMY || e->type == ENTITY_TRIGGER) {
+                        EntityEnemyType lastType = e->enemyType;
                         easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->enemyType, e->T.id, gameState->currentSceneName); e->enemyType = (EntityEnemyType)easyEditor_pushList_withIds(appInfo->editor, "Enemy Type: ", MyEntity_EnemyTypeStrings, arrayCount(MyEntity_EnemyTypeStrings), e->T.id, gameState->currentSceneName);
                         easyEditor_pushSlider(appInfo->editor, "Move Speed: ", &e->enemyMoveSpeed, 1, 10);
+
+                        if(lastType != e->enemyType) {
+                            assignAnimalAttribs(e, gameState, e->enemyType);
+                        }
                     }
 
                     if(e->type == ENTITY_CHEST || e->type == ENTITY_TRIGGER_WITH_RIGID_BODY) {
@@ -3153,13 +3231,7 @@ int main(int argc, char *args[]) {
                     }
 
 
-                    if(e->type == ENTITY_ANIMAL) {
-                        EntityAnimalType lastType = e->animalType;
-                        easyEditor_alterListIndex_withIds(appInfo->editor, (int)e->animalType, e->T.id, gameState->currentSceneName); e->animalType = (EntityAnimalType)easyEditor_pushList_withIds(appInfo->editor, "Animal Type: ", MyEntity_AnimalTypeStrings, arrayCount(MyEntity_AnimalTypeStrings), e->T.id, gameState->currentSceneName);
-                        if(lastType != e->animalType) {
-                            assignAnimalAttribs(e, gameState, e->animalType);
-                        }
-                    }
+                        
                     
                     if(e->type == ENTITY_LAMP_POST || e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) {
                         V4 lColor = {};
@@ -3401,6 +3473,19 @@ int main(int argc, char *args[]) {
                             newEntity->T.scale = e->T.scale;
                             newEntity->colorTint = e->colorTint;
 
+                            newEntity->animationRate = e->animationRate;
+
+                            if(&e->animationController.parent != e->animationController.parent.next) {
+                                EasyAnimation_ListItem *nextAnimation = e->animationController.parent.next;
+                                while(&e->animationController.parent != nextAnimation) {
+
+                                    easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, nextAnimation->animation, nextAnimation->timerPeriod);
+                                    nextAnimation = nextAnimation->next;
+                                }
+                            }
+
+
+
                             newEntity->audioFile = e->audioFile;
                             newEntity->dialogType = e->dialogType;
                         }
@@ -3449,7 +3534,7 @@ int main(int argc, char *args[]) {
 
             /////////////////////////////////////////////////////
              //NOTE: Draw what the player is holding
-            {
+            if(gameState->gameModeType != GAME_MODE_CRAFTING){
 
                 Matrix4 T_1 = Matrix4_scale(mat4(), v3(100, 100, 0));
                 Matrix4 item_T = Matrix4_scale(mat4(), v3(40, 40, 0));
@@ -3550,6 +3635,21 @@ int main(int argc, char *args[]) {
                 gameState->gameIsPaused = true;
 
                 updateShop(gameState->current_shop, gameState, (Entity *)manager->player, gameFont, appInfo);
+
+                //NOTE: Exit the shop
+                if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ESCAPE)) {
+                    gameState->gameModeType = GAME_MODE_PLAY;
+                    gameState->gameIsPaused = false;
+                    gameState->current_shop = 0;
+                }
+            }
+
+            //NOTE: Draw the shop if in the shop
+            if(gameState->gameModeType == GAME_MODE_CRAFTING) {
+                //Make sure game is paused
+                gameState->gameIsPaused = true;
+
+                updateCrafting(gameState->crafting, gameState, (Entity *)manager->player, gameFont, appInfo);
 
                 //NOTE: Exit the shop
                 if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_ESCAPE)) {
@@ -3725,7 +3825,7 @@ int main(int argc, char *args[]) {
                    gameState->entityChestToDisplay = 0;
 
                    easyAnimation_emptyAnimationContoller(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList);
-                   easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, EASY_ANIMATION_PERIOD);   
+                   easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, ((Entity *)(manager->player))->animationRate);   
                    
                }
             }

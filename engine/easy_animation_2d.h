@@ -34,6 +34,8 @@ typedef struct EasyAnimation_ListItem {
     int frameIndex;
     
     Animation *animation;
+
+    
     
     EasyAnimation_ListItem *prev;
     EasyAnimation_ListItem *next;
@@ -44,6 +46,7 @@ typedef struct {
 
     Animation *lastAnimationOn;
     bool finishedAnimationLastUpdate; //goes to true if it finished an animation in the last update so you can change it if you need to
+    unsigned int currentLoopCount; //NOTE: How many times the current animation has looped for
 } EasyAnimation_Controller;
 
 ///////////////////////************ Header definitions start here *************////////////////////
@@ -102,6 +105,7 @@ static void easyAnimation_initController(EasyAnimation_Controller *controller) {
     controller->parent.next = controller->parent.prev = &controller->parent;
     controller->finishedAnimationLastUpdate = false;
     controller->lastAnimationOn = 0;
+    controller->currentLoopCount = 0;
 }
 
 static void easyAnimation_initAnimation_withFrames(Animation *animation, char **FileNames, int FileNameCount, char *name) {
@@ -195,6 +199,8 @@ static void easyAnimation_emptyAnimationContoller(EasyAnimation_Controller *cont
         Item->next = *AnimationItemFreeListPtr;
         *AnimationItemFreeListPtr = Item;
     }
+
+    controller->currentLoopCount = 0;
     
 }
 
@@ -224,6 +230,7 @@ static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller,
             Item->frameIndex = 0;
 
             if(Item->next != AnimationListSentintel) {
+                //NOTE: There are more than one animation on the list, so go to the next one
                 //Remove from linked list
                 AnimationListSentintel->next = Item->next;
                 Item->next->prev = AnimationListSentintel;
@@ -231,7 +238,11 @@ static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller,
                 //Add to free list
                 Item->next = *AnimationItemFreeListPtr;
                 *AnimationItemFreeListPtr = Item;
-            } 
+
+                controller->currentLoopCount = 0;
+            } else {
+                controller->currentLoopCount++;
+            }
 
             controller->finishedAnimationLastUpdate = true;
 

@@ -16,6 +16,8 @@
 
 #define EASY_ANIMATION_PERIOD 0.1f
 
+#define GLOBAL_DEFINE_defaultMetersPerLetter_floatingText 0.5f
+
 
 #if DEVELOPER_MODE
 #define RESOURCE_PATH_EXTENSION "../res/" 

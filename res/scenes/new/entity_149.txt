@@ -9,6 +9,7 @@
 	layer: -1.000000;
 	subtype: 0;
 	enemyType: "ENEMY_SKELETON";
+	animationRate: 0.100000;
 	spriteName: "white texture";
 	colliderScale: 1.000000 3.000000;
 	colliderOffset: 0.000000 0.000000 0.000000;
@@ -18,7 +19,6 @@
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;
-	animalType: "ENTITY_ANIMAL_NULL";
 	dialogType: "ENTITY_DIALOG_NULL";
 	triggerType: "ENTITY_TRIGGER_LOAD_SCENE";
 	rateOfCreation: 3.000000;

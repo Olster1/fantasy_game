@@ -10,6 +10,7 @@ FUNC(ENTITY_DIALOG_LADY_CASTLE)\
 FUNC(ENTITY_DIALOG_ASK_USER_TO_SAVE)\
 FUNC(ENTITY_DIALOG_ENTER_SHOP)\
 FUNC(ENTITY_DIALOG_SLEEP_IN_BED)\
+FUNC(ENTITY_DIALOG_ENTER_CRAFTING)\
 
 typedef enum {
     MY_DIALOG_TYPE(ENUM)
@@ -23,7 +24,8 @@ typedef enum {
 	DIALOG_ACTION_SAVE_PROGRESS,
 	DIALOG_ACTION_EXIT_DIALOG, //TO play sound to make it more obvious you exited
 	DIALOG_ACTION_GO_TO_SHOP,
-	DIALOG_ACTION_SLEEP
+	DIALOG_ACTION_SLEEP,
+	DIALOG_ACTION_GO_TO_CRAFTING
 } DialogActionType;
 
 typedef struct EntityDialogNode EntityDialogNode;
@@ -81,6 +83,7 @@ typedef struct {
 	EntityDialogNode *promptUserSaveAtFire;
 	EntityDialogNode *enterShopDialog;
 	EntityDialogNode *promptSleepInBed;
+	EntityDialogNode *promptEnterCratingArea;
 
 	Arena perDialogArena;
 	MemoryArenaMark perDialogArenaMark;
@@ -248,6 +251,27 @@ static void initDialogTrees(GameDialogs *gd) {
 
 	}
 
+	{
+		EntityDialogNode *n = pushEmptyNode_longTerm();
+		gd->promptEnterCratingArea = n;
+
+		pushTextToNode(n, "{s: 3}Do you want to use the Cauldron?");
+		pushChoiceToNode(n, "Yes");
+		pushChoiceToNode(n, "No");
+
+		dialog_pushActionForChoice(n, 0, DIALOG_ACTION_GO_TO_CRAFTING);
+		dialog_pushActionForChoice(n, 1, DIALOG_ACTION_EXIT_DIALOG);
+		
+		EntityDialogNode *n2 = pushEmptyNode_longTerm();
+		n2->isEndNode = true;
+		pushTextToNode(n2, "");
+
+		pushConnectionNode(n, n2, 1);
+
+	}
+
+	
+
 	//NOTE: Sleep in bed
 	{
 		EntityDialogNode *n = pushEmptyNode_longTerm();
@@ -329,6 +353,8 @@ static EntityDialogNode *findDialogInfo(DialogInfoType type, GameDialogs *gd) {
 		result = gd->enterShopDialog;
 	} else if(type == ENTITY_DIALOG_SLEEP_IN_BED) {
 		result = gd->promptSleepInBed;
+	} else if(type == ENTITY_DIALOG_ENTER_CRAFTING) {
+		result = gd->promptEnterCratingArea;
 	}
 
 	return result;

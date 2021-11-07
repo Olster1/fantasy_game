@@ -114,6 +114,15 @@ internal inline particle_system_settings InitParticlesSettings(ParticleSystemTyp
     return Set;
 }
 
+internal inline void easyParticles_pauseSystem(particle_system *system) {
+    system->Active = false;
+} 
+
+
+internal inline void easyParticles_playSystem(particle_system *system) {
+    system->Active = true;
+} 
+
 internal inline void InitParticleSystem(particle_system *System, particle_system_settings *Set, int MaxParticleCount_) {
     memset(System, 0, sizeof(particle_system));
     System->Set = *Set;
@@ -465,11 +474,11 @@ internal inline void drawAndUpdateParticleSystem(RenderGroup *group, particle_sy
     }
 }
 
-void prewarmParticleSystem(particle_system *System, V3 Acceleration) {
+void prewarmParticleSystem(particle_system *System, V3 Acceleration, V4 particleColor) {
     float dtLeft = System->Set.LifeSpan;
     float dtUpdate = 1.0f / 15.0f;
     while(dtLeft > 0) {
-        drawAndUpdateParticleSystem(0, System, v3(0, 0, 0), dtUpdate, Acceleration, COLOR_WHITE, false);
+        drawAndUpdateParticleSystem(0, System, v3(0, 0, 0), dtUpdate, Acceleration, particleColor, false);
         dtLeft -= dtUpdate;
         if(dtLeft < dtUpdate) {
             dtUpdate = dtLeft;

@@ -14,7 +14,6 @@ typedef enum {
 	EDITOR_CREATE_ENTITY_FOG,
 	EDITOR_CREATE_SHOOT_TRIGGER,
 	EDITOR_CREATE_LAMP_POST,
-	EDITOR_CREATE_ANIMAL,
 } EditorCreateMode;
 
 #define MY_TILE_EDITOR_OPTION(FUNC) \
@@ -36,7 +35,7 @@ typedef enum {
 	EDITOR_GIZMO_ANGLE
 } EditorGizmoSelect;
 
-char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Board Mode", "Scenery", "Scenery with RB",  "Trigger With Rigid Body", "Empty Trigger", "Chest", "Enemy", "Dialog", "push block", "Entity Creator", "Fog", "Shoot Trigger", "Lamp Post", "Animal"};
+char *EditorCreateModesStrings[] = { "Select", "Tile Mode", "Board Mode", "Scenery", "Scenery with RB",  "Trigger With Rigid Body", "Empty Trigger", "Chest", "Enemy", "Dialog", "push block", "Entity Creator", "Fog", "Shoot Trigger", "Lamp Post"};
 
 typedef struct {
 	void *entitySelected;
