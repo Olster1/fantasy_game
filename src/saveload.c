@@ -984,7 +984,9 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
             assert(manager->player);
             Entity *player = (Entity *)manager->player;
 
-            player->T.pos = gameState->playerSaveProgress.playerInfo.position;
+
+            //NOTE: I'm not sure if we need the position thing, whether we save the player as a seperate thing?
+            // player->T.pos = gameState->playerSaveProgress.playerInfo.position;
             player->health = gameState->playerSaveProgress.playerInfo.health;
             player->stamina = gameState->playerSaveProgress.playerInfo.stamina;
         }

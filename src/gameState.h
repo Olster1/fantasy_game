@@ -333,11 +333,15 @@ typedef struct {
 	float timeSinceLastRefill;
 } Game_Shop;
 
+typedef enum {
+    CRAFT_ITEM_NETTLE_POTION,
+} CraftItemType;
 
+#define MAX_RECIPE_COUNT 6
 typedef struct {
 	int typeCount;
-	EntityType types[16];
-	int count[16];
+	EntityType types[MAX_RECIPE_COUNT];
+	int count[MAX_RECIPE_COUNT];
 } CraftRecipe;
 
 typedef struct {
@@ -355,8 +359,11 @@ typedef struct {
 
 	float timeSinceLastRefill;
 
+	bool displayProduct;
 
 	CraftRecipe currentRecipe;
+
+	CraftItemType CraftItemType;
 } Game_Crafting;
 
 
@@ -717,7 +724,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 
 	state->currentFogEntity = 0;
 
-	state->gameModeType = GAME_MODE_PLAY;
+	state->gameModeType = GAME_DEFINES_START_MODE;
 
 	state->splatList = initInfinteAlloc(char *);
 	state->splatTextures = initInfinteAlloc(Texture *);

@@ -36,6 +36,7 @@ FUNC(ENEMY_SKELETON)\
 FUNC(ENEMY_BOLT_BALL)\
 FUNC(ENEMY_CHICKEN)\
 FUNC(ENEMY_NETTLE)\
+FUNC(ENEMY_BUG)\
 
 typedef enum {
     MY_ENTITY_ENEMY_TYPE(ENUM)
@@ -91,6 +92,26 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 		switch(state) {
 			default: {
 				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
+			} break;
+		}
+	} else if(type == ENEMY_BUG) {
+		switch(state) {
+			case ENTITY_ANIMATION_IDLE: {
+				animation = gameState_findSplatAnimation(gameState, "bug_3.png");
+			} break;
+			case ENTITY_ANIMATION_WALK: {
+				animation = gameState_findSplatAnimation(gameState, "bug_3.png");
+			} break;
+			case ENTITY_ANIMATION_ATTACK: {
+				animation = gameState_findSplatAnimation(gameState, "bug_3.png");
+				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
+			} break;
+			case ENTITY_ANIMATION_HURT: {
+				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
+				// animation = gameState_findSplatAnimation(gameState, "bug_3.png");
+			} break;
+			case ENTITY_ANIMATION_DIE: {
+				animation = gameState_findSplatAnimation(gameState, "bug_die_9.png");
 			} break;
 		}
 	}
@@ -827,7 +848,10 @@ static inline void hurtEnemy(GameState *gameState, EntityManager *manager, float
 	if(enemy->health <= 0.0f) {
 
 		easyConsole_addToStream(DEBUG_globalEasyConsole, "ENEMY DEAD");
-		// enemy->isDead = true;
+		
+		if(enemy->enemyType == ENEMY_BUG) {
+			enemy->animationRate = 0.1f;
+		}
 
 		easyAnimation_addAnimationToController(&enemy->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_DIE, enemy->enemyType), enemy->animationRate);	
 
@@ -3027,7 +3051,7 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 		sprite = findTextureAsset(animationFileName);	
 
 		//We snap alter the width based on the aspect ratio of the sprite, this is based on that the y is the same across frames
-		entity->T.scale.x = (1.0f / sprite->aspectRatio_h_over_w)*entity->T.scale.y;
+		// entity->T.scale.x = (1.0f / sprite->aspectRatio_h_over_w)*entity->T.scale.y;
 
 		if(entity->type == ENTITY_BOMB && entity->animationController.finishedAnimationLastUpdate) {
 			assert(entity->isDying);
@@ -3248,8 +3272,11 @@ static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 world
 }
 
 static Entity *initEnemy(GameState *gameState, EntityManager *manager, V3 worldP) {
-	return initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.5f, 0.25f), gameState, ENTITY_ENEMY, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
-}
+	
+	Entity *e = initEntity(manager, &gameState->werewolfIdle, worldP, v2(2.5f, 2.5f), v2(0.5f, 0.25f), gameState, ENTITY_ENEMY, gameState->inverse_weight, 0, COLOR_WHITE, 1, true);
+
+	return e;
+} 
 
 
 
@@ -3496,6 +3523,28 @@ static Entity *initPushRock(GameState *gameState, EntityManager *manager, V3 wor
 }
 
 
+static bool getEnemyRotate(EntityEnemyType type) {
+
+	bool result = true;
+
+	if(type == ENEMY_BUG) {
+		result = false;
+	}
+
+
+	return result;
+}
+
+static V2 getEnemyScale(EntityEnemyType type) {
+	V2 scale = v2(2.5f, 2.5f);
+
+	if(type == ENEMY_BUG) {
+		scale.x = 0.7f;
+		scale.y = 1.2f;
+	}
+
+	return scale;
+}
 
 static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3 position, Texture *splatTexture, EntityType entType, SubEntityType subtype, bool colliderSet, EntityTriggerType triggerType, char *audioFile, Animation *animation) {
 	Entity *newEntity = 0;

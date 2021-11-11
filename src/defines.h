@@ -18,6 +18,8 @@
 
 #define GLOBAL_DEFINE_defaultMetersPerLetter_floatingText 0.5f
 
+#define GAME_DEFINES_START_MODE GAME_MODE_CRAFTING
+
 
 #if DEVELOPER_MODE
 #define RESOURCE_PATH_EXTENSION "../res/" 

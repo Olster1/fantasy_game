@@ -1,3 +1,6 @@
+
+
+
 static void initCrafting(GameState *state) {
 
 	Game_Crafting *shop = pushStruct(&globalLongTermArena, Game_Crafting);
@@ -13,6 +16,7 @@ static void initCrafting(GameState *state) {
 
     shop->uiLevel = 0;
 
+    shop->displayProduct = false;
 
 }
 
@@ -82,18 +86,19 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
 
     if(shop->uiLevel == 0) {
-    	if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT) && shop->itemIndex  != 0) {
+    	if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
             shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MIN_SIZE;
 
 
             shop->itemIndex--;
             playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
 
-            easyConsole_pushInt(DEBUG_globalEasyConsole, shop->itemIndex);
             shop->inventoryBreathSelector = 0;
 
             if(shop->itemIndex < 0) {
-                shop->itemIndex = 0;
+                shop->itemIndex = 1;
+                easyConsole_pushInt(DEBUG_globalEasyConsole, shop->itemIndex);
+                shop->uiLevel = 2; //NOTE: the items in the inventory
             }
 
             shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
@@ -126,7 +131,7 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
             shop->uiLevel = 1;
         }
-    } else {
+    } else if(shop->uiLevel == 1) { //NOTE: on the brew button
         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN)) {
             shop->inventoryBreathSelector = 0;
 
@@ -134,7 +139,67 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
             shop->uiLevel = 0;
         }
-    } 
+
+        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
+            shop->inventoryBreathSelector = 0;
+
+            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+            shop->uiLevel = 2;
+
+            shop->itemIndex = 1;
+        }
+    } else if(shop->uiLevel == 2) { //NOTE: In the inventory slots
+        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT) && shop->itemIndex > 0 && (shop->itemIndex % 2) == 1) {
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MIN_SIZE;
+
+
+            shop->itemIndex--;
+            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+            shop->inventoryBreathSelector = 0;
+
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
+        }
+
+        
+        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_RIGHT) && shop->itemIndex  <= (MAX_RECIPE_COUNT - 1)) {
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MIN_SIZE;
+
+            shop->inventoryBreathSelector = 0;
+
+            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
+
+            if(shop->itemIndex == 1 || shop->itemIndex == 3 || shop->itemIndex == 5) {
+                shop->uiLevel = 0;
+                shop->itemIndex = 0;
+            } else {shop->itemIndex++;}
+        }
+
+        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_DOWN) && (shop->itemIndex + 2)  < (MAX_RECIPE_COUNT)) {
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MIN_SIZE;
+
+            shop->inventoryBreathSelector = 0;
+
+            shop->itemIndex += 2;
+            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
+        }
+
+        if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_UP) && (shop->itemIndex - 2)  >= 0) {
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MIN_SIZE;
+
+            shop->inventoryBreathSelector = 0;
+
+            shop->itemIndex -= 2;
+            playGameSound(&globalLongTermArena, gameState->clickSound, 0, AUDIO_BACKGROUND);
+
+            shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
+        }
+    }
 
 
 
@@ -177,13 +242,16 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
             easyParticles_pauseSystem(&gameState->steamParticleSystem);
             gameState->crafting->usingCauldron = false;
             playGameSound(&globalLongTermArena, easyAudio_findSound("timer_up.wav"), 0, AUDIO_BACKGROUND);
+
+            gameState->crafting->displayProduct = true;
+            // gameState->crafting->productType = 
         }
 
         if(!easyAnimation_isControllerEmpty(&gameState->cauldronAnimationController)) {
             char *animationFileName = easyAnimation_updateAnimation(&gameState->cauldronAnimationController, &gameState->animationFreeList, appInfo->dt);
             cauldronTexture = findTextureAsset(animationFileName);
         } else {
-            cauldronTexture = findTextureAsset("cauldron_long.png"); 
+            cauldronTexture = findTextureAsset("cauldron_outline_long.png"); 
         }
         
 
@@ -197,8 +265,25 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
         Texture *brewTexture = findTextureAsset("brew_writing.png"); 
 
-        if(gameState->crafting->uiLevel == 1) {
+        if(gameState->crafting->usingCauldron) {
             brewTexture =  findTextureAsset("brew_writing_lite.png");            
+        } else if(gameState->crafting->uiLevel == 1) {
+            Texture *hover_t = findTextureAsset("btn_hover.png");
+                
+            float circleSize = 150;
+
+            shop->inventoryBreathSelector += appInfo->dt;
+
+            if(shop->inventoryBreathSelector > 1.0f) {
+                shop->inventoryBreathSelector -= 1.0f;
+            }
+        
+            float s = smoothStep00(1.2f*circleSize, shop->inventoryBreathSelector, 1.3f*circleSize);
+
+            Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(2.0f*s, s, 0)), v3(0, 300, 0.1f));
+                                
+            setModelTransform(globalRenderGroup, T_matrix);
+            renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
         }
 
         T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(cauldronScale, brewTexture->aspectRatio_h_over_w*cauldronScale, 0)), v3(0, 300, 0.2f));
@@ -206,18 +291,7 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
         setModelTransform(globalRenderGroup, T_matrix);
         renderDrawSprite(globalRenderGroup, brewTexture, COLOR_WHITE);
 
-        {
-            // Texture *hover_t = findTextureAsset("targeting2.png");
-                
-            // float circleSize = 150;
-    
-            // float s = smoothStep00(1.3f*circleSize, shop->inventoryBreathSelector, 1.6f*circleSize);
-
-            // Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(1.5f*s, s, 0)), v3(0, 300, 0.1f));
-                                
-            // setModelTransform(globalRenderGroup, T_matrix);
-            // renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
-        }
+        
         
 
 
@@ -327,10 +401,106 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
         }
 
         if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && !gameState->crafting->usingCauldron && gameState->crafting->uiLevel == 1) {
-            playGameSound(&globalLongTermArena, easyAudio_findSound("cauldron.wav"), 0, AUDIO_BACKGROUND);
-            easyAnimation_addAnimationToController(&gameState->cauldronAnimationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "cauldron_bubbling_9.png"), 0.25f*GLOBAL_DEFINE_defaultMetersPerLetter_floatingText);
-            easyParticles_playSystem(&gameState->steamParticleSystem);
-            gameState->crafting->usingCauldron = true;
+            bool recipeFound = true;
+
+            //NOTE: Decrement the crafting items we're using
+
+            int totalCount = 0;
+
+            //NOTE: Build the recipe match we're making
+
+            CraftRecipe *recipe = &gameState->crafting->currentRecipe;    
+
+            for(int i = 0; i < arrayCount(recipe->types); ++i) {
+                if(recipe->types[i] != ENTITY_NULL) {
+                    totalCount += recipe->count[i];
+                }
+            }
+
+            EntityType *matchTypes = pushArray(&globalPerFrameArena, totalCount, EntityType);
+            int matchIndexAt = 0; 
+
+            for(int i = 0; i < arrayCount(recipe->types); ++i) {
+                if(recipe->types[i] != ENTITY_NULL) {
+                    
+                    for(int j = 0; j < recipe->count[i]; j++) {
+                        matchTypes[matchIndexAt++] = recipe->types[i];    
+                    }
+                }
+            }
+
+            assert(matchIndexAt == totalCount);
+
+            bool found = false;
+
+            EntityType *arrayType = 0;
+            int arrayLen = 0;
+
+            if(totalCount > 0) {
+
+                bool potion1_found = true;
+                bool potion2_found = true;
+                EntityType potion1[] = { ENTITY_NETTLE, ENTITY_DOCK, ENTITY_DOCK }; 
+                EntityType potion2[] = { ENTITY_NETTLE, ENTITY_DOCK }; 
+
+                for(int i = 0; i < totalCount; ++i) {
+                    EntityType type = matchTypes[i];
+
+                    if(potion1_found && potion1[i] == type && arrayCount(potion1) == totalCount) {
+
+                    } else {
+                        potion1_found = false;
+                    }
+                    
+
+                    if(potion2_found && potion2[i] == type && arrayCount(potion2) == totalCount) {
+
+                    } else {
+                        potion2_found = false;
+                    }
+                }
+
+                
+                if(potion1_found) {
+                    found = true;
+                    arrayType = potion1;
+                    arrayLen = arrayCount(potion1);
+                } else if(potion2_found) {
+                    found = true;
+                    arrayType = potion2;
+                    arrayLen = arrayCount(potion2);
+                }
+            }
+
+            if(found) {
+                for(int i = 0; i < arrayLen; ++i) {
+                    EntityType type = arrayType[i];
+
+                    for(int j = 0; j < arrayCount(recipe->types); ++j) {
+                        EntityType t = recipe->types[j];
+
+                        if(t == type) {
+                            assert(recipe->count[j] > 0);
+                            recipe->count[j]--;
+                        }
+                    }
+
+                }
+            } else {
+                //NOTE: No recipe found
+                recipeFound = false;
+            }
+
+            ///////////////////////////////////////////////
+
+            if(recipeFound) {
+                playGameSound(&globalLongTermArena, easyAudio_findSound("cauldron.wav"), 0, AUDIO_BACKGROUND);
+                easyAnimation_addAnimationToController(&gameState->cauldronAnimationController, &gameState->animationFreeList, gameState_findSplatAnimation(gameState, "cauldron_bubbling_9.png"), 0.25f*GLOBAL_DEFINE_defaultMetersPerLetter_floatingText);
+                easyParticles_playSystem(&gameState->steamParticleSystem);
+                gameState->crafting->usingCauldron = true;
+
+                playGameSound(&globalLongTermArena, easyAudio_findSound("btn_click.wav"), 0, AUDIO_BACKGROUND);    
+            }
         }
 
         //////////////////////
@@ -379,38 +549,118 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
     {
         CraftRecipe *recipe = &gameState->crafting->currentRecipe;    
 
-        float xAt = -0.45f*fuaxWidth;
+        float startX = -0.35f*fuaxWidth;
+        float xAt = startX;
         float yAt = 200;
-        for(int i = 0; i < recipe->typeCount; ++i) {
-
-            Texture *inventoryTexture = getInvetoryTexture(recipe->types[i]);
+        for(int i = 0; i < arrayCount(recipe->types); ++i) {
+            
+            float scale = 120;
 
             renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
-            float scale = 100;
-            Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(scale, inventoryTexture->aspectRatio_h_over_w*scale, 0)), v3(xAt, yAt, 0.3f));
-                                
-            setModelTransform(globalRenderGroup, T_matrix);
-            renderDrawSprite(globalRenderGroup, inventoryTexture, COLOR_WHITE);
 
-            float offset = 50;
-            char *str = easy_createString_printf(&globalPerFrameArena, "%d", recipe->count[i]);
-            outputTextNoBacking(gameFont, xAt + 0.5f*fuaxWidth, yAt + 0.5f*fuaxHeight, 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
 
-            ///////////////////////////////////////////
+            //NOTE: draw the outlines for the cauldron
+            EasyTransform T;
+            easyTransform_initTransform_withScale(&T, v3(xAt, yAt, 0.2f), v3(1.2f*scale, 1.2f*scale, 1), EASY_TRANSFORM_NO_ID); 
 
-            xAt += 0.75f*scale;
+            setModelTransform(globalRenderGroup, easyTransform_getTransform(&T));
+            
+            renderDrawSprite(globalRenderGroup, findTextureAsset("cauldron_select_outline.png"), COLOR_WHITE);
 
-            if(recipe->typeCount > 1 && i != (recipe->typeCount - 1)) {
-                float offset = 50;
-                outputTextNoBacking(gameFont, xAt + 0.5f*fuaxWidth, fuaxHeight - (yAt + 0.5f*fuaxHeight), 0.1f, gameState->fuaxResolution, "+", rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+            if(shop->uiLevel == 2 && i == shop->itemIndex) {
+
+                shop->inventoryBreathSelector += appInfo->dt;
+
+                if(shop->inventoryBreathSelector > 1.0f) {
+                    shop->inventoryBreathSelector -= 1.0f;
+                }
+
+                float s = smoothStep00(1.3f*circleSize, shop->inventoryBreathSelector, 1.6f*circleSize);
+
+                Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(xAt, yAt, 0.3f));
+                                    
+                setModelTransform(globalRenderGroup, T_matrix);
+                renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
+
+
 
             }
 
-            xAt += 0.75f*scale;
+            if(recipe->types[i] != ENTITY_NULL) {
+
+                Texture *inventoryTexture = getInvetoryTexture(recipe->types[i]);
+
+                float w = scale;
+                float h = inventoryTexture->aspectRatio_h_over_w*scale;
+
+                if(inventoryTexture->aspectRatio_h_over_w > 1.0f) {
+                    h = scale;
+                    w = (1.0f / inventoryTexture->aspectRatio_h_over_w)*scale;
+                }
+                
+                Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(w, h, 0)), v3(xAt, yAt, 0.3f));
+                                    
+                setModelTransform(globalRenderGroup, T_matrix);
+                renderDrawSprite(globalRenderGroup, inventoryTexture, COLOR_WHITE);
+
+                float textOffsetX = 50;
+                float textOffsetY = 50;
+
+                //NOTE: Draw backing circle
+                {
+                    Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(50, 50, 0)), v3(xAt + 1.2f*textOffsetX, yAt - textOffsetY + 10, 0.15f));
+                                        
+                    setModelTransform(globalRenderGroup, T_matrix);
+                    renderDrawSprite(globalRenderGroup, findTextureAsset("circle_backing.png"), COLOR_WHITE);
+                }
+                ///////////////////
+
+
+                
+                float offset = 50;
+                char *str = easy_createString_printf(&globalPerFrameArena, "%d", recipe->count[i]);
+                outputTextNoBacking(gameFont, xAt + 0.5f*fuaxWidth + textOffsetX, fuaxHeight - (yAt + 0.5f*fuaxHeight - textOffsetY), 0.1f, gameState->fuaxResolution, str, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+
+                ///////////////////////////////////////////
+                
+            }
+
+            xAt += 1.5f*scale;
+
+            if(i % 2 && i != 0) {
+                yAt -= 1.5f*scale;
+                xAt = startX;
+            }
         }
 
 
             
+    }
+
+    //NOTE: Draw the prodcut 
+
+    {
+
+        if(gameState->crafting->displayProduct) 
+        {
+            float x = 0.25f*fuaxWidth;
+            float y = 50;
+
+            Texture *productTex = findTextureAsset("bottle_green.png");
+            float size = 200;
+            Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(size, productTex->aspectRatio_h_over_w*size, 0)), v3(x, y, 0.1f));
+                                
+            setModelTransform(globalRenderGroup, T_matrix);
+            renderDrawSprite(globalRenderGroup, productTex, COLOR_WHITE);
+
+            char *productStr = "Nettle Tea";    
+
+            Rect2f textSize = outputTextNoBacking(gameFont, x + 0.5f*fuaxWidth, fuaxHeight - (-150 + 0.5f*fuaxHeight), 0.1f, gameState->fuaxResolution, productStr, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, false, 1);
+
+            outputTextNoBacking(gameFont, x + 0.5f*fuaxWidth - 0.5f*getDim(textSize).x, fuaxHeight - (-150 + 0.5f*fuaxHeight), 0.1f, gameState->fuaxResolution, productStr, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), COLOR_BLACK, 1.3f, true, 1);
+
+        }
+
     }
     
     easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);

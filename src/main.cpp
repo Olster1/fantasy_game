@@ -3193,6 +3193,13 @@ int main(int argc, char *args[]) {
 
                         if(lastType != e->enemyType) {
                             assignAnimalAttribs(e, gameState, e->enemyType);
+
+                            if(e->enemyType == ENEMY_BUG) {
+                                e->T.scale.xy = getEnemyScale(e->enemyType);
+                                if(!getEnemyRotate(e->enemyType)) {
+                                    e->T.Q = identityQuaternion();
+                                }
+                            }
                         }
                     }
 
@@ -3941,6 +3948,8 @@ int main(int argc, char *args[]) {
                                 if(gameState->inventoryBreathSelector > 1.0f) {
                                     gameState->inventoryBreathSelector -= 1.0f;
                                 }
+
+                                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
 
                                 float s = smoothStep00(1.3f*circleSize, gameState->inventoryBreathSelector, 1.6f*circleSize);
 
