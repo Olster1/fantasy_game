@@ -93,6 +93,12 @@ typedef struct {
 	EasyRigidBody rb;
 } EditorUndoState;
 
+
+typedef struct {
+	int id;
+	char *sceneName;
+} EntityToDeleteOnSave;
+
 static EditorState *initEditorState(Arena *arena) {
 	EditorState *result = pushStruct(arena, EditorState);
 

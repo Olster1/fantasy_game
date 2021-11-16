@@ -360,6 +360,9 @@ typedef struct {
 	float timeSinceLastRefill;
 
 	bool displayProduct;
+	float errorStringTimer;
+
+	char *errorString;
 
 	CraftRecipe currentRecipe;
 
@@ -499,6 +502,7 @@ typedef struct {
 
 	//SOUNDS
 
+	WavFile *errorSound;
 	WavFile *clickSound;
 	WavFile *equipItemSound;
 	WavFile *openMenuSound;
@@ -660,6 +664,7 @@ static GameState *initGameState(float yOverX_aspectRatio) {
 	state->gameIsPaused = false;
 
 	state->openMenuSound = state->equipItemSound = state->clickSound = findSoundAsset("click2.wav");
+	state->errorSound = findSoundAsset("error.wav");
 	state->chestOpenSound = findSoundAsset("chest_open.wav");
 
 	state->bubbleSound = findSoundAsset("bubble1.wav");

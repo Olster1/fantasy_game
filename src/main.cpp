@@ -259,6 +259,7 @@ typedef struct {
 
     Array_Dynamic entitiesToAddForFrame;
     Array_Dynamic entitiesToDeleteForFrame;
+    Array_Dynamic entitiesToDeleteOnSave;
 
     Array_Dynamic damageNumbers;
     Array_Dynamic activeParticleSystems;
@@ -3362,15 +3363,15 @@ int main(int argc, char *args[]) {
                     //wasPressed(appInfo->keyStates.gameButtons, BUTTON_DELETE) || wasPressed(appInfo->keyStates.gameButtons, BUTTON_BACKSPACE)
                     if(e->type != ENTITY_WIZARD && (easyEditor_pushButton(appInfo->editor, "Delete Entity") || (wasPressed(gameKeyStates.gameButtons, BUTTON_BACKSPACE) && !easyEditor_isInteracting(appInfo->editor)))) {
 
-                        ////////////////NOTE: Will want to remove when we do undo
-                        char *allScenesFolderName = getAllScenesFolderName();
-                        char *fullSceneFolderPath = concatInArena(getFullSceneFolderPath(gameState->currentSceneName, allScenesFolderName), "/", &globalPerFrameArena);
-                        char *entityFileName = getFullNameForEntityFile(e->T.id, fullSceneFolderPath);
-
-                        if(platformDoesFileExist(entityFileName)) {
-                            platformDeleteFile(entityFileName);    
+                        //NOTE: Add entity to be deleted off disk when we save the scene, so we add to array ready to commit the delete
+                        {
+                            ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteOnSave);
+                            EntityToDeleteOnSave *entityToDelete = (EntityToDeleteOnSave *)arrayInfo.elm;
+                            entityToDelete->id = e->T.id;
+                            entityToDelete->sceneName = gameState->currentSceneName;
                         }
-                        ///////////////////////////////////////////////
+                        ///////////////////////////////////
+
 
                         ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToDeleteForFrame);
                         int *indexToAdd = (int *)arrayInfo.elm;

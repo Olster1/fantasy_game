@@ -12,9 +12,32 @@ static char *getFullNameForEntityFile(int entityID, char *fullSceneFolderPath) {
 
 }
 
+static void deleteEntityOffDisk(char *sceneName, int entityID) {
+    char *allScenesFolderName = getAllScenesFolderName();
+    char *fullSceneFolderPath = concatInArena(getFullSceneFolderPath(sceneName, allScenesFolderName), "/", &globalPerFrameArena);
+    char *entityFileName = getFullNameForEntityFile(entityID, fullSceneFolderPath);
+
+    if(platformDoesFileExist(entityFileName)) {
+        platformDeleteFile(entityFileName);    
+    }
+}
+
 
 static void gameScene_saveScene(GameState *gameState, EntityManager *manager, char *sceneName_) {
 	DEBUG_TIME_BLOCK()
+
+    //NOTE: Delete entities that we deleted during gameplay that we now want to comit to disk
+
+    for(int i = 0; i < manager->entitiesToDeleteOnSave.count; ++i) {
+        EntityToDeleteOnSave *e = (EntityToDeleteOnSave *)getElement(&manager->entitiesToDeleteOnSave, i);
+        if(e) {
+            //NOTE: Delete off disk now
+            deleteEntityOffDisk(e->sceneName, e->id);
+            ///////////////////////////////////////////////
+        }
+    }
+
+    ///////////////
 
 	char *sceneName = sceneName_;
 	if(sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '/' || sceneName_[easyString_getSizeInBytes_utf8(sceneName) - 1] != '\\') {

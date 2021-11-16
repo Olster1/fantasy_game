@@ -103,12 +103,10 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 				animation = gameState_findSplatAnimation(gameState, "bug_3.png");
 			} break;
 			case ENTITY_ANIMATION_ATTACK: {
-				animation = gameState_findSplatAnimation(gameState, "bug_3.png");
-				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
+				animation = gameState_findSplatAnimation(gameState, "bug_attack_11.png");
 			} break;
 			case ENTITY_ANIMATION_HURT: {
-				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
-				// animation = gameState_findSplatAnimation(gameState, "bug_3.png");
+				animation = gameState_findSplatAnimation(gameState, "bug_hurt_8.png");
 			} break;
 			case ENTITY_ANIMATION_DIE: {
 				animation = gameState_findSplatAnimation(gameState, "bug_die_9.png");
@@ -473,6 +471,7 @@ static void initEntityManager(EntityManager *manager) {
 
 	initArray(&manager->entitiesToAddForFrame, EntityToAdd);
 	initArray(&manager->entitiesToDeleteForFrame, int);
+	initArray(&manager->entitiesToDeleteOnSave, EntityToDeleteOnSave);
 
 	initArray(&manager->damageNumbers, Entity_DamageNumber);
 
@@ -1063,18 +1062,20 @@ static char *getInventoryCollectString(EntityType type, int count, Arena *arena)
 
 
 static void entityManager_emptyEntityManager(EntityManager *manager, EasyPhysics_World *physicsWorld) {
+	
+	easyArray_clear(&manager->entitiesToDeleteOnSave);
 	easyArray_clear(&manager->entitiesToDeleteForFrame);
 	easyArray_clear(&manager->entities);
 	easyArray_clear(&manager->entitiesToAddForFrame);
 	easyArray_clear(&manager->damageNumbers);
 	easyArray_clear(&manager->activeParticleSystems);
 
+	assert(manager->entitiesToDeleteOnSave.count == 0);
 	assert(manager->entitiesToDeleteForFrame.count == 0);
 	assert(manager->entities.count == 0);
 	assert(manager->entitiesToAddForFrame.count == 0);
 	assert(manager->damageNumbers.count == 0);
 	assert(manager->activeParticleSystems.count == 0);
-
 	
 
 	EasyPhysics_emptyPhysicsWorld(physicsWorld);
@@ -2072,6 +2073,8 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 			V3 playerInWorldP = roundToGridBoard(worldP, 1);
 			V3 entP_inWorld = roundToGridBoard(entP, 1);
 
+			bool isAttackAnim = false;
+
 			if(entity->subEntityType & ENEMY_IGNORE_PLAYER) {
 				werewolfMoveSpeed = entity->enemyMoveSpeed;
 				worldP = playerInWorldP = entity->aiController->searchBouys[entity->aiController->bouyIndexAt];
@@ -2090,6 +2093,8 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 			EasyAi_A_Star_Result aiResult = easyAi_update_A_star(entity->aiController, entP_inWorld,  playerInWorldP);
 
+			//NOTE: Is in attacking animation
+			bool attack = easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_ATTACK, entity->enemyType));
 
 			if(aiResult.found) {
 				entity->lastSetPos = aiResult.nextPos;
@@ -2104,10 +2109,23 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 				V2 dir = normalizeV2(diff.xy);
 
-				animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_WALK, entity->enemyType);
-
 				entity->rb->dP.xy = v2_scale(werewolfMoveSpeed, dir);
-			} else {
+
+				
+
+				if(getLengthSqrV3(diff) < 0.5f) { //if less than 1 metre away, try attacking
+					if(!attack) //NOTE: If not already attacking
+					{
+						//NOTE: Attack 
+						isAttackAnim = true;
+						animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_ATTACK, entity->enemyType);
+					}
+				} else { //NOTE: More than 1m away
+					if(!attack) { //NOTE: Walk animation if not in the middle of attack animation
+						animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_WALK, entity->enemyType);
+					}
+				}
+			} else if(!attack) { //NOTE: Wait till attack animation is finished
 				animToAdd = getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, entity->enemyType);
 			}
 
@@ -2118,7 +2136,7 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 
 			//Enemy HURT PLAYER//
-			if(entity->collider1->collisions.count > 0) {
+			if(entity->collider1->collisions.count > 0 && easyAnimation_getCurrentAnimation(&entity->animationController, getAnimationForEnemy(gameState, ENTITY_ANIMATION_ATTACK, entity->enemyType))) {
 				assert(entity->collider1->isTrigger);
 
 	            MyEntity_CollisionInfo info = MyEntity_hadCollisionWithType(manager, entity->collider1, ENTITY_WIZARD, EASY_COLLISION_ENTER);	
@@ -2168,6 +2186,11 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 	        		easyConsole_addToStream(DEBUG_globalEasyConsole, "add anim");
 	        		easyAnimation_emptyAnimationContoller(&entity->animationController, &gameState->animationFreeList);
 	        		easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, animToAdd, entity->animationRate);	
+	        	
+	        		if(isAttackAnim) {
+	        			//NOTE: Add idle animation once attack is finshed
+	        			easyAnimation_addAnimationToController(&entity->animationController, &gameState->animationFreeList, getAnimationForEnemy(gameState, ENTITY_ANIMATION_IDLE, entity->enemyType), entity->animationRate);		
+	        		}
 	        	}
 	        }
     	} else {
@@ -2982,10 +3005,17 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 		if(distance < 100.0f || entity->healthBarTimer >= 0.0f) { //Show health bar
 			float percent = (float)entity->health / (float)entity->maxHealth;
 
+			renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+            
+
+			Texture *healthBarTexture = 0;
 			V4 color = COLOR_GREEN;
 
 			if(percent < 0.5f) {
+				healthBarTexture = findTextureAsset("healthbar_red.png");
 				color = COLOR_RED;
+			} else {
+				healthBarTexture = findTextureAsset("healthbar.png");
 			}
 
 
@@ -3009,6 +3039,8 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 			setModelTransform(entitiesRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
 			renderDrawQuad(entitiesRenderGroup, color);
+			assert(healthBarTexture);
+			// renderDrawSprite(globalRenderGroup, healthBarTexture, COLOR_WHITE);
 
 			if(entity->healthBarTimer >= 0.0f) {
 				entity->healthBarTimer += dt;

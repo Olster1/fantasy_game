@@ -18,6 +18,8 @@ static void initCrafting(GameState *state) {
 
     shop->displayProduct = false;
 
+    shop->errorStringTimer = -1.0f;
+
 }
 
 // static void addItemToShop(Game_Shop *shop, EntityType type,int count, bool isDisposable, float cost) {
@@ -84,6 +86,7 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
     }
     /////////////
 
+    CraftRecipe *recipe = &gameState->crafting->currentRecipe;    
 
     if(shop->uiLevel == 0) {
     	if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_LEFT)) {
@@ -199,6 +202,34 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
             shop->animationItemTimers[shop->itemIndex].target = UI_ITEM_PICKER_MAX_SIZE;
         }
+
+       if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE)) {
+        if(recipe->types[shop->itemIndex] != ENTITY_NULL) {
+               shop->inventoryBreathSelector = 0;
+                
+               //NOTE: Remove from slot
+               recipe->count[shop->itemIndex] -= 1;
+
+               //NOTE: Put back in inventory
+
+               for(int i = 0; i < inventoryCount; ++i) {   
+                   ItemInfo *itemI = infos[i];
+                   if(itemI->type == recipe->types[shop->itemIndex]) {
+                        //NOTE: Add back to the inventory count
+                        itemI->count++;
+                        break;
+                   }
+               }
+
+
+                if(recipe->count[shop->itemIndex] <= 0) {
+                    recipe->types[shop->itemIndex] = ENTITY_NULL;
+                    recipe->count[shop->itemIndex] = 0;
+                }
+
+               playGameSound(&globalLongTermArena, gameState->errorSound, 0, AUDIO_BACKGROUND);
+           }
+       }
     }
 
 
@@ -358,7 +389,7 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
             //ADD ITEM TO CAULDRON
             if(wasPressed(appInfo->keyStates.gameButtons, BUTTON_SPACE) && !gameState->crafting->usingCauldron && gameState->crafting->uiLevel == 0) {
-                CraftRecipe *recipe = &gameState->crafting->currentRecipe;    
+                
                 if(recipe->typeCount < arrayCount(recipe->types)) {
                     
                     int index = -1;
@@ -394,6 +425,11 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                     itemI->count--;
                 } else {
                     //NOTE: Show error message
+                    gameState->crafting->errorStringTimer = 0;
+                    gameState->crafting->errorString = "Mmm, there's no more room"; 
+                    
+                   playGameSound(&globalLongTermArena, gameState->errorSound, 0, AUDIO_BACKGROUND);
+
                 }
             }
 
@@ -500,6 +536,31 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                 gameState->crafting->usingCauldron = true;
 
                 playGameSound(&globalLongTermArena, easyAudio_findSound("btn_click.wav"), 0, AUDIO_BACKGROUND);    
+            } else {
+                //NOTE: Display error text to user that no recipe exists for that
+                gameState->crafting->errorStringTimer = 0;
+                gameState->crafting->errorString = "Mmm, nothing is happening..."; 
+                
+                playGameSound(&globalLongTermArena, gameState->errorSound, 0, AUDIO_BACKGROUND);
+                
+            }
+        }
+
+        //NOTE: Update error string
+        if(gameState->crafting->errorStringTimer >= 0.0f){
+
+            gameState->crafting->errorStringTimer += appInfo->dt;
+
+            float canVal = gameState->crafting->errorStringTimer / 4.0f;
+
+            V4 color = COLOR_WHITE;
+            color.w = 1.0f - canVal;
+
+            
+            outputTextNoBacking(gameFont, 0.5f*fuaxWidth - 350, 100, 0.1f, gameState->fuaxResolution, gameState->crafting->errorString, rect2fMinMax(0, 0, gameState->fuaxResolution.x, gameState->fuaxResolution.y), color, 1.3f, true, 1);
+            
+            if(canVal >= 1.0f) {
+                gameState->crafting->errorStringTimer = -1.0f;
             }
         }
 
@@ -577,13 +638,10 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
 
                 float s = smoothStep00(1.3f*circleSize, shop->inventoryBreathSelector, 1.6f*circleSize);
 
-                Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(xAt, yAt, 0.3f));
+                Matrix4 T_matrix = Matrix4_translate(Matrix4_scale(mat4(), v3(s, s, 0)), v3(xAt, yAt, 0.35f));
                                     
                 setModelTransform(globalRenderGroup, T_matrix);
                 renderDrawSprite(globalRenderGroup, hover_t, COLOR_WHITE);
-
-
-
             }
 
             if(recipe->types[i] != ENTITY_NULL) {
