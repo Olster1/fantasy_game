@@ -72,15 +72,21 @@ static void updateCrafting(Game_Crafting *shop, float dt) {
 
 static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *player, EasyFont_Font *gameFont, OSAppInfo *appInfo) {
 
+
+    //NOTE: The recipes
+    EntityType potion1[] = { ENTITY_NETTLE, ENTITY_DOCK, ENTITY_DOCK }; 
+    EntityType potion2[] = { ENTITY_NETTLE, ENTITY_DOCK }; 
+    ////////////////////////////////////////////////////////////
+
     //NOTE: Get the craftable inventory count
     int inventoryCount = 0;
 
     ItemInfo *infos[arrayCount(gameState->itemSpots)];
 
     //////// NOTE: Get the inventory count first /////////////////////////
-    for(int i = 1; i < arrayCount(gameState->itemSpots) + 1; ++i) {   
+    for(int i = 0; i < arrayCount(gameState->itemSpots); ++i) {   
 
-        if(gameState->itemSpots[i].isCraftable) {
+        if(gameState->itemSpots[i].isCraftable && gameState->itemSpots[i].type != ENTITY_NULL) {
             infos[inventoryCount++] = &gameState->itemSpots[i];
         }
     }
@@ -211,15 +217,16 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                recipe->count[shop->itemIndex] -= 1;
 
                //NOTE: Put back in inventory
-
-               for(int i = 0; i < inventoryCount; ++i) {   
-                   ItemInfo *itemI = infos[i];
-                   if(itemI->type == recipe->types[shop->itemIndex]) {
-                        //NOTE: Add back to the inventory count
-                        itemI->count++;
-                        break;
+               if(recipe->count[shop->itemIndex] >= 0) {
+                   for(int i = 0; i < inventoryCount; ++i) {   
+                       ItemInfo *itemI = infos[i];
+                       if(itemI->type == recipe->types[shop->itemIndex]) {
+                            //NOTE: Add back to the inventory count
+                            itemI->count++;
+                            break;
+                       }
                    }
-               }
+                }
 
 
                 if(recipe->count[shop->itemIndex] <= 0) {
@@ -472,12 +479,10 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
             EntityType *arrayType = 0;
             int arrayLen = 0;
 
+            bool potion1_found = true;
+            bool potion2_found = true;
+            
             if(totalCount > 0) {
-
-                bool potion1_found = true;
-                bool potion2_found = true;
-                EntityType potion1[] = { ENTITY_NETTLE, ENTITY_DOCK, ENTITY_DOCK }; 
-                EntityType potion2[] = { ENTITY_NETTLE, ENTITY_DOCK }; 
 
                 for(int i = 0; i < totalCount; ++i) {
                     EntityType type = matchTypes[i];
@@ -520,7 +525,6 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                             recipe->count[j]--;
                         }
                     }
-
                 }
             } else {
                 //NOTE: No recipe found
@@ -536,10 +540,11 @@ static void updateCrafting(Game_Crafting *shop, GameState *gameState, Entity *pl
                 gameState->crafting->usingCauldron = true;
 
                 playGameSound(&globalLongTermArena, easyAudio_findSound("btn_click.wav"), 0, AUDIO_BACKGROUND);    
+
             } else {
                 //NOTE: Display error text to user that no recipe exists for that
                 gameState->crafting->errorStringTimer = 0;
-                gameState->crafting->errorString = "Mmm, nothing is happening..."; 
+                gameState->crafting->errorString = "Mmm, that recipe doesn't work."; 
                 
                 playGameSound(&globalLongTermArena, gameState->errorSound, 0, AUDIO_BACKGROUND);
                 
