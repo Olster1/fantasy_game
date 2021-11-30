@@ -1620,9 +1620,14 @@ int main(int argc, char *args[]) {
             float time = clamp(0.4f, timeDiff, 1);
             dayColor = v4_scale(time, dayColor);
             dayColor.w = 1;
+
+            if(!gameState->useSunlightColor) {
+                dayColor = v4_scale(0.5f, v4(1, 1, 1, 1));    
+                dayColor.w = 1;
+            } 
+
             globalRenderGroup->timeOfDayColor = dayColor;
             entitiesRenderGroup->timeOfDayColor = dayColor;
-
 
             ///////////////////////////////////////////////
            
@@ -1851,13 +1856,24 @@ int main(int argc, char *args[]) {
            for(int i = 0; i < manager->entities.count; ++i) {
                Entity *e = (Entity *)getElement(&manager->entities, i);
                if(e) {
-                   if((e->type == ENTITY_LAMP_POST && (t_24hr > 18 || t_24hr < 6)) || ((e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) && e->chestIsOpen)) {
+                    bool timeOfDay = (t_24hr > 18 || t_24hr < 6);
+
+                    //NOTE: Always push lights when not using sunlight color
+                   if(!gameState->useSunlightColor) {
+                     timeOfDay = true;
+                   }
+
+                   if((e->type == ENTITY_LAMP_POST && timeOfDay) || ((e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) && e->chestIsOpen)) {
                        float perlinFactor = lerp(0.4f, perlin1d(globalTimeSinceStart*0.1f, 10, 4), 1.0f);
 
                        float extraIntensity = 1;
                        if(e->triggerType == ENTITY_TRIGGER_SAVE_BY_FIRE || e->triggerType == ENTITY_TRIGGER_FIRE_POST) {
                             float diff_from_12 = absVal(12 - t_24hr);
                             extraIntensity = clamp01(diff_from_12 / 6);
+
+                            if(!gameState->useSunlightColor) {
+                                extraIntensity = 1;
+                            }
                        }
 
                        V3 lightPos = v3_plus(easyTransform_getWorldPos(&e->T), v3(0, 0, -1.5f));
@@ -1896,7 +1912,10 @@ int main(int argc, char *args[]) {
                }
            }
 
-           drawRenderGroup(shadowMapRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+           
+            drawRenderGroup(shadowMapRenderGroup, (RenderDrawSettings)(RENDER_DRAW_SORT));
+           
+
            /////////////////////////////////////////////////////////////////////
 
 
@@ -2399,8 +2418,6 @@ int main(int argc, char *args[]) {
 
                 Texture *t = findTextureAsset("bulls_eye.png");
 
-                easyConsole_pushV2(DEBUG_globalEasyConsole, appInfo->keyStates.mouseP_01);
-
                 gameState->tempTransform.Q = identityQuaternion();
                 gameState->tempTransform.pos = v3(appInfo->keyStates.mouseP_01.x*fuaxWidth, (1.0f - appInfo->keyStates.mouseP_01.y)*fuaxHeight, 0.1f);
 
@@ -2426,8 +2443,8 @@ int main(int argc, char *args[]) {
                 Matrix4 projection = OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight);
                 setProjectionTransform(globalRenderGroup, projection);
 
-                //DRAW THE CLOCK
-                {
+                //DRAW THE CLOCK only outside
+                if(gameState->useSunlightShadows) {
 
                    Texture *clock = findTextureAsset("sun_moon_clock1.png");
                    
@@ -2448,7 +2465,7 @@ int main(int argc, char *args[]) {
                    setModelTransform(globalRenderGroup, T);
                    renderDrawSprite(globalRenderGroup, clock, COLOR_WHITE);
                    easyRender_disableScissors(globalRenderGroup);
-                }
+                } 
 
                 Entity *p = ((Entity *)(manager->player));
 
@@ -2601,6 +2618,8 @@ int main(int argc, char *args[]) {
 
 
                 easyEditor_pushCheckBox(appInfo->editor, "Control Player", &DEBUG_CONTROL_PLAYER);
+                easyEditor_pushCheckBox(appInfo->editor, "Sunlight in Level", &gameState->useSunlightShadows);
+                easyEditor_pushCheckBox(appInfo->editor, "Sun Color in Level", &gameState->useSunlightColor);
 
 
                 int splatIndexOn = 0;
@@ -3865,6 +3884,30 @@ int main(int argc, char *args[]) {
                }
             }
 
+            if(gameState->gameModeType == GAME_MODE_CUT_SCENE) {
+
+                //NOTE: Update the black bars
+
+
+                //NOTE: Draw the black bars
+                float fuaxWidth = 1920.0f;
+                float fuaxHeight = appInfo->aspectRatio_yOverX*fuaxWidth;
+                        
+                float height_of_cutscene = 0.25f;
+                float height_of_cutscene_half = 0.5f - (0.5*height_of_cutscene);
+
+                setViewTransform(globalRenderGroup, mat4());
+                setProjectionTransform(globalRenderGroup, OrthoMatrixToScreen(fuaxWidth, fuaxWidth*appInfo->aspectRatio_yOverX));
+
+                Matrix4 T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, height_of_cutscene*fuaxHeight, 0)), v3(0, height_of_cutscene_half*fuaxHeight, 0.5f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawQuad(globalRenderGroup, COLOR_BLACK);
+
+                T = Matrix4_translate(Matrix4_scale(mat4(), v3(fuaxWidth, height_of_cutscene*fuaxHeight, 0)), v3(0, -height_of_cutscene_half*fuaxHeight, 0.5f));
+                setModelTransform(globalRenderGroup, T);
+                renderDrawQuad(globalRenderGroup, COLOR_BLACK);
+            }
+
             if(gameState->gameModeType == GAME_MODE_READING_TEXT) {
 
                 //Make sure game is paused
@@ -4221,6 +4264,11 @@ int main(int argc, char *args[]) {
 
                     if(gameState->sceneFileNameTryingToSave) {
                         easyPlatform_freeMemory(gameState->sceneFileNameTryingToSave);
+                    }
+
+                    if(stringsMatchNullN("level", token.at, token.size)) {
+                        noMatch = false;
+                        easyConsole_addToStream(DEBUG_globalEasyConsole, gameState->currentSceneName);
                     }
                             
                     if(stringsMatchNullN("save", token.at, token.size)) {

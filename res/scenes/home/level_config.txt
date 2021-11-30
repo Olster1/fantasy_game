@@ -1,0 +1,6 @@
+{
+
+	type: "ENTITY_LVL_CONFIG";
+	useSunlight: false;
+}
+

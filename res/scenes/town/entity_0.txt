@@ -2,21 +2,28 @@
 
 	id: 0;
 	type: "ENTITY_WIZARD";
-	position: -37.928581 88.386391 -1.500000;
+	position: -0.917110 1.005574 -0.400000;
 	scale: 0.640625 1.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	layer: 0.000000;
 	subtype: 0;
-	colliderScale: 0.250000 0.250000;
-	colliderOffset: 0.000000 -0.500000 0.000000;
-	colliderScale2: 1.000000 1.400000;
-	colliderOffset2: 0.000000 0.500000 0.000000;
+	enemyType: "ENEMY_SKELETON";
+	animationRate: 0.100000;
+	colliderScale: 0.200000 0.250000;
+	colliderOffset: 0.000000 0.000000 0.000000;
+	aiNodes: ;
+	searchBouys: ;
+	colliderScale2: 1.400000 1.000000;
+	colliderOffset2: 0.500000 0.000000 0.000000;
+	partnerId: -1;
+	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
 	rateOfCreation: 0.000000;
 	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
 }
 

@@ -78,6 +78,7 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 		
 	} else if(type == ENEMY_BOLT_BALL) {
 		switch(state) {
+			case ENTITY_ANIMATION_IDLE: 
 			case ENTITY_ANIMATION_ATTACK: 
 			case ENTITY_ANIMATION_HURT: 
 			case ENTITY_ANIMATION_DIE: {
@@ -654,7 +655,9 @@ static ParticleSystemListItem *getParticleSystem(EntityManager *m, Entity *entit
 
 static void renderKeyPromptHover(GameState *gameState, Texture *keyTexture, Entity *entity, float dt, bool useScaleY, RenderGroup *group) {
 	if(!gameState->gameIsPaused) {
-		// easyConsole_addToStream(DEBUG_globalEasyConsole, "RENDER PROMPT");
+
+		renderSetShader(group, &pixelArtProgramPlain);
+		
 		entity->tBob += dt;
 
 		V3 scale = easyTransform_getWorldScale(&entity->T);
@@ -1105,7 +1108,7 @@ static void sleepInBed(void *data_) {
 	}
 
 
-	easyConsole_pushFloat(DEBUG_globalEasyConsole, data->weatherState->timeOfDay);
+	// easyConsole_pushFloat(DEBUG_globalEasyConsole, data->weatherState->timeOfDay);
 
 
 	data->gameState->gameIsPaused = false; 
@@ -3007,7 +3010,7 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 		if(distance < 100.0f || entity->healthBarTimer >= 0.0f) { //Show health bar
 			float percent = (float)entity->health / (float)entity->maxHealth;
 
-			renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+			renderSetShader(entitiesRenderGroup, &pixelArtProgramPlain);
             
 			Texture *healthBarTexture = 0;
 			V4 color = COLOR_GREEN;
@@ -3221,7 +3224,7 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 		{
 			renderSetShader(entitiesRenderGroup, shaderProgram); renderDrawSprite(entitiesRenderGroup, sprite, entity->colorTint);
 
-			if(shouldDrawForShadows) {
+			if(shouldDrawForShadows && gameState->useSunlightShadows) {
 				renderSetShader(shadowMapGroup, &shadowMapProgram); renderDrawSprite(shadowMapGroup, sprite, entity->colorTint);
 			}
 		}

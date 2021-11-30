@@ -26,7 +26,7 @@ static void deleteEntityOffDisk(char *sceneName, int entityID) {
 static void gameScene_saveScene(GameState *gameState, EntityManager *manager, char *sceneName_) {
 	DEBUG_TIME_BLOCK()
 
-    //NOTE: Delete entities that we deleted during gameplay that we now want to comit to disk
+    //NOTE: Delete entities that we deleted during gameplay that we now want to commit to disk
 
     for(int i = 0; i < manager->entitiesToDeleteOnSave.count; ++i) {
         EntityToDeleteOnSave *e = (EntityToDeleteOnSave *)getElement(&manager->entitiesToDeleteOnSave, i);
@@ -274,6 +274,39 @@ static void gameScene_saveScene(GameState *gameState, EntityManager *manager, ch
     platformEndFile(handle);    
 
 
+    ////////////////////////`   
+
+
+    //NOTE: Empty the file contents buffer
+    fileContents.count = 0;
+
+    ////////save the config variables for level
+    {
+        char buffer[32];
+        sprintf(buffer, "{\n\n");
+        addElementInifinteAllocWithCount_(&fileContents, buffer, strlen(buffer));
+
+        addVar(&fileContents, MyEntity_EntityTypeStrings[(int)ENTITY_LVL_CONFIG], "type", VAR_CHAR_STAR);
+                        
+        addVar(&fileContents, &gameState->useSunlightShadows, "useSunlight", VAR_BOOL);
+        addVar(&fileContents, &gameState->useSunlightColor, "useSunlightColor", VAR_BOOL);
+
+        sprintf(buffer, "}\n\n");
+        addElementInifinteAllocWithCount_(&fileContents, buffer, strlen(buffer));
+                    
+
+        char *fullEntityFileName = concatInArena(fullSceneFolderPath, "level_config.txt", &globalPerFrameArena);
+
+        ///////////////////////************ Write the file to disk *************////////////////////
+        game_file_handle handle = platformBeginFileWrite(fullEntityFileName);
+        if(!handle.HasErrors) {
+            platformWriteFile(&handle, fileContents.memory, fileContents.count*fileContents.sizeOfMember, 0);
+        } else {
+            easyConsole_addToStream(DEBUG_globalEasyConsole, "Can't save entity file. Handle has Errors.");             
+        }
+
+        platformEndFile(handle);    
+    }
     ////////////////////////`   
 
 
@@ -715,9 +748,35 @@ static void gameScene_loadScene(GameState *gameState, EntityManager *manager, ch
         		}
 
 
-                
+                if(entType == ENTITY_LVL_CONFIG) {
+                    parsing = true;
+                    tokenizer = lexBeginParsing((char *)contents.memory, EASY_LEX_OPTION_EAT_WHITE_SPACE);
 
-                if(entType == ENTITY_TILE_MAP) {
+                    //NOTE: Just start parsing the file again 
+                    while(parsing) {
+                        EasyToken token = lexGetNextToken(&tokenizer);
+                        InfiniteAlloc *data = 0;
+
+                        switch(token.type) {
+                            case TOKEN_NULL_TERMINATOR: {
+
+                                parsing = false;
+                            } break;
+                            case TOKEN_WORD: {
+                                if(stringsMatchNullN("useSunlight", token.at, token.size)) {
+                                    gameState->useSunlightShadows = getBoolFromDataObjects(&tokenizer);
+                                    
+                                } else if(stringsMatchNullN("useSunlightColor", token.at, token.size)) {
+                                    gameState->useSunlightColor = getBoolFromDataObjects(&tokenizer);
+                                    
+                                }
+
+                            } break;
+                            default: {
+                            }
+                        }
+                    }
+                } else if(entType == ENTITY_TILE_MAP) {
                     parsing = true;
                     tokenizer = lexBeginParsing((char *)contents.memory, EASY_LEX_OPTION_EAT_WHITE_SPACE);
                     WorldTileType tileType; 

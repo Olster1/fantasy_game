@@ -1,0 +1,7 @@
+{
+
+	type: "ENTITY_LVL_CONFIG";
+	useSunlight: true;
+	useSunlightColor: true;
+}
+

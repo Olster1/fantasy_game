@@ -1,0 +1,24 @@
+{
+
+	id: 167;
+	type: "ENTITY_SCENERY";
+	position: -1.428576 -5.653671 -0.240001;
+	scale: 1.000000 1.000000 1.000000;
+	color: 1.000000 1.000000 1.000000 1.000000;
+	rotation: 0.923880 -0.382683 0.000000 0.000000;
+	layer: -1.000000;
+	subtype: 0;
+	enemyType: "ENEMY_SKELETON";
+	animationRate: 0.290903;
+	partnerId: 0;
+	moveDirection: 0.000000 0.000000;
+	lightColor: 1.000000 0.500000 0.000000;
+	lightIntensity: 2.000000;
+	renderFirstPass: 0;
+	dialogType: "ENTITY_DIALOG_NULL";
+	rateOfCreation: 3.000000;
+	typeToCreate: "ENTITY_NULL";
+	shouldNotRender: false;
+	animationName: "Nettle3.png";
+}
+

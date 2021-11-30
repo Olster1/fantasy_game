@@ -69,11 +69,14 @@ inline void easyConsole_initConsole(EasyConsole *c, ButtonType hotkey) {
 	c->bufferStream[0] = '\0';
 }
 
-inline void easyConsole_addToStream(EasyConsole *c, char *toAdd) {
+
+#define easyConsole_addToStream(c, toAdd) easyConsole_addToStream_(c, toAdd, __LINE__, __FILE__)
+
+inline void easyConsole_addToStream_(EasyConsole *c, char *toAdd, int lineNumber, char *file) {
 	DEBUG_TIME_BLOCK()
 	MemoryArenaMark perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 
-	char *at = easy_createString_printf(&globalPerFrameArena, "%.2fs: %s", globalTimeSinceStart, toAdd);
+	char *at = easy_createString_printf(&globalPerFrameArena, "%d %.2fs: %s ... %s", lineNumber, globalTimeSinceStart, toAdd, getFileLastPortionWithArena(file, &globalPerFrameArena));
 
 	// [0]1|[1]2|[2]3|[3]4|[X]
 

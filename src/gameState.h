@@ -35,6 +35,7 @@ FUNC(ENTITY_NETTLE)\
 FUNC(ENTITY_DOCK)\
 FUNC(ENTITY_BOTTLE)\
 FUNC(ENTITY_QUIVER)\
+FUNC(ENTITY_LVL_CONFIG)\
 
 
 typedef enum {
@@ -46,6 +47,7 @@ typedef enum {
 	GAME_MODE_ITEM_COLLECT,
 	GAME_MODE_SHOP,
 	GAME_MODE_CRAFTING,
+	GAME_MODE_CUT_SCENE
 } GameModeType;
 
 typedef enum {
@@ -622,6 +624,9 @@ typedef struct {
 	WavFile *successSound;
 	WavFile *gongSound;
 	bool gameIsPaused;
+
+	bool useSunlightShadows;
+	bool useSunlightColor;
 
 	EasyAnimation_Controller cauldronAnimationController;
 
