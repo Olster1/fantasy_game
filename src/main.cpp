@@ -2384,6 +2384,33 @@ int main(int argc, char *args[]) {
 
             ///////////////////////////////////////////////////////////////////////////////////
 
+            {
+            EasyRender_ShaderAndTransformState state = easyRender_saveShaderAndTransformState(globalRenderGroup);
+
+                renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
+
+               float fuaxWidth = 1920.0f;
+               float fuaxHeight = fuaxWidth*appInfo->aspectRatio_yOverX;
+
+               setViewTransform(globalRenderGroup, mat4());
+               Matrix4 projection = OrthoMatrixToScreen_BottomLeft(fuaxWidth, fuaxHeight);
+               setProjectionTransform(globalRenderGroup, projection);
+
+
+                Texture *t = findTextureAsset("bulls_eye.png");
+
+                easyConsole_pushV2(DEBUG_globalEasyConsole, appInfo->keyStates.mouseP_01);
+
+                gameState->tempTransform.Q = identityQuaternion();
+                gameState->tempTransform.pos = v3(appInfo->keyStates.mouseP_01.x*fuaxWidth, (1.0f - appInfo->keyStates.mouseP_01.y)*fuaxHeight, 0.1f);
+
+                gameState->tempTransform.scale.xy = v2(100, 100);
+
+                setModelTransform(globalRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
+                renderDrawSprite(globalRenderGroup, t, COLOR_WHITE);
+
+                easyRender_restoreShaderAndTransformState(globalRenderGroup, &state);
+            }
             
 
             //DRAW THE PLAYER HUD

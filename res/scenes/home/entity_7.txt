@@ -1,26 +1,22 @@
 {
 
-	id: 3;
-	type: "ENTITY_TRIGGER";
-	position: 19.158474 1.495785 -0.010000;
-	scale: 1.000000 2.000000 1.000000;
+	id: 7;
+	type: "ENTITY_SCENERY";
+	position: 19.852154 3.301361 -0.010000;
+	scale: 1.500000 2.000000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 1.000000 0.000000 0.000000 0.000000;
 	layer: -1.000000;
 	subtype: 0;
 	enemyType: "ENEMY_SKELETON";
 	animationRate: 0.100000;
-	spriteName: "door_light_arc";
-	colliderScale: 0.800000 0.500000;
-	colliderOffset: 0.000000 -0.500000 0.000000;
-	levelToLoad: "new";
-	partnerId: 153;
-	moveDirection: 0.000000 -1.000000;
+	spriteName: "rug";
+	partnerId: 0;
+	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;
 	lightIntensity: 2.000000;
 	renderFirstPass: 0;
 	dialogType: "ENTITY_DIALOG_NULL";
-	triggerType: "ENTITY_TRIGGER_LOAD_SCENE";
 	rateOfCreation: 3.000000;
 	typeToCreate: "ENTITY_NULL";
 	shouldNotRender: false;

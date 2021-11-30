@@ -1717,7 +1717,9 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 		}
 
-		//NOTE: CAST A SPELL
+		
+
+		//NOTE: Use Bow and arrow
 		if(wasPressed(keyStates->gameButtons, BUTTON_C)) {
 			//spawn bullet
 			ArrayElementInfo arrayInfo = getEmptyElementWithInfo(&manager->entitiesToAddForFrame);
@@ -3007,7 +3009,6 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 			renderSetShader(globalRenderGroup, &pixelArtProgramPlain);
             
-
 			Texture *healthBarTexture = 0;
 			V4 color = COLOR_GREEN;
 
@@ -3020,9 +3021,9 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 
 			float w = 1.2f; //game world meters
-			float h = 0.3f; //game world meters
+			float h = 0.15f; //game world meters
 
-			V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -2.0f));
+			V3 position = v3_plus(easyTransform_getWorldPos(&entity->T), v3(0.0f, 0, -1.0f));
 
 			gameState->tempTransform.pos = position;
 
@@ -3038,9 +3039,10 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 			gameState->tempTransform.pos.x -= 0.5f*overhang;		
 
 			setModelTransform(entitiesRenderGroup, easyTransform_getTransform(&gameState->tempTransform));
-			renderDrawQuad(entitiesRenderGroup, color);
+
+			// renderDrawQuad(entitiesRenderGroup, color);
 			assert(healthBarTexture);
-			// renderDrawSprite(globalRenderGroup, healthBarTexture, COLOR_WHITE);
+			renderDrawSprite(entitiesRenderGroup, healthBarTexture, COLOR_WHITE);
 
 			if(entity->healthBarTimer >= 0.0f) {
 				entity->healthBarTimer += dt;

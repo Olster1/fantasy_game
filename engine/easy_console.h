@@ -115,6 +115,12 @@ static inline void easyConsole_pushFloat(EasyConsole *c, float i) {
 }
 
 
+static inline void easyConsole_pushV2(EasyConsole *c, V2 i) {
+	DEBUG_TIME_BLOCK()
+	char *buf = easy_createString_printf(&globalPerFrameArena, "%f, %f", i.x, i.y);
+	easyConsole_addToStream(c, buf);
+}
+
 static inline void easyConsole_pushV3(EasyConsole *c, V3 i) {
 	DEBUG_TIME_BLOCK()
 	char *buf = easy_createString_printf(&globalPerFrameArena, "%f, %f, %f", i.x, i.y, i.z);
