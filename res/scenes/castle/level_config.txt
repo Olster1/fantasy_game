@@ -2,6 +2,6 @@
 
 	type: "ENTITY_LVL_CONFIG";
 	useSunlight: false;
-	useSunlightColor: true;
+	useSunlightColor: false;
 }
 

@@ -18,7 +18,7 @@
 
 #define GLOBAL_DEFINE_defaultMetersPerLetter_floatingText 0.5f
 
-#define GAME_DEFINES_START_MODE GAME_MODE_CUT_SCENE
+#define GAME_DEFINES_START_MODE GAME_MODE_PLAY
 
 
 #if DEVELOPER_MODE

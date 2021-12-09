@@ -768,6 +768,39 @@ int main(int argc, char *args[]) {
         GameWeatherState *weatherState = initWeatherState();
 
 
+
+        ///////// LOAD ALL ANIMATION FILES
+
+        
+        {
+            char *str = "Empty";
+            addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, str);
+            char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
+            char *folderName = concatInArena(globalExeBasePath, "img/fantasy_sprites/animaionPreLoad/", &globalPerFrameArena);
+            FileNameOfType splatAnimationFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
+            int splatAnimationCount = splatAnimationFileNames.count;
+            for(int i = 0; i < splatAnimationFileNames.count; ++i) {
+                char *fullName = splatAnimationFileNames.names[i];
+                char *shortName = getFileLastPortion(fullName);
+                if(shortName[0] != '.') { //don't load hidden file 
+                    addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, shortName);
+
+                    Animation *animation = (Animation *)easyPlatform_allocateMemory(sizeof(Animation), EASY_PLATFORM_MEMORY_NONE);
+
+                    easyAnimation_initAnimation(animation, shortName);
+                    loadAndAddImagesStripToAssets_(animation, fullName, 0, false, true);
+
+                    addAssetAnimation(shortName, shortName, animation);
+
+                    addElementInfinteAlloc_notPointer(&gameState->splatAnimations, animation);
+                }
+                free(fullName);
+            }
+        }
+
+        ////////////////////////////////////////
+
+
         easyAnimation_initAnimation(&gameState->seagullAnimation, "seagullAnimation");
         loadAndAddImagesStripToAssets(&gameState->seagullAnimation, "img/fantasy_sprites/seagull_animation.png", 32, false);
 
@@ -793,13 +826,16 @@ int main(int argc, char *args[]) {
 
         {
             //WIZARD ANIMATIONS
-            easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
+
+            gameState->wizardBottom = gameState_findSplatAnimation(gameState, "Man_forward_4.png");
+
+            // easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
+            // loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
             // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
             // easyAnimation_pushFrame(&gameState->wizardRun, "player.png");
 
-            easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
+            // easyAnimation_initAnimation(&gameState->wizardForward, "wizardForward");
+            // loadAndAddImagesStripToAssets_count_offset(&gameState->wizardForward, "img/fantasy_sprites/man.png", 41, false, 4, 4);
 
 
             easyAnimation_initAnimation(&gameState->wizardSwimLeft, "wizardSwimLeft");
@@ -817,8 +853,8 @@ int main(int argc, char *args[]) {
             easyAnimation_initAnimation(&gameState->wizardSwordAttackRight, "wizardAttackRight");
             loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackRight, "img/fantasy_sprites/man_attack_right.png", 58, false);
 
-            easyAnimation_initAnimation(&gameState->wizardSwordAttackFront, "wizardAttackFront");
-            loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackFront, "img/fantasy_sprites/man_attack_front.png", 47, false);
+            gameState->wizardSwordAttackFront = gameState_findSplatAnimation(gameState, "Man_forward_attack_4.png");
+
 
             easyAnimation_initAnimation(&gameState->wizardSwordAttackBack, "wizardAttackBack");
             loadAndAddImagesStripToAssets(&gameState->wizardSwordAttackBack, "img/fantasy_sprites/man_attack_back.png", 42, false);
@@ -829,35 +865,27 @@ int main(int argc, char *args[]) {
             easyAnimation_pushFrame(&gameState->wizardIdle, "player.png");
             // loadAndAddImagesStripToAssets(&gameState->wizardIdle, "img/fantasy_sprites/wizard/Idle.png", 231);
 
-            easyAnimation_initAnimation(&gameState->wizardIdleForward, "wizardIdleForward");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleForward, "img/fantasy_sprites/man_idle.png", 41, false, 1, 2);
+            gameState->wizardIdleForward = gameState_findSplatAnimation(gameState, "Man_back_idle_6.png");
+            gameState->wizardIdleBottom = gameState_findSplatAnimation(gameState, "Man_forward_idle_6.png");
+            gameState->wizardIdleLeft = gameState_findSplatAnimation(gameState, "Man_left_idle_6.png");
+            gameState->wizardIdleRight = gameState_findSplatAnimation(gameState, "Man_left_idle_6.png");
 
-            easyAnimation_initAnimation(&gameState->wizardIdleBottom, "wizardIdleBottom");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleBottom, "img/fantasy_sprites/man_idle1.png", 41, false, 1, 0);
-
-            easyAnimation_initAnimation(&gameState->wizardIdleLeft, "wizardIdleLeft");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleLeft, "img/fantasy_sprites/man_idle2.png", 41, false, 1, 3);
-
-            easyAnimation_initAnimation(&gameState->wizardIdleRight, "wizardIdleRight");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardIdleRight, "img/fantasy_sprites/man_idle3.png", 41, false, 1, 1);
-
-
-            easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardBottom, "img/fantasy_sprites/man1.png", 41, false, 4, 12);
+            gameState->wizardForward = gameState_findSplatAnimation(gameState, "Man_back_4.png");
 
             easyAnimation_initAnimation(&gameState->wizardGetItem, "wizardGetItem");
             loadAndAddImagesStripToAssets(&gameState->wizardGetItem, "img/fantasy_sprites/man_getitem.png", 41, false);
             
 
+            gameState->wizardRight = gameState->wizardLeft = gameState_findSplatAnimation(gameState, "Man_left_walk_4.png");
 
-            // easyAnimation_initAnimation(&gameState->wizardBottom, "wizardBottom");
-            // easyAnimation_pushFrame(&gameState->wizardBottom, "player_down.png");
+            gameState->wizard_sideways_forward = gameState_findSplatAnimation(gameState, "Man_forward_sideways_4.png");
+            gameState->wizard_sideways_back = gameState_findSplatAnimation(gameState, "Man_back_sideways_4.png");
+            
+            // easyAnimation_initAnimation(&gameState->wizardLeft, "wizardLeft");
+            // loadAndAddImagesStripToAssets_count_offset(&gameState->wizardLeft, "img/fantasy_sprites/man2.png", 41, false, 4, 8);
 
-            easyAnimation_initAnimation(&gameState->wizardLeft, "wizardLeft");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardLeft, "img/fantasy_sprites/man2.png", 41, false, 4, 8);
-
-            easyAnimation_initAnimation(&gameState->wizardRight, "wizardRight");
-            loadAndAddImagesStripToAssets_count_offset(&gameState->wizardRight, "img/fantasy_sprites/man3.png", 41, false, 4, 0);
+            // easyAnimation_initAnimation(&gameState->wizardRight, "wizardRight");
+            // loadAndAddImagesStripToAssets_count_offset(&gameState->wizardRight, "img/fantasy_sprites/man3.png", 41, false, 4, 0);
 
             ////////////////////////////////////////////////////////////////////////////
 
@@ -1000,34 +1028,6 @@ int main(int argc, char *args[]) {
             }
         }
 
-        ///////// LOAD ALL ANIMATION FILES
-
-        
-        {
-            char *str = "Empty";
-            addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, str);
-            char *imgFileTypes[] = {"jpg", "jpeg", "png", "bmp", "PNG"};
-            char *folderName = concatInArena(globalExeBasePath, "img/fantasy_sprites/animaionPreLoad/", &globalPerFrameArena);
-            FileNameOfType splatAnimationFileNames = getDirectoryFilesOfType(folderName, imgFileTypes, arrayCount(imgFileTypes));
-            int splatAnimationCount = splatAnimationFileNames.count;
-            for(int i = 0; i < splatAnimationFileNames.count; ++i) {
-                char *fullName = splatAnimationFileNames.names[i];
-                char *shortName = getFileLastPortion(fullName);
-                if(shortName[0] != '.') { //don't load hidden file 
-                    addElementInfinteAlloc_notPointer(&gameState->splatListAnimations, shortName);
-
-                    Animation *animation = (Animation *)easyPlatform_allocateMemory(sizeof(Animation), EASY_PLATFORM_MEMORY_NONE);
-
-                    easyAnimation_initAnimation(animation, shortName);
-                    loadAndAddImagesStripToAssets_(animation, fullName, 0, false, true);
-
-                    addAssetAnimation(shortName, shortName, animation);
-
-                    addElementInfinteAlloc_notPointer(&gameState->splatAnimations, animation);
-                }
-                free(fullName);
-            }
-        }
 
 
 
@@ -3879,7 +3879,7 @@ int main(int argc, char *args[]) {
                    gameState->entityChestToDisplay = 0;
 
                    easyAnimation_emptyAnimationContoller(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList);
-                   easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, ((Entity *)(manager->player))->animationRate);   
+                   easyAnimation_addAnimationToController(&((Entity *)(manager->player))->animationController, &gameState->animationFreeList, gameState->wizardIdleForward, ((Entity *)(manager->player))->animationRate);   
                    
                }
             }

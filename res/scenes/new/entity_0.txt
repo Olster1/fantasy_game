@@ -2,8 +2,8 @@
 
 	id: 0;
 	type: "ENTITY_WIZARD";
-	position: 0.000000 3.897389 -0.400000;
-	scale: 0.640625 1.000000 1.000000;
+	position: 15.872292 -1.034546 -0.437527;
+	scale: 1.500000 1.500000 1.000000;
 	color: 1.000000 1.000000 1.000000 1.000000;
 	rotation: 0.923880 -0.382683 0.000000 0.000000;
 	layer: 0.000000;
@@ -14,8 +14,8 @@
 	colliderOffset: 0.000000 0.000000 0.000000;
 	aiNodes: ;
 	searchBouys: ;
-	colliderScale2: 1.000000 1.400000;
-	colliderOffset2: 0.000000 0.500000 0.000000;
+	colliderScale2: 1.400000 1.000000;
+	colliderOffset2: -0.500000 0.000000 0.000000;
 	partnerId: -1;
 	moveDirection: 0.000000 0.000000;
 	lightColor: 1.000000 0.500000 0.000000;

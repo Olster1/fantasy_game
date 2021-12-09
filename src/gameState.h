@@ -379,7 +379,7 @@ typedef struct {
 	EasyAnimation_ListItem *animationFreeList;
 
 	//ANIMATIONS
-	Animation wizardForward;
+	Animation *wizardForward;
 	Animation wizardAttack;
 	Animation firePitAnimation;
 	Animation torchAnimation;
@@ -393,12 +393,16 @@ typedef struct {
 
 	Animation wizardSwordAttackLeft;
 	Animation wizardSwordAttackRight;
-	Animation wizardSwordAttackFront;
+	Animation *wizardSwordAttackFront;
 	Animation wizardSwordAttackBack;
 
-	Animation wizardBottom;
-	Animation wizardLeft;
-	Animation wizardRight;
+	Animation *wizardBottom;
+	Animation *wizardLeft;
+	Animation *wizardRight;
+
+	Animation *wizard_sideways_forward;
+	Animation *wizard_sideways_back;
+
 	Animation wizardGetItem;
 
 	Animation wizardSwimLeft;
@@ -406,10 +410,10 @@ typedef struct {
 	Animation wizardSwimUp;
 	Animation wizardSwimDown;
 
-	Animation wizardIdleForward;
-	Animation wizardIdleBottom;
-	Animation wizardIdleLeft;
-	Animation wizardIdleRight;
+	Animation *wizardIdleForward;
+	Animation *wizardIdleBottom;
+	Animation *wizardIdleLeft;
+	Animation *wizardIdleRight;
 
 	Animation skeletonAttack;
 	Animation skeletonDeath;

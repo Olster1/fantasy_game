@@ -40,6 +40,8 @@ typedef struct ValidIndex {
 } ValidIndex;
 
 #define INCREMENT_COUNT 16 //must be below 64 since it uses a u64 flag to check validity
+static u32 global_increment_sqrt = (u32)sqrt(INCREMENT_COUNT);
+
 typedef struct {
     size_t sizeofType;
     Pool *poolHash[1 << 10]; // must be power of two 
@@ -264,7 +266,6 @@ int addElement_(Array_Dynamic *array, void *elmData, size_t sizeofData) {
 Pool *getPool(Array_Dynamic *array, int poolIndex) {
     DEBUG_TIME_BLOCK()
     //hash table would avoid looking at all the arrays
-    //SLOW: Replace modulus
     Pool *result = array->poolHash[poolIndex & (arrayCount(array->poolHash) - 1)];
     while(result) {
         if(result->id == poolIndex) {
@@ -283,7 +284,13 @@ typedef struct {
 
 PoolInfo getPoolInfo(Array_Dynamic *array, int absIndex) {
     DEBUG_TIME_BLOCK()
-    int poolAt = absIndex / INCREMENT_COUNT;
+
+    //NOTE: Old way with a divide but seemed to be taking a long time so replaced it
+    // int poolAt = absIndex / INCREMENT_COUNT;
+
+    u32 shiftedValue = (~(INCREMENT_COUNT - 1));
+    u32 poolAt = ((u32)absIndex & shiftedValue) >> global_increment_sqrt;
+
     // assert(absIndex < INCREMENT_COUNT);
     
     PoolInfo result = {};

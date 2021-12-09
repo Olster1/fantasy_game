@@ -37,6 +37,7 @@ FUNC(ENEMY_BOLT_BALL)\
 FUNC(ENEMY_CHICKEN)\
 FUNC(ENEMY_NETTLE)\
 FUNC(ENEMY_BUG)\
+FUNC(ENEMY_BAT)\
 
 typedef enum {
     MY_ENTITY_ENEMY_TYPE(ENUM)
@@ -83,7 +84,7 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 			case ENTITY_ANIMATION_HURT: 
 			case ENTITY_ANIMATION_DIE: {
 				//bogus animation
-				animation = &gameState->wizardForward;
+				animation = gameState->wizardForward;
 			} break;
 			default: {
 				animation = gameState_findSplatAnimation(gameState, "boltBall4.png");
@@ -92,6 +93,24 @@ static Animation *getAnimationForEnemy(GameState *gameState, EntityAnimationStat
 	} else if(type == ENEMY_CHICKEN) {
 		switch(state) {
 			default: {
+				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
+			} break;
+		}
+	} else if(type == ENEMY_BAT) {
+		switch(state) {
+			case ENTITY_ANIMATION_IDLE: {
+				animation = gameState_findSplatAnimation(gameState, "bat_sideways_6.png");
+			} break;
+			case ENTITY_ANIMATION_WALK: {
+				animation = gameState_findSplatAnimation(gameState, "bat_sideways_6.png");
+			} break;
+			case ENTITY_ANIMATION_ATTACK: {
+				animation = gameState_findSplatAnimation(gameState, "bat_sideways_6.png");
+			} break;
+			case ENTITY_ANIMATION_HURT: {
+				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
+			} break;
+			case ENTITY_ANIMATION_DIE: {
 				animation = gameState_findSplatAnimation(gameState, "chicken_3.png");
 			} break;
 		}
@@ -1531,16 +1550,21 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 				}
 			}
 
+			entity->isFlipped = false;	
+			bool wasLeft = false;
+			bool wasRight = false;
 
 			if(!entity->isFalling) {
 				if(isDown(keyStates->gameButtons, BUTTON_LEFT) && !isPaused) {
 					entity->rb->accumForce.x += -gameState->walkPower*walkModifier;
 
+					wasLeft = true;
+
 					if(entity->isSwimming) {
 						animToAdd = &gameState->wizardSwimLeft;
 					} else {
-						animToAdd = &gameState->wizardLeft;
-						idleAnimation = &gameState->wizardIdleLeft;	
+						animToAdd = gameState->wizardLeft;
+						idleAnimation = gameState->wizardIdleLeft;	
 					}
 
 					tryPlayFootstep(entity);
@@ -1557,11 +1581,18 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 				if(isDown(keyStates->gameButtons, BUTTON_RIGHT) && !isPaused) {
 					entity->rb->accumForce.x += gameState->walkPower*walkModifier;
+
+					wasRight = true;
+					
 					if(entity->isSwimming) {
 						animToAdd = &gameState->wizardSwimRight;
 					} else {
-						animToAdd = &gameState->wizardRight;
-						idleAnimation = &gameState->wizardIdleRight;
+						
+						animToAdd = gameState->wizardRight;
+						entity->isFlipped = true;	
+						
+						
+						idleAnimation = gameState->wizardIdleRight;
 					}
 					staminaFactor = 0.1f;
 
@@ -1575,13 +1606,26 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 					entity->direction = ENTITY_DIRECTION_RIGHT;
 
 				}
+
+
 				if(isDown(keyStates->gameButtons, BUTTON_UP) && !isPaused) {
 					entity->rb->accumForce.y += gameState->walkPower*walkModifier;
 					if(entity->isSwimming) {
 						animToAdd = &gameState->wizardSwimUp;
 					} else {
-						animToAdd = &gameState->wizardForward;
-						idleAnimation = &gameState->wizardIdleForward;
+						if(wasLeft) {
+							animToAdd = gameState->wizard_sideways_back;
+							entity->isFlipped = true;
+						} else if(wasRight){
+							animToAdd = gameState->wizard_sideways_back;
+							entity->isFlipped = false;
+						} else {
+							animToAdd = gameState->wizardForward;
+						}
+						
+
+
+						idleAnimation = gameState->wizardIdleForward;
 					}
 					staminaFactor = 0.1f;
 					tryPlayFootstep(entity);
@@ -1601,8 +1645,16 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 					if(entity->isSwimming) {
 						animToAdd = &gameState->wizardSwimDown;
 					} else {
-						animToAdd = &gameState->wizardBottom;
-						idleAnimation = &gameState->wizardIdleBottom;
+						if(wasLeft) {
+							animToAdd = gameState->wizard_sideways_forward;
+						} else if(wasRight){
+							animToAdd = gameState->wizard_sideways_forward;
+							entity->isFlipped = true;
+						} else {
+							animToAdd = gameState->wizardBottom;
+						}
+						
+						idleAnimation = gameState->wizardIdleBottom;
 					}
 					staminaFactor = 0.1f;
 
@@ -1615,6 +1667,9 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 					entity->direction = ENTITY_DIRECTION_DOWN;
 				}
+
+
+				
 			}
 
 			//decrement stamina while swimming
@@ -1648,21 +1703,21 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 
 			if(gameState->moveDirectionAfterSceneLoad.x > 0) {
 				entity->direction = ENTITY_DIRECTION_RIGHT;
-				animToAdd = &gameState->wizardRight;
-				idleAnimation = &gameState->wizardIdleRight;	
+				animToAdd = gameState->wizardRight;
+				idleAnimation = gameState->wizardIdleRight;	
 			} else if(gameState->moveDirectionAfterSceneLoad.x < 0) {
 				entity->direction = ENTITY_DIRECTION_LEFT;
-				animToAdd = &gameState->wizardLeft;
-				idleAnimation = &gameState->wizardIdleLeft;	
+				animToAdd = gameState->wizardLeft;
+				idleAnimation = gameState->wizardIdleLeft;	
 
 			} else if(gameState->moveDirectionAfterSceneLoad.y < 0) {
 				entity->direction = ENTITY_DIRECTION_DOWN;
-				animToAdd = &gameState->wizardBottom;
-				idleAnimation = &gameState->wizardIdleBottom;	
+				animToAdd = gameState->wizardBottom;
+				idleAnimation = gameState->wizardIdleBottom;	
 			} else if(gameState->moveDirectionAfterSceneLoad.y > 0) {
 				entity->direction = ENTITY_DIRECTION_UP;
-				animToAdd = &gameState->wizardForward;
-				idleAnimation = &gameState->wizardIdleForward;
+				animToAdd = gameState->wizardForward;
+				idleAnimation = gameState->wizardIdleForward;
 			}
 
 			if(canVal >= 1) {
@@ -1770,17 +1825,21 @@ void updateEntity(EasyFont_Font *gameFont, EntityManager *manager, Entity *entit
 		if(wasPressed(keyStates->gameButtons, BUTTON_Q) && !isPaused) {
 			if(entity->direction == ENTITY_DIRECTION_LEFT) {
 				animToAdd = &gameState->wizardSwordAttackLeft;
-				idleAnimation = &gameState->wizardIdleLeft;
+				idleAnimation = gameState->wizardIdleLeft;
 			} else if(entity->direction == ENTITY_DIRECTION_RIGHT) {
 				animToAdd = &gameState->wizardSwordAttackRight;
-				idleAnimation = &gameState->wizardIdleRight;
+				idleAnimation = gameState->wizardIdleRight;
 			} else if(entity->direction == ENTITY_DIRECTION_UP) {
 				animToAdd = &gameState->wizardSwordAttackBack;
-				idleAnimation = &gameState->wizardIdleForward;
+				idleAnimation = gameState->wizardIdleForward;
 			} else if(entity->direction == ENTITY_DIRECTION_DOWN) {
-				animToAdd = &gameState->wizardSwordAttackFront;
-				idleAnimation = &gameState->wizardIdleBottom;
+				animToAdd = gameState->wizardSwordAttackFront;
+				idleAnimation = gameState->wizardIdleBottom;
 			}  
+
+
+			playGameSound(&globalLongTermArena, easyAudio_findSound("swoosh.wav"), 0, AUDIO_FOREGROUND);
+			
 
 			player_useAttackItem(gameState, manager, findDamage(entity->type), entity);
 
@@ -3305,7 +3364,7 @@ static Entity *initScenery_withRigidBody(GameState *gameState, EntityManager *ma
 }
 
 static Entity *initWizard(GameState *gameState, EntityManager *manager, V3 worldP) {
-	 return initEntity(manager, &gameState->wizardIdle, worldP, v2(2.4f, 2.0f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
+	 return initEntity(manager, &gameState->wizardIdle, worldP, v2(1.5f, 1.5f), v2(0.2f, 0.25f), gameState, ENTITY_WIZARD, gameState->inverse_weight, 0, COLOR_WHITE, 0, true);
 }
 
 static Entity *initEnemy(GameState *gameState, EntityManager *manager, V3 worldP) {
@@ -3605,7 +3664,7 @@ static Entity *initEntityOfType(GameState *gameState, EntityManager *manager, V3
 			newEntity = initWizard(gameState, manager, position);
 			manager->player = newEntity;
 
-            easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, &gameState->wizardIdleForward, newEntity->animationRate);      
+            easyAnimation_addAnimationToController(&newEntity->animationController, &gameState->animationFreeList, gameState->wizardIdleForward, newEntity->animationRate);      
 
 		} break;
 		case ENTITY_PLAYER_PROJECTILE: {
