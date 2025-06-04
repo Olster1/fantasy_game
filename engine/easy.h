@@ -33,7 +33,7 @@ float min(float a, float b) {
 
 #ifdef _WIN32
 //printf doens't print to the console annoyingly!!
-#define printf(...) {char str[256]; sprintf_s(str, __VA_ARGS__); OutputDebugString(str); }
+#define printf(...) {char str[256]; snprintf(str, __VA_ARGS__); OutputDebugString(str); }
 #endif
 
 #include <limits.h>

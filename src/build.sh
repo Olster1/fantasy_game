@@ -1,3 +1,3 @@
 
-ERRORS_OFF=-Wno-c++11-compat-deprecated-writable-strings
-clang++ $ERRORS_OFF -Wl,-rpath,@executable_path/ -I ../libs/gl3w -I ../shared/  main.cpp ../libs/gl3w/GL/gl3w.cpp -L../bin -F../bin -framework SDL2 -framework OpenGl -framework CoreFoundation -DDESKTOP=1 -DDEVELOPER_MODE=1 -o ../bin/game -g
+gcc -Wl,-rpath,@executable_path/ -I ../libs/gl3w -I ../engine/ -I ../libs/  main.cpp ../libs/gl3w/GL/gl3w.cpp -L../bin -F../bin -Wno-deprecated-declarations -Wno-c++11-compat-deprecated-writable-strings -rpath /Library/Frameworks -I/Library/Frameworks/SDL2.framework/Headers -I/Library/Frameworks/SDL2_image.framework/Headers -F/Library/Frameworks -framework OpenGL -framework SDL2 -framework SDL2_image -framework CoreFoundation -DDESKTOP=1 -DDEVELOPER_MODE=1 -o ../bin/game -g
+# gcc -o Minecraft ./platform_layer.cpp -Wno-deprecated-declarations -Wno-c++11-compat-deprecated-writable-strings -rpath /Library/Frameworks -I/Library/Frameworks/SDL2.framework/Headers -I/Library/Frameworks/SDL2_image.framework/Headers -F/Library/Frameworks -framework OpenGL -framework SDL2 -framework SDL2_image

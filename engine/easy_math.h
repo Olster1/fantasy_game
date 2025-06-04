@@ -1657,7 +1657,7 @@ static inline bool easyMath_rayVsAABB3f(V3 origin, V3 dir, Rect3f b, V3 *hitPoin
     /* Ray origin inside bounding box */
     if(inside)  {
         *hitPoint = origin;
-        return (TRUE);
+        return true;
     }
 
 

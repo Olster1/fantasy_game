@@ -5,7 +5,25 @@ DEBUG_TIME_BLOCK(); //put this at the begining of a scope like a fiunction
 DEBUG_TIME_BLOCK_NAMED(name); //this is if you want to profile just a block
 
 */
-#define EASY_PROFILER_ON 1
+#define EASY_PROFILER_ON 0
+
+
+// SPDX-License-Identifier: GPL-2.0
+u64 _rdtsc(void)
+{
+    u64 val;
+
+    /*
+     * According to ARM DDI 0487F.c, from Armv8.0 to Armv8.5 inclusive, the
+     * system counter is at least 56 bits wide; from Armv8.6, the counter
+     * must be 64 bits wide.  So the system counter could be less than 64
+     * bits wide and it is attributed with the flag 'cap_user_time_short'
+     * is true.
+     */
+    asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+
+    return val;
+}
 
 typedef enum {
 	EASY_PROFILER_PUSH_SAMPLE,
@@ -202,7 +220,8 @@ class EasyProfileBlock {
 
 	EasyProfileBlock(u32 lineNumber, char *fileName, char *functionName, bool isOverallFrame) {
 		if(!DEBUG_global_ProfilePaused) {
-			u64 ts = __rdtsc();
+			// u64 ts = __rdtsc(); //NOTE: WINDOWS version
+			u64 ts = _rdtsc();
 			s64 startTimeSecondsCount = EasyTime_GetTimeCount(); //Since unix epoch I guess?
 			//We just duplicate the ts & timeStart since these are used for the total time & is only for when we POP a sample (not PUSH)
 			EasyProfile_AddSample(lineNumber, fileName, functionName, ts, ts, startTimeSecondsCount, 0, EASY_PROFILER_PUSH_SAMPLE, isOverallFrame);
@@ -223,7 +242,8 @@ class EasyProfileBlock {
 
 	~EasyProfileBlock() {
 		if(!this->wasPaused) {
-			u64 ts = __rdtsc();
+			// u64 ts = __rdtsc(); //NOTE: Windows version
+			u64 ts = _rdtsc();
 			s64 timeAt = EasyTime_GetTimeCount();
 			assert(timeAt >= this->startTimeSecondsCount);
 			assert(ts >= startTimeStamp);

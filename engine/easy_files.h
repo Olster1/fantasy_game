@@ -469,7 +469,7 @@ void platformCopyFile(char *fileName, char *copyDir) {
 static HANDLE FindFirstFileInDir(char *dirName, WIN32_FIND_DATAA *fileFindData) {
     char fileName[MAX_PATH] = "";
     /* remove '..' sections in path name */
-    if (PathCanonicalizeA(fileName, dirName) == FALSE)
+    if (PathCanonicalizeA(fileName, dirName) == false)
         return INVALID_HANDLE_VALUE;
     /* add directory separator + * to get files in the directory */
     if (strlen(fileName) + 2 > MAX_PATH)

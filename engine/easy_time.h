@@ -4,37 +4,33 @@
 
 */
 
-#ifdef __APPLE__ 
+// #include <timeapi.h>
+static u64 GlobalTimeFrequencyDatum;
 
-#elif _WIN32
-#include <timeapi.h>
-static LARGE_INTEGER GlobalTimeFrequencyDatum;
-
-inline s64 EasyTime_GetTimeCount()
+inline u64 EasyTime_GetTimeCount()
 {
-    LARGE_INTEGER Time;
-    QueryPerformanceCounter(&Time);
+    u64 s = SDL_GetPerformanceCounter();
     
-    return Time.QuadPart;
+    return s;
 }
 
-inline s64 EasyTime_GetSecondsCount() {
-	return (EasyTime_GetTimeCount() / GlobalTimeFrequencyDatum.QuadPart);
+inline u64 EasyTime_GetSecondsCount() {
+	return (EasyTime_GetTimeCount() / GlobalTimeFrequencyDatum);
 } 
 
-inline float EasyTime_GetSecondsElapsed(s64 CurrentCount, s64 LastCount)
+inline float EasyTime_GetSecondsElapsed(u64 CurrentCount, u64 LastCount)
 {
-    s64 Difference = CurrentCount - LastCount;
-    float Seconds = (float)Difference / (float)GlobalTimeFrequencyDatum.QuadPart;
+    u64 Difference = CurrentCount - LastCount;
+    float Seconds = (float)Difference / (float)GlobalTimeFrequencyDatum;
     
     return Seconds;
 }
 
-inline float EasyTime_GetMillisecondsElapsed(s64 CurrentCount, s64 LastCount)
+inline float EasyTime_GetMillisecondsElapsed(u64 CurrentCount, u64 LastCount)
 {
-    s64 Difference = CurrentCount - LastCount;
+    u64 Difference = CurrentCount - LastCount;
     assert(Difference >= 0); //user put them in the right order
-    double Seconds = (float)Difference / (float)GlobalTimeFrequencyDatum.QuadPart;
+    double Seconds = (float)Difference / (float)GlobalTimeFrequencyDatum;
 	float millseconds = (float)(Seconds * 1000.0);     
     return millseconds;
     
@@ -42,11 +38,10 @@ inline float EasyTime_GetMillisecondsElapsed(s64 CurrentCount, s64 LastCount)
 
 
 inline void EasyTime_setupTimeDatums() {
-	QueryPerformanceFrequency(&GlobalTimeFrequencyDatum);
-	timeBeginPeriod(1);
+    GlobalTimeFrequencyDatum = SDL_GetPerformanceFrequency();
+	// timeBeginPeriod(1);
 }
 
 static inline u64 EasyTime_getTimeStamp() {
     return (u64)time(NULL);
 }
-#endif

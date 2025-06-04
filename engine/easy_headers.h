@@ -1,7 +1,11 @@
 #include <GL/gl3w.h>
 
-#include "../SDL2/sdl.h"
-#include "../SDL2/SDL_syswm.h"
+#include <SDL2/SDL.h>
+#include <SDL2_image/SDL_image.h>
+#include <arm_acle.h>   
+
+// #include "../SDL2/sdl.h"
+// #include "../SDL2/SDL_syswm.h"
 
 #include <stdio.h>
 #include <time.h> // to init random generator

@@ -275,8 +275,6 @@ void gameScene_loadScene(GameState *gameState, EntityManager *manager, char *sce
 #include "shop.c"
 #include "crafting.c"
 
-
-
 static bool drawAndUpdateMessageSystem(OSAppInfo *appInfo, GameState *gameState, EntityManager *manager, GameWeatherState *weatherState, EasyTransitionState *transitionState, float tweakY, float tweakWidth, float tweakSpacing, EasyFont_Font *gameFont, FrameBuffer *mainFrameBuffer) {
 
     if(gameState->enteredTalkModeThisFrame) {

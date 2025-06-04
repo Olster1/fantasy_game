@@ -31,8 +31,8 @@ static void initAllShopsWithItems(GameState *gameState) {
 	{
 		gameState->townShop = initGameShop_();
 
-		addItemToShop(gameState->townShop, ENTITY_BOMB, 3, true, 10, FALSE);
-		addItemToShop(gameState->townShop, ENTITY_HEALTH_POTION_1, 5, true, 8, FALSE);
+		addItemToShop(gameState->townShop, ENTITY_BOMB, 3, true, 10, false);
+		addItemToShop(gameState->townShop, ENTITY_HEALTH_POTION_1, 5, true, 8, false);
 	}
 }
 

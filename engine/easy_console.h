@@ -341,8 +341,8 @@ inline void easyConsole_parseDefault(EasyConsole *c, EasyToken token) {
     	}
     	
     } else if(stringsMatchNullN("outsideConsole", token.at, token.size)) {
-    	STARTUPINFO startUpInfo = {};
-    	_PROCESS_INFORMATION lpProcessInformation;
+    	// STARTUPINFO startUpInfo = {};
+    	// _PROCESS_INFORMATION lpProcessInformation;
 
     	// if(!CreateProcessA(
     	//    "c:\\windows\\system32\\cmd.exe",

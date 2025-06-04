@@ -77,7 +77,7 @@ void loadAndAddImagesStripToAssets_(Animation *animation, char *folderNameAbsolu
 
     	char countAsString[128];
 
-    	sprintf_s(countAsString, arrayCount(countAsString), "_%d", count);
+    	snprintf(countAsString, arrayCount(countAsString), "_%d", count);
 
     	char *tempFileName = concatInArena(shortName, countAsString, &globalPerFrameArena);
 
@@ -119,7 +119,7 @@ void loadAndAddImagesStripToAssets_count_offset_(Animation *animation, char *fol
 
     	char countAsString[128];
 
-    	sprintf_s(countAsString, arrayCount(countAsString), "_%d", count);
+    	snprintf(countAsString, arrayCount(countAsString), "_%d", count);
 
     	char *tempFileName = concatInArena(shortName, countAsString, &globalPerFrameArena);
 
@@ -174,7 +174,7 @@ void loadAndAddImagesStripToAssets_xy_(Animation *animation, char *folderNameAbs
 
 	    	char countAsString[128];
 
-	    	sprintf_s(countAsString, arrayCount(countAsString), "_%d", count);
+	    	snprintf(countAsString, arrayCount(countAsString), "_%d", count);
 
 	    	char *tempFileName = concatInArena(shortName, countAsString, &globalPerFrameArena);
 

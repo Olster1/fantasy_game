@@ -59,7 +59,7 @@ static void easyFont_createSDFFont(char *fileName, u32 startCodePoint, u32 endCo
             elm.shortName = concatInArena(fontName, buffer, &globalPerFrameArena);
             elm.longName = concatInArena(fileName, buffer, &globalPerFrameArena);
             
-            elm.tex = {};
+            // elm.tex = {};
             elm.tex.width = width;
             elm.tex.height = height;
             elm.tex.aspectRatio_h_over_w = height / width;

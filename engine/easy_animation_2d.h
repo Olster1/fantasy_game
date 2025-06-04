@@ -77,7 +77,7 @@ float easyAnimation_getDirectionInRadians(float x, float y);
 
 #if EASY_ANIMATION_2D_IMPLEMENTATION
 
-static char *easyAnimation2d_copyString(char *str) {
+char *easyAnimation2d_copyString(char *str) {
 
     int sizeOfString = 0;
     char *at = (char *)str;
@@ -101,14 +101,14 @@ static char *easyAnimation2d_copyString(char *str) {
     return result;
 }
 
-static void easyAnimation_initController(EasyAnimation_Controller *controller) {
+void easyAnimation_initController(EasyAnimation_Controller *controller) {
     controller->parent.next = controller->parent.prev = &controller->parent;
     controller->finishedAnimationLastUpdate = false;
     controller->lastAnimationOn = 0;
     controller->currentLoopCount = 0;
 }
 
-static void easyAnimation_initAnimation_withFrames(Animation *animation, char **FileNames, int FileNameCount, char *name) {
+void easyAnimation_initAnimation_withFrames(Animation *animation, char **FileNames, int FileNameCount, char *name) {
     animation->name = name;
     animation->frameCount = 0;
 
@@ -118,12 +118,12 @@ static void easyAnimation_initAnimation_withFrames(Animation *animation, char **
     }
 }
 
-static void easyAnimation_initAnimation(Animation *animation, char *name) {
+void easyAnimation_initAnimation(Animation *animation, char *name) {
     animation->name = name;
     animation->frameCount = 0;
 }
 
-static void easyAnimation_pushFrame(Animation *animation, char *assetName) {
+void easyAnimation_pushFrame(Animation *animation, char *assetName) {
     EASY_HEADERS_ASSERT(animation->frameCount < arrayCount(animation->frames));
     animation->frames[animation->frameCount++] = easyAnimation2d_copyString(assetName);
 }
@@ -141,7 +141,7 @@ static void easyAnimation_pushFrame(Animation *animation, char *assetName) {
 //     return Result;
 // }
 
-static Animation *easyAnimation_findAnimation(Animation *Animations, int AnimationsCount, char *name) {
+Animation *easyAnimation_findAnimation(Animation *Animations, int AnimationsCount, char *name) {
     Animation *Result = 0;
     for(int i = 0; i < AnimationsCount; ++i) {
         Animation *Anim = Animations + i;
@@ -155,7 +155,7 @@ static Animation *easyAnimation_findAnimation(Animation *Animations, int Animati
 }
 
 
-static void easyAnimation_addAnimationToController(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr, Animation *animation, float period) {
+void easyAnimation_addAnimationToController(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr, Animation *animation, float period) {
     EasyAnimation_ListItem *AnimationItemFreeList = *AnimationItemFreeListPtr;
     EasyAnimation_ListItem *Item = 0;
     if(AnimationItemFreeList) {
@@ -185,7 +185,7 @@ static void easyAnimation_addAnimationToController(EasyAnimation_Controller *con
     
 }
 
-static void easyAnimation_emptyAnimationContoller(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr) {
+void easyAnimation_emptyAnimationContoller(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr) {
     //NOTE(ollie): While still things on the list
     EasyAnimation_ListItem *AnimationListSentintel = &controller->parent;
 
@@ -204,7 +204,7 @@ static void easyAnimation_emptyAnimationContoller(EasyAnimation_Controller *cont
     
 }
 
-static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr, float dt) {
+char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller, EasyAnimation_ListItem **AnimationItemFreeListPtr, float dt) {
     EasyAnimation_ListItem *AnimationListSentintel = &controller->parent;
 
     controller->finishedAnimationLastUpdate = false; //clear out the value
@@ -254,12 +254,12 @@ static char *easyAnimation_updateAnimation(EasyAnimation_Controller *controller,
     return result;
 }
 
-inline static int easyAnimation_isControllerEmpty(EasyAnimation_Controller *c) {
+inline int easyAnimation_isControllerEmpty(EasyAnimation_Controller *c) {
     int Result = c->parent.next == &c->parent;
     return Result;
 }
 
-inline static float easyAnimation_getDirectionInRadians(float x, float y) {
+inline float easyAnimation_getDirectionInRadians(float x, float y) {
     float DirectionValue = 0;
     if(x != 0 || y != 0) {
         //V2 EntityVelocity = normalizeV2(dp);
@@ -268,12 +268,12 @@ inline static float easyAnimation_getDirectionInRadians(float x, float y) {
     return DirectionValue;
 }
 
-inline static char *easyAnimation_getFrameOn(EasyAnimation_ListItem *AnimationListSentintel) {
+inline char *easyAnimation_getFrameOn(EasyAnimation_ListItem *AnimationListSentintel) {
     char *currentFrame = AnimationListSentintel->next->animation->frames[AnimationListSentintel->next->frameIndex];
     return currentFrame;
 }
 
-inline static bool easyAnimation_getCurrentAnimation(EasyAnimation_Controller *c, Animation *a) {
+inline bool easyAnimation_getCurrentAnimation(EasyAnimation_Controller *c, Animation *a) {
     return (c->parent.next->animation == a);
 
 }
